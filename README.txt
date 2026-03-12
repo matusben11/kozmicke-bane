@@ -1,0 +1,1 @@
+Spusti HRA.bat

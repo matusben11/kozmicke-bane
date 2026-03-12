@@ -1,0 +1,4 @@
+pywebview>=4.0
+flask>=3.0
+pyngrok>=7.0
+gunicorn>=21.0

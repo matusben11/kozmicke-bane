@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+game_users.json
+kb_career.json
+kb_saves.json
+kb_leaderboard.json
+cloudflared.exe
+cloudflared
+*.log
