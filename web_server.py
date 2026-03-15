@@ -52,7 +52,25 @@ def _seed_default_user():
 _seed_default_user()
 
 
+def _migrate_saves():
+    """Skonvertuje starý formát {"1": {...}} na nový {"USERNAME": {"1": {...}}}"""
+    saves = load_jf(KB_SAVES, {})
+    if not saves or any(not k.isdigit() for k in saves.keys()):
+        return  # prázdny alebo už nový formát
+    new_saves = {}
+    for slot, data in saves.items():
+        uname = data.get("username", "UNKNOWN").upper()
+        new_saves.setdefault(uname, {})[slot] = data
+    save_jf(KB_SAVES, new_saves)
+    print(f"[migrate] kb_saves.json migrovaný: {list(new_saves.keys())}")
+
+_migrate_saves()
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+def _uname():
+    return session["username"].upper()
 
 def load_users():
     if DATA_FILE.exists():
@@ -909,7 +927,7 @@ def delete_save_route(slot):
     if "username" not in session:
         return redirect("/")
     saves = load_jf(KB_SAVES, {})
-    uname = session["username"].upper()
+    uname = _uname()
     if uname in saves:
         saves[uname].pop(str(slot), None)
     save_jf(KB_SAVES, saves)
@@ -950,10 +968,7 @@ def api_save_game():
         return "", 401
     d = request.json
     saves = load_jf(KB_SAVES, {})
-    uname = session["username"].upper()
-    if uname not in saves:
-        saves[uname] = {}
-    saves[uname][str(d["slot"])] = d["data"]
+    saves.setdefault(_uname(), {})[str(d["slot"])] = d["data"]
     save_jf(KB_SAVES, saves)
     return "true"
 
@@ -963,7 +978,7 @@ def api_load_game():
         return "null", 401
     slot = str(request.json.get("slot"))
     saves = load_jf(KB_SAVES, {})
-    user_saves = saves.get(session["username"].upper(), {})
+    user_saves = saves.get(_uname(), {})
     d = user_saves.get(slot)
     return json.dumps(d) if d else "null"
 
@@ -973,7 +988,7 @@ def api_delete_save():
         return "", 401
     slot = str(request.json.get("slot"))
     saves = load_jf(KB_SAVES, {})
-    uname = session["username"].upper()
+    uname = _uname()
     if uname in saves:
         saves[uname].pop(slot, None)
     save_jf(KB_SAVES, saves)
@@ -984,7 +999,7 @@ def api_startup_data():
     if not _require_session():
         return "{}", 401
     all_saves = load_jf(KB_SAVES, {})
-    user_saves = all_saves.get(session["username"].upper(), {})
+    user_saves = all_saves.get(_uname(), {})
     return json.dumps({
         "saves":       user_saves,
         "leaderboard": load_jf(KB_LB, []),
@@ -1046,7 +1061,7 @@ def api_get_career():
     if not _require_session():
         return "{}", 401
     career = load_jf(KB_CAREER, {})
-    return json.dumps(career.get(session["username"].upper(), {}))
+    return json.dumps(career.get(_uname(), {}))
 
 
 # ── Export / Import dát ────────────────────────────────────────────────────
@@ -1055,7 +1070,7 @@ def api_get_career():
 def export_data():
     if "username" not in session:
         return redirect("/")
-    uname = session["username"].upper()
+    uname = _uname()
     all_saves  = load_jf(KB_SAVES, {})
     all_career = load_jf(KB_CAREER, {})
     all_lb     = load_jf(KB_LB, [])
@@ -1075,7 +1090,7 @@ def export_data():
 def import_data():
     if "username" not in session:
         return redirect("/")
-    uname = session["username"].upper()
+    uname = _uname()
 
     if request.method == "POST":
         file = request.files.get("datafile")
@@ -1086,17 +1101,13 @@ def import_data():
         except Exception:
             return _import_page("⚠ Neplatný JSON súbor.", error=True)
 
-        # Saves
-        if data.get("saves"):
-            all_saves = load_jf(KB_SAVES, {})
-            all_saves[uname] = data["saves"]
-            save_jf(KB_SAVES, all_saves)
+        def _merge(path, key):
+            d = load_jf(path, {})
+            d[uname] = data[key]
+            save_jf(path, d)
 
-        # Career
-        if data.get("career"):
-            all_career = load_jf(KB_CAREER, {})
-            all_career[uname] = data["career"]
-            save_jf(KB_CAREER, all_career)
+        if data.get("saves"):  _merge(KB_SAVES,  "saves")
+        if data.get("career"): _merge(KB_CAREER, "career")
 
         # Leaderboard — pridaj záznamy (bez duplikátov podľa ts)
         if data.get("lb"):
