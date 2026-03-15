@@ -24,6 +24,34 @@ app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
 
 
+# ── Seed default user from env vars ────────────────────────────────────────
+def _seed_default_user():
+    """
+    Ak sú nastavené env premenné DEFAULT_USER + DEFAULT_PASS,
+    automaticky vytvorí účet pri štarte servera (iba ak ešte neexistuje).
+    Použitie na Render: nastav tieto premenné v Environment sekcii.
+    """
+    username = os.environ.get("DEFAULT_USER", "").strip()
+    password = os.environ.get("DEFAULT_PASS", "")
+    if not username or not password:
+        return
+    users = load_users() if DATA_FILE.exists() else {}
+    if username in users:
+        return  # účet už existuje, nič nerob
+    users[username] = {
+        "password": hashlib.sha256(password.encode()).hexdigest(),
+        "registered": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "last_login": None,
+        "last_web_login": None,
+        "score": 0, "games_played": 0, "kb_sessions": 0,
+    }
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, indent=4, ensure_ascii=False)
+    print(f"[seed] Účet '{username}' vytvorený z DEFAULT_USER env var.")
+
+_seed_default_user()
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def load_users():
@@ -464,7 +492,8 @@ def fmt_date_ts(ts):
 DEPTHS = {1: "Povrch", 2: "Litosféra", 3: "Hlboká", 4: "Magma", 5: "Jadro"}
 
 def render_lobby(pilot):
-    saves  = load_jf(KB_SAVES, {})
+    all_saves = load_jf(KB_SAVES, {})
+    saves  = all_saves.get(pilot.upper(), {})
     career = load_jf(KB_CAREER, {})
     kb     = career.get(pilot.upper(), {})
     cr     = kb.get("career_cr", 0)
@@ -874,7 +903,9 @@ def delete_save_route(slot):
     if "username" not in session:
         return redirect("/")
     saves = load_jf(KB_SAVES, {})
-    saves.pop(str(slot), None)
+    uname = session["username"].upper()
+    if uname in saves:
+        saves[uname].pop(str(slot), None)
     save_jf(KB_SAVES, saves)
     return redirect("/lobby")
 
@@ -913,7 +944,10 @@ def api_save_game():
         return "", 401
     d = request.json
     saves = load_jf(KB_SAVES, {})
-    saves[str(d["slot"])] = d["data"]
+    uname = session["username"].upper()
+    if uname not in saves:
+        saves[uname] = {}
+    saves[uname][str(d["slot"])] = d["data"]
     save_jf(KB_SAVES, saves)
     return "true"
 
@@ -923,7 +957,8 @@ def api_load_game():
         return "null", 401
     slot = str(request.json.get("slot"))
     saves = load_jf(KB_SAVES, {})
-    d = saves.get(slot)
+    user_saves = saves.get(session["username"].upper(), {})
+    d = user_saves.get(slot)
     return json.dumps(d) if d else "null"
 
 @app.route("/api/delete_save", methods=["POST"])
@@ -932,7 +967,9 @@ def api_delete_save():
         return "", 401
     slot = str(request.json.get("slot"))
     saves = load_jf(KB_SAVES, {})
-    saves.pop(slot, None)
+    uname = session["username"].upper()
+    if uname in saves:
+        saves[uname].pop(slot, None)
     save_jf(KB_SAVES, saves)
     return "true"
 
@@ -940,8 +977,10 @@ def api_delete_save():
 def api_startup_data():
     if not _require_session():
         return "{}", 401
+    all_saves = load_jf(KB_SAVES, {})
+    user_saves = all_saves.get(session["username"].upper(), {})
     return json.dumps({
-        "saves":       load_jf(KB_SAVES, {}),
+        "saves":       user_saves,
         "leaderboard": load_jf(KB_LB, []),
         "pilot":       session["username"],
     })

@@ -1621,20 +1621,21 @@ const _startSlot = _params.get('slot');   // napr. ?slot=2 = načítaj slot 2
 initDesktopData();
 
 if (_startSlot) {
-  // Načítaj uloženie — pyapi sínc prebehne cez initDesktopData async,
-  // preto krátko počkáme kým sa dáta dostanú do localStorage
-  setTimeout(() => {
-    const slotNum = parseInt(_startSlot);
-    if (loadGame(slotNum)) {
+  const _slotNum = parseInt(_startSlot);
+  let _loadRetries = 0;
+  function _tryLoadSlot() {
+    if (loadGame(_slotNum)) {
       startAmb();
       document.getElementById('qsbtn').style.display = 'inline-block';
       document.getElementById('lbbtn').style.display = 'inline-block';
       showGame([{txt:`📂 Hra načítaná — Vitaj späť, ${G.username}!`, cls:'linf'}]);
+    } else if (_loadRetries++ < 20) {
+      setTimeout(_tryLoadSlot, 250); // čakaj na fetch, max 5s
     } else {
-      // slot prázdny, štart normálne
       sceneBoot(PILOT);
     }
-  }, 350);
+  }
+  setTimeout(_tryLoadSlot, 200);
 } else {
   sceneBoot(PILOT);
 }
