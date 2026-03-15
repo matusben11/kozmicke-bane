@@ -52,21 +52,6 @@ def _seed_default_user():
 _seed_default_user()
 
 
-def _migrate_saves():
-    """Skonvertuje starý formát {"1": {...}} na nový {"USERNAME": {"1": {...}}}"""
-    saves = load_jf(KB_SAVES, {})
-    if not saves or any(not k.isdigit() for k in saves.keys()):
-        return  # prázdny alebo už nový formát
-    new_saves = {}
-    for slot, data in saves.items():
-        uname = data.get("username", "UNKNOWN").upper()
-        new_saves.setdefault(uname, {})[slot] = data
-    save_jf(KB_SAVES, new_saves)
-    print(f"[migrate] kb_saves.json migrovaný: {list(new_saves.keys())}")
-
-_migrate_saves()
-
-
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _uname():
@@ -105,6 +90,19 @@ def load_jf(path, default=None):
 def save_jf(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _migrate_saves():
+    saves = load_jf(KB_SAVES, {})
+    if not saves or any(not k.isdigit() for k in saves.keys()):
+        return
+    new_saves = {}
+    for slot, data in saves.items():
+        uname = data.get("username", "UNKNOWN").upper()
+        new_saves.setdefault(uname, {})[slot] = data
+    save_jf(KB_SAVES, new_saves)
+    print(f"[migrate] kb_saves.json migrated: {list(new_saves.keys())}")
+
+_migrate_saves()
 
 def kb_rank(cr):
     for thr, r, name in [
