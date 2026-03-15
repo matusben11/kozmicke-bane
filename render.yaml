@@ -2,7 +2,7 @@ services:
   - type: web
     name: kozmicke-bane
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements_cloud.txt
     startCommand: gunicorn wsgi:app
     envVars:
       - key: SECRET_KEY
