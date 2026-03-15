@@ -578,6 +578,12 @@ def render_lobby(pilot):
         html += '<div class="lb-row">&ndash; zatiaľ žiadne záznamy &ndash;</div>'
     html += '</div>'
 
+    # ── Import / Export
+    html += '<div class="card">'
+    html += '<div class="card-title">&#128228; PRENOS DÁT &mdash; Import / Export</div>'
+    html += '<a href="/import_data" class="btn" style="text-align:center">&#8597; Preniesť dáta z PC na server (alebo naopak)</a>'
+    html += '</div>'
+
     # ── Logout
     html += '<div style="width:100%;max-width:700px">'
     html += '<a href="/logout" class="btn btn-logout">&#10007; &nbsp; Odhlásiť sa</a>'
@@ -1041,6 +1047,106 @@ def api_get_career():
         return "{}", 401
     career = load_jf(KB_CAREER, {})
     return json.dumps(career.get(session["username"].upper(), {}))
+
+
+# ── Export / Import dát ────────────────────────────────────────────────────
+
+@app.route("/export_data")
+def export_data():
+    if "username" not in session:
+        return redirect("/")
+    uname = session["username"].upper()
+    all_saves  = load_jf(KB_SAVES, {})
+    all_career = load_jf(KB_CAREER, {})
+    all_lb     = load_jf(KB_LB, [])
+    export = {
+        "username": uname,
+        "saves":    all_saves.get(uname, {}),
+        "career":   all_career.get(uname, {}),
+        "lb":       [e for e in all_lb if e.get("username","").upper() == uname],
+    }
+    resp = make_response(json.dumps(export, ensure_ascii=False, indent=2))
+    resp.headers["Content-Type"] = "application/json"
+    resp.headers["Content-Disposition"] = f'attachment; filename="kb_export_{uname.lower()}.json"'
+    return resp
+
+
+@app.route("/import_data", methods=["GET", "POST"])
+def import_data():
+    if "username" not in session:
+        return redirect("/")
+    uname = session["username"].upper()
+
+    if request.method == "POST":
+        file = request.files.get("datafile")
+        if not file:
+            return _import_page("⚠ Žiadny súbor nebol nahraný.", error=True)
+        try:
+            data = json.loads(file.read().decode("utf-8"))
+        except Exception:
+            return _import_page("⚠ Neplatný JSON súbor.", error=True)
+
+        # Saves
+        if data.get("saves"):
+            all_saves = load_jf(KB_SAVES, {})
+            all_saves[uname] = data["saves"]
+            save_jf(KB_SAVES, all_saves)
+
+        # Career
+        if data.get("career"):
+            all_career = load_jf(KB_CAREER, {})
+            all_career[uname] = data["career"]
+            save_jf(KB_CAREER, all_career)
+
+        # Leaderboard — pridaj záznamy (bez duplikátov podľa ts)
+        if data.get("lb"):
+            lb = load_jf(KB_LB, [])
+            existing_ts = {e.get("ts") for e in lb}
+            for entry in data["lb"]:
+                if entry.get("ts") not in existing_ts:
+                    lb.append(entry)
+            lb.sort(key=lambda x: -x.get("score", 0))
+            save_jf(KB_LB, lb[:50])
+
+        return _import_page(f"✓ Dáta pre {uname} úspešne importované!", error=False)
+
+    return _import_page("")
+
+
+def _import_page(msg, error=None):
+    color = "#ff3a3a" if error else "#39ff6a"
+    msg_html = f'<div style="color:{color};margin-bottom:1rem;font-size:1.1rem">{msg}</div>' if msg else ""
+    return f"""<!DOCTYPE html><html lang="sk"><head><meta charset="UTF-8">
+<title>Import / Export — KB</title>
+<style>
+  body{{background:#000;color:#ffb000;font-family:'Courier New',monospace;display:flex;
+       align-items:center;justify-content:center;min-height:100vh;margin:0;}}
+  .box{{border:2px solid #ffb000;padding:2rem;max-width:500px;width:90%;}}
+  h2{{margin:0 0 1.2rem;letter-spacing:.1em;}}
+  .btn{{display:block;background:#0d0a00;border:1px solid #a07000;color:#ffb000;
+        font-family:'Courier New',monospace;font-size:1rem;padding:.55rem 1rem;
+        cursor:pointer;text-align:center;text-decoration:none;margin-bottom:.5rem;width:100%;box-sizing:border-box;}}
+  .btn:hover{{background:#1a1200;border-color:#ffb000;}}
+  .btn-g{{border-color:#39ff6a44;color:#39ff6a;}}
+  .btn-g:hover{{background:#001800;border-color:#39ff6a;}}
+  input[type=file]{{color:#ffb000;margin-bottom:.8rem;width:100%;}}
+</style></head><body><div class="box">
+  <h2>⬆⬇ IMPORT / EXPORT DÁT</h2>
+  {msg_html}
+  <p style="color:#a07000;font-size:.92rem;margin-bottom:1.2rem">
+    <strong>Export</strong> — stiahni svoje dáta ako JSON súbor.<br>
+    <strong>Import</strong> — nahraj JSON súbor (napr. zo svojho PC).
+  </p>
+  <a href="/export_data" class="btn btn-g">⬇ Exportovať moje dáta (stiahni JSON)</a>
+  <hr style="border-color:#333;margin:1rem 0">
+  <form method="POST" enctype="multipart/form-data">
+    <div style="margin-bottom:.4rem">⬆ Nahrať JSON súbor:</div>
+    <input type="file" name="datafile" accept=".json">
+    <button type="submit" class="btn">⬆ Importovať</button>
+  </form>
+  <hr style="border-color:#333;margin:1rem 0">
+  <a href="/lobby" class="btn">◀ Späť do lobby</a>
+</div></body></html>"""
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────
