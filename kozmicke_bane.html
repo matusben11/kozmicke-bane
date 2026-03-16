@@ -688,7 +688,7 @@ function aLead(){
 //  INV / UPG HTML
 // ══════════════════════════════════════════════════════════════
 function invH(){return [...MINERALS,...(G.era===4?MINERALS_4:[])].map(m=>{const s=G.inv[m.id]||{qty:0,pl:0};
-  if(!s.qty)return`<span style="color:${m.col};opacity:.2">${m.sym}0</span>`;
+  if(!s.qty){const dim=m.tier>=5?'.45':'.2';return`<span style="color:${m.col};opacity:${dim}">${m.sym}0</span>`;}
   const pb=s.pl>0?`<sup style="color:#ffe066;font-size:.68rem">${s.pl>1?'★★':'★'}</sup>`:'';
   return`<span style="color:${m.col}">${m.sym}${s.qty}${pb}</span>`;}).join(' ');}
 function upgB(){
@@ -819,6 +819,15 @@ function aAscend(){
 // ══════════════════════════════════════════════════════════════
 function aMine(){
   if(_miningLock){rG([{txt:'⛏  Vŕtačka ešte pracuje — počkaj!',cls:'lwarn'}]);return;}
+  // Era 4 bez zmluvy: ak sú zásoby vyčerpané, ťažba je zablokovaná
+  if(G.era===4&&G.colony&&!G.corpContract){
+    const c=G.colony;
+    if(c.food<=0&&c.energy<=0&&c.workers<=0){
+      rG([{txt:'🚫 KOLÓNIA SKOLABOVALA — ťažba nie je možná!',cls:'ldng'},
+          {txt:'  Bez zmluvy s NOVA Corp musíš sám zásobovať kolóniu.',cls:'lwarn'},
+          {txt:'  Kúp jedlo ⚡ energiu 👷 pracovníkov v [3] Obchode alebo',cls:'linf'},
+          {txt:'  podpíš zmluvu s NOVA Corp cez [N].',cls:'linf'}]);return;}}
+
   _miningLock=true;
   rG([{txt:'⛏  Vŕtačka sa zahryza do horniny...',cls:'linf'}]);
   const pw=document.getElementById('mpw'),pf=document.getElementById('mpf');
@@ -878,10 +887,11 @@ function doMine(){
     if(m.tier>=5&&G.planet!==3&&G.era<4)w=0;
     // Planetárne bonusy v 4.0
     if(G.era===4){
-      if(m.id==='cryon'&&G.currentPlanet4==='kryon')w*=6;
-      if(m.id==='volcanum'&&G.currentPlanet4==='sigma')w*=6;
-      if(m.id==='neovoid'&&G.currentPlanet4==='omega7')w*=5;
-      if(G.currentPlanet4==='zyrax8')w*=.3; // základňa — menej surovín
+      if(m.tier>=5)w*=8; // tier-5 minerals: boost base chance in era 4
+      if(m.id==='cryon'&&G.currentPlanet4==='kryon')w*=8;
+      if(m.id==='volcanum'&&G.currentPlanet4==='sigma')w*=8;
+      if(m.id==='neovoid'&&G.currentPlanet4==='omega7')w*=8;
+      if(m.tier<5&&G.currentPlanet4==='zyrax8')w*=.3; // základňa — menej bežných surovín
     }
     if(hQ&&i>=5)w+=.04;if(hSon&&i>=8)w+=.05;
     if(sec==='Rich')w*=(m.tier>=dep.lv?2.5:1.3);
@@ -935,6 +945,7 @@ function doMine(){
     G.stats.events++;if(ev.t==='danger'){sFX('danger');flash('rgba(255,58,58,.15)');}}
   G.visited.add(`${(G.turn*3)%13},${(G.turn*2)%13}`);
   _miningLock=false;
+  quickSave();
   if(G.hp<=0){setTimeout(sceneOver,700);return;}
   if(G.planet===3&&colonizationMet()){setTimeout(sceneColonizeWin,700);return;}
   rG(logs);}
@@ -958,6 +969,7 @@ function aSell(){
   logs.push({txt:'',cls:'lwarn'});
   logs.push({txt:`  ► CELKOM: +${total} CR  |  ZOSTATOK: ${G.credits} CR`,cls:'lok'});
   flash('rgba(57,255,106,.13)');sFX('buy');
+  quickSave();
   if(G.era<4&&G.planet!==3&&G.credits>=G.goal){setTimeout(G.planet===2?sceneCorpOffer:sceneWin,600);return;}
   rG([{txt:'── VÝKUPNÁ STANICA ──',cls:'linf'},...logs]);}
 
@@ -1607,11 +1619,23 @@ function aPlanetTravel(){
           :p.travelCR===0?'ZÁKLADŇA'
           :`${p.travelCR} CR + ${fuelNeed} palivo`}</span></div>`;
   }
+  // Omega unlock panel
+  let omegaHtml='';
+  if(!G.omegaUnlocked){
+    const canOmega=G.rp>=500&&G.credits>=20000;
+    omegaHtml=`<div style="margin-top:.6rem;padding:.5rem .7rem;border:1px solid #dd00ff44;background:#1a001a;border-radius:4px;font-size:.88rem;">
+      <div style="color:#dd00ff;font-weight:bold;margin-bottom:.3rem">🔓 ODOMKNUTIE OMEGA-VII</div>
+      <div style="color:${G.rp>=500?'var(--g)':'var(--r)'}">  ${G.rp>=500?'✓':'✗'} Výskum: ${G.rp} / 500 RP &nbsp;<span style="color:var(--ad)">(získaj cez [R] Výskum)</span></div>
+      <div style="color:${G.credits>=20000?'var(--g)':'var(--r)'}">  ${G.credits>=20000?'✓':'✗'} Kredity: ${G.credits} / 20 000 CR</div>
+      ${canOmega?`<button class="btn" style="margin-top:.4rem;color:#dd00ff;border-color:#dd00ff44" onclick="sFX('click');buyOmegaUnlock();aPlanetTravel()">🔓 Odomknúť OMEGA-VII</button>`:'<div style="color:var(--ad);margin-top:.3rem;font-size:.82rem">Splň obe podmienky pre odomknutie.</div>'}
+    </div>`;
+  }
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
     <div class="st">🪐 MAPA GALAXIE &mdash; Aktuálna: <span style="color:${curPlanet4().col}">${curPlanet4().name}</span></div>
-    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">Palivo: 🚀 ${G.colony.fuel}  ·  Kredity: ${G.credits} CR</div>
+    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">Palivo: 🚀 ${G.colony.fuel}  ·  Kredity: ${G.credits} CR  ·  Výskum: ${G.rp} RP</div>
     ${html}
+    ${omegaHtml}
     <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
