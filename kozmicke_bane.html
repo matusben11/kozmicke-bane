@@ -687,7 +687,7 @@ function aLead(){
 // ══════════════════════════════════════════════════════════════
 //  INV / UPG HTML
 // ══════════════════════════════════════════════════════════════
-function invH(){return MINERALS.map(m=>{const s=G.inv[m.id]||{qty:0,pl:0};
+function invH(){return [...MINERALS,...(G.era===4?MINERALS_4:[])].map(m=>{const s=G.inv[m.id]||{qty:0,pl:0};
   if(!s.qty)return`<span style="color:${m.col};opacity:.2">${m.sym}0</span>`;
   const pb=s.pl>0?`<sup style="color:#ffe066;font-size:.68rem">${s.pl>1?'★★':'★'}</sup>`:'';
   return`<span style="color:${m.col}">${m.sym}${s.qty}${pb}</span>`;}).join(' ');}
@@ -945,7 +945,8 @@ function doMine(){
 function aSell(){
   const logs=[];let total=0,any=false;
   const colOresSold=[];
-  for(const m of MINERALS){const s=G.inv[m.id];if(!s||s.qty<=0)continue;any=true;
+  const sellPool=G.era===4?[...MINERALS,...MINERALS_4]:MINERALS;
+  for(const m of sellPool){const s=G.inv[m.id];if(!s||s.qty<=0)continue;any=true;
     if(G.planet===3&&(m.id==='titanium'||m.id==='exoternimium'))colOresSold.push(m.name);
     const mult=s.pl>1?3:s.pl===1?2:1;const val=m.v*mult*s.qty;total+=val;
     const ps=s.pl>0?` [${s.pl>1?'★★ ×3':'★ ×2'}]`:'';
@@ -957,7 +958,7 @@ function aSell(){
   logs.push({txt:'',cls:'lwarn'});
   logs.push({txt:`  ► CELKOM: +${total} CR  |  ZOSTATOK: ${G.credits} CR`,cls:'lok'});
   flash('rgba(57,255,106,.13)');sFX('buy');
-  if(G.planet!==3&&G.credits>=G.goal){setTimeout(G.planet===2?sceneCorpOffer:sceneWin,600);return;}
+  if(G.era<4&&G.planet!==3&&G.credits>=G.goal){setTimeout(G.planet===2?sceneCorpOffer:sceneWin,600);return;}
   rG([{txt:'── VÝKUPNÁ STANICA ──',cls:'linf'},...logs]);}
 
 // ══════════════════════════════════════════════════════════════
@@ -998,10 +999,11 @@ function aShop(){
         <span style="font-size:.9rem;color:${afford?'var(--a)':'var(--r)'}">${s.cost} CR</span></div>`;
     }
     // Omega-VII unlock
-    if(!G.omegaUnlocked&&G.rp>=500){
-      html+=`<div class="si" onclick="buyOmegaUnlock()">
+    if(!G.omegaUnlocked){
+      const canOmega=G.rp>=500&&G.credits>=20000;
+      html+=`<div class="si" onclick="${canOmega?'buyOmegaUnlock()':''}" style="${!canOmega?'opacity:.5':''}">
         <span><strong style="color:#dd00ff">🔓 Odomknúť OMEGA-VII</strong> <small style="color:var(--ad)">500 RP + 20 000 CR</small></span>
-        <span style="color:${G.credits>=20000?'var(--a)':'var(--r)'}">20 000 CR</span></div>`;
+        <span style="font-size:.9rem;color:${G.rp>=500?'var(--a)':'var(--r)'}">${G.rp}/500 RP</span></div>`;
     }
   }
 
@@ -1048,7 +1050,8 @@ function buySupply(id){
   aShop();}
 
 function buyOmegaUnlock(){
-  if(G.rp<500||G.credits<20000){sFX('danger');return;}
+  if(G.rp<500){sFX('danger');rG([{txt:`✗ Nedostatok RP! Máš ${G.rp}/500 RP. Pokračuj vo výskume.`,cls:'ldng'}]);return;}
+  if(G.credits<20000){sFX('danger');rG([{txt:`✗ Nedostatok CR! Chýba ${20000-G.credits} CR.`,cls:'ldng'}]);return;}
   G.rp-=500;G.credits-=20000;G.omegaUnlocked=true;
   sFX('win');flash('rgba(221,0,255,.25)');
   rG([{txt:'🔓 OMEGA-VII ODOMKNUTÝ! Priprav sa na hlboký vesmír.',cls:'lrar'},
@@ -1156,7 +1159,7 @@ function aLore(){const e=LORE[G.loreIdx%LORE.length];G.loreIdx++;
 //  STATS
 // ══════════════════════════════════════════════════════════════
 function aStat(){
-  const iv=MINERALS.reduce((s,m)=>{const i=G.inv[m.id];return s+(i&&i.qty?m.v*(i.pl>1?3:i.pl===1?2:1)*i.qty:0);},0);
+  const iv=[...MINERALS,...MINERALS_4].reduce((s,m)=>{const i=G.inv[m.id];return s+(i&&i.qty?m.v*(i.pl>1?3:i.pl===1?2:1)*i.qty:0);},0);
   setScr(`<div class="panel" style="min-width:620px;">
     ${corners()}
     <div class="st">📊 ŠTATISTIKY MISIE</div>
@@ -1179,7 +1182,7 @@ function aStat(){
       <div><span class="hl">Zbraň:         </span>${G.weapon?`⚔ ${G.weapon.name}`:'žiadna'}</div>
       <div><span class="hl">Výskum (RP):   </span>${G.rp} RP</div>
       <div><span class="hl">Raketa:        </span>${G.rocket?'✓ zostrojená':'✗ nezostrojená'}</div>
-      <div><span class="hl">Planéta:       </span>ZYRAX-${G.planet===2?'10':'9'}</div>
+      <div><span class="hl">Planéta:       </span>${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 Kolonizácia':G.planet===2?'ZYRAX-10':'ZYRAX-9'}</div>
     </div>
     <div class="mg g1" style="margin-top:.7rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
   </div>`);
@@ -1191,8 +1194,8 @@ function aStat(){
 function aQuit(){setScr(`<div class="panel" style="text-align:center;min-width:560px;">
   ${corners()}
   <div style="font-size:1.12rem;margin-bottom:1rem;color:var(--ad);">
-    Opustiť Zyrax-9?<br>
-    Máš <span style="color:var(--a)">${G.credits} CR</span> z <span style="color:var(--a)">${G.goal} CR</span>
+    Opustiť ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8':G.planet===2?'ZYRAX-10':'ZYRAX-9'}?<br>
+    Máš <span style="color:var(--a)">${G.credits} CR</span>${G.era<4?` z <span style="color:var(--a)">${G.goal} CR</span>`:''}
   </div>
   <div class="mg" style="max-width:500px;margin:0 auto;">
     <button class="btn btn-s" onclick="sFX('click');sceneSave()">💾 Najprv uložiť</button>
