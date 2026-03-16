@@ -604,6 +604,28 @@ def render_lobby(pilot):
     html += '<div style="width:100%;max-width:700px">'
     html += '<a href="/logout" class="btn btn-logout">&#10007; &nbsp; Odhlásiť sa</a>'
     html += '</div>'
+    # ── Auto-sync script (localStorage → server pri každom otvorení lobby)
+    html += """<script>
+(function(){
+  try{
+    var saves=JSON.parse(localStorage.getItem('kb_saves')||'{}');
+    var lb=JSON.parse(localStorage.getItem('kb_leaderboard')||'[]');
+    var hasData=Object.keys(saves).length>0||lb.length>0;
+    if(!hasData)return;
+    fetch('/api/sync_local_saves',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({saves:saves,leaderboard:lb})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.synced>0){
+        console.log('[sync] Synchronizovaných slotov: '+d.synced);
+        window.location.reload();
+      }
+    }).catch(function(e){console.warn('[sync]',e);});
+  }catch(e){console.warn('[sync] Chyba:',e);}
+})();
+</script>"""
+
     html += '</body></html>'
     return html
 
@@ -1063,6 +1085,42 @@ def api_get_career():
 
 
 # ── Export / Import dát ────────────────────────────────────────────────────
+
+@app.route("/api/sync_local_saves", methods=["POST"])
+def sync_local_saves():
+    """Auto-sync: prehliadač pošle localStorage dáta → server ich uloží."""
+    if "username" not in session:
+        return {"ok": False}, 401
+    uname = _uname()
+    body = request.get_json(force=True, silent=True) or {}
+    synced = 0
+
+    # Uloženia (kb_saves) — localStorage formát: {slot: saveData}
+    raw_saves = body.get("saves", {})
+    if raw_saves:
+        all_saves = load_jf(KB_SAVES, {})
+        user_saves = all_saves.get(uname, {})
+        for slot, data in raw_saves.items():
+            if slot not in user_saves:          # uložíme iba ak server slot chýba
+                user_saves[slot] = data
+                synced += 1
+        all_saves[uname] = user_saves
+        save_jf(KB_SAVES, all_saves)
+
+    # Leaderboard — iba záznamy tohto hráča
+    lb_entries = body.get("leaderboard", [])
+    if lb_entries:
+        all_lb = load_jf(KB_LB, [])
+        existing_ts = {e.get("ts") for e in all_lb}
+        for entry in lb_entries:
+            if (entry.get("username", "").upper() == uname
+                    and entry.get("ts") not in existing_ts):
+                all_lb.append(entry)
+        all_lb.sort(key=lambda x: x.get("score", 0), reverse=True)
+        save_jf(KB_LB, all_lb[:50])
+
+    return {"ok": True, "synced": synced}
+
 
 @app.route("/export_data")
 def export_data():
