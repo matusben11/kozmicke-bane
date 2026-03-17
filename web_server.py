@@ -18,7 +18,8 @@ KB_SAVES  = BASE_DIR / "kb_saves.json"
 KB_LB     = BASE_DIR / "kb_leaderboard.json"
 HTML_FILE = BASE_DIR / "kozmicke_bane.html"
 
-PORT = int(os.environ.get("PORT", 5000))
+PORT       = int(os.environ.get("PORT", 5000))
+ADMIN_CODE = os.environ.get("ADMIN_CODE", "")   # nastav v env premenných na Render
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -1274,6 +1275,178 @@ def _import_page(msg, error=None):
   <hr style="border-color:#333;margin:1rem 0">
   <a href="/lobby" class="btn">◀ Späť do lobby</a>
 </div></body></html>"""
+
+
+# ── Admin panel ────────────────────────────────────────────────────────────
+
+ADMIN_CSS = """
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0a0a0a;color:#ddd;font-family:'Courier New',monospace;padding:1rem;}
+h1{color:#ffb000;margin-bottom:1rem;}
+h2{color:#ff8800;margin:.8rem 0 .4rem;}
+table{width:100%;border-collapse:collapse;font-size:.88rem;margin-bottom:1.5rem;}
+th{background:#1a1200;color:#ffb000;padding:.35rem .6rem;text-align:left;border:1px solid #333;}
+td{padding:.3rem .6rem;border:1px solid #222;}
+tr:hover td{background:#111;}
+.me td{background:#1a1a00;}
+a.btn{display:inline-block;padding:.25rem .7rem;border:1px solid #555;color:#ffb000;
+  text-decoration:none;border-radius:3px;font-size:.82rem;margin:.15rem;}
+a.btn:hover{background:#1a1200;border-color:#ffb000;}
+a.btn-r{border-color:#ff4444;color:#ff4444;}
+a.btn-r:hover{background:#1a0000;border-color:#ff4444;}
+a.btn-g{border-color:#39ff6a;color:#39ff6a;}
+.warn{color:#ff4444;margin:.5rem 0;}
+.ok{color:#39ff6a;margin:.5rem 0;}
+form.inline{display:inline;}
+input{background:#111;border:1px solid #444;color:#ffb000;padding:.2rem .4rem;
+  border-radius:3px;font-family:inherit;font-size:.85rem;}
+</style>
+"""
+
+def _admin_check():
+    """Vráti True ak je admin session aktívna."""
+    return session.get("admin") is True
+
+@app.route("/admin", methods=["GET", "POST"])
+def admin_login():
+    if _admin_check():
+        return redirect("/admin/panel")
+    err = ""
+    if request.method == "POST":
+        code = request.form.get("code", "")
+        if ADMIN_CODE and code == ADMIN_CODE:
+            session["admin"] = True
+            return redirect("/admin/panel")
+        err = "Nesprávny admin kód."
+    return f"""<!DOCTYPE html><html><head><title>Admin</title>{ADMIN_CSS}</head><body>
+<h1>🔑 ADMIN PRÍSTUP</h1>
+<p style="color:#888;margin-bottom:1rem">Zadaj admin kód nastavený v env premennej <code>ADMIN_CODE</code>.</p>
+{"<p class='warn'>"+err+"</p>" if err else ""}
+<form method="POST">
+  <input type="password" name="code" placeholder="Admin kód" autofocus style="width:220px">
+  <button type="submit" style="background:#1a1200;border:1px solid #ffb000;color:#ffb000;
+    padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.4rem">
+    Vstúpiť
+  </button>
+</form>
+</body></html>"""
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect("/admin")
+
+@app.route("/admin/panel")
+def admin_panel():
+    if not _admin_check():
+        return redirect("/admin")
+    users   = load_users()
+    career  = load_jf(KB_CAREER, {})
+    saves   = load_jf(KB_SAVES, {})
+
+    rows = ""
+    for uname, u in sorted(users.items()):
+        c    = career.get(uname.upper(), {})
+        sv   = saves.get(uname.upper(), {})
+        rows += f"""<tr>
+          <td><strong>{uname}</strong></td>
+          <td style="font-size:.78rem;color:#888;word-break:break-all">{u.get('password','–')[:16]}…</td>
+          <td>{u.get('registered','–')}</td>
+          <td>{u.get('last_login') or u.get('last_web_login') or '–'}</td>
+          <td style="color:#ffdd44">{c.get('rank_name','–')}</td>
+          <td>{c.get('career_cr',0):,} CR</td>
+          <td>{c.get('sessions',0)} / {c.get('wins',0)}</td>
+          <td>{len(sv)} slotov</td>
+          <td>
+            <a href="/admin/reset/{uname}" class="btn btn-r"
+               onclick="return confirm('Reset hesla pre {uname}?')">Reset hesla</a>
+            <a href="/admin/delete/{uname}" class="btn btn-r"
+               onclick="return confirm('Vymazať účet {uname}? Toto je nevratné!')">Zmazať</a>
+          </td>
+        </tr>"""
+
+    total_cr = sum(career.get(u.upper(),{}).get("career_cr",0) for u in users)
+    return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}</head><body>
+<h1>⚙ ADMIN PANEL — KOZMICKÉ BANE</h1>
+<p style="color:#888;font-size:.85rem">
+  Účty: <strong style="color:#ffb000">{len(users)}</strong> &nbsp;|&nbsp;
+  Celkové kariérne CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
+  <a href="/admin/logout" class="btn btn-r">Odhlásiť admin</a>
+  <a href="/lobby" class="btn">Lobby</a>
+</p>
+<h2>👥 VŠETKY ÚČTY</h2>
+<table>
+  <tr>
+    <th>Používateľ</th><th>Hash hesla (prvých 16 znakov)</th>
+    <th>Registrovaný</th><th>Posledné prihlásenie</th>
+    <th>Rank</th><th>Kariéra</th><th>Hry / Výhry</th><th>Uloženia</th><th>Akcie</th>
+  </tr>
+  {rows}
+</table>
+<h2>🔐 RESET HESLA</h2>
+<form method="POST" action="/admin/reset_pw">
+  <input type="text"     name="uname"   placeholder="Používateľ" style="width:180px">
+  <input type="password" name="new_pw"  placeholder="Nové heslo" style="width:180px">
+  <button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;
+    padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.3rem">
+    Nastaviť heslo
+  </button>
+</form>
+<p style="color:#555;font-size:.8rem;margin-top:.4rem">
+  * Heslá sú uložené ako SHA-256 hash — originálne heslá nie sú nikde uložené.
+</p>
+</body></html>"""
+
+@app.route("/admin/reset_pw", methods=["POST"])
+def admin_reset_pw():
+    if not _admin_check():
+        return redirect("/admin")
+    uname  = request.form.get("uname", "").strip()
+    new_pw = request.form.get("new_pw", "")
+    users  = load_users()
+    if uname not in users:
+        return redirect("/admin/panel?err=notfound")
+    ok, msg = validate_pw(new_pw)
+    if not ok:
+        return redirect(f"/admin/panel?err={msg}")
+    users[uname]["password"] = hash_pw(new_pw)
+    save_users(users)
+    return redirect("/admin/panel")
+
+@app.route("/admin/reset/<uname>")
+def admin_reset_get(uname):
+    if not _admin_check():
+        return redirect("/admin")
+    return f"""<!DOCTYPE html><html><head><title>Reset hesla</title>{ADMIN_CSS}</head><body>
+<h1>🔐 Reset hesla — {uname}</h1>
+<form method="POST" action="/admin/reset_pw">
+  <input type="hidden" name="uname" value="{uname}">
+  <input type="password" name="new_pw" placeholder="Nové heslo (min 6 znakov, 1 číslica)"
+    style="width:260px" autofocus>
+  <button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;
+    padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.3rem">
+    Uložiť nové heslo
+  </button>
+</form>
+<p style="margin-top:.8rem"><a href="/admin/panel" class="btn">◀ Späť</a></p>
+</body></html>"""
+
+@app.route("/admin/delete/<uname>")
+def admin_delete_user(uname):
+    if not _admin_check():
+        return redirect("/admin")
+    users = load_users()
+    users.pop(uname, None)
+    save_users(users)
+    # Vymaž aj kariéru a uloženia
+    career = load_jf(KB_CAREER, {})
+    career.pop(uname.upper(), None)
+    save_jf(KB_CAREER, career)
+    saves = load_jf(KB_SAVES, {})
+    saves.pop(uname.upper(), None)
+    save_jf(KB_SAVES, saves)
+    return redirect("/admin/panel")
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────
