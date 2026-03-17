@@ -58,15 +58,25 @@ _seed_default_user()
 def _uname():
     return session["username"].upper()
 
+def _atomic_write(path, text):
+    """Write text to a temp file then rename — prevents corruption on crash."""
+    path = pathlib.Path(path)
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    tmp.replace(path)
+
 def load_users():
-    if DATA_FILE.exists():
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    try:
+        if DATA_FILE.exists():
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[WARN] game_users.json corrupted ({e}), starting fresh.")
     return {}
 
 def save_users(u):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(u, f, indent=4, ensure_ascii=False)
+    _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -89,8 +99,7 @@ def load_jf(path, default=None):
     return default if default is not None else {}
 
 def save_jf(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 def _migrate_saves():
     saves = load_jf(KB_SAVES, {})
