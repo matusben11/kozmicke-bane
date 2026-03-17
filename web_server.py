@@ -979,10 +979,24 @@ def game():
                 "kozmicke_bane.html nenájdený!</h2>"), 404
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html = f.read()
-    # Inject server-side saves so any device gets data immediately (no async needed)
-    user_saves = load_jf(KB_SAVES, {}).get(_uname(), {})
+    # Inject server-side saves + career so any device gets data immediately (no async needed)
+    user_saves  = load_jf(KB_SAVES,  {}).get(_uname(), {})
+    all_career  = load_jf(KB_CAREER, {})
+    my_career   = all_career.get(_uname(), {})
+    lb_rows = []
+    for u, d in all_career.items():
+        if d.get("career_cr", 0) > 0:
+            lb_rows.append({"username": u, "career_cr": d.get("career_cr", 0),
+                "rank_name": d.get("rank_name", "Baník"), "rank": d.get("rank", 1),
+                "sessions": d.get("sessions", 0), "wins": d.get("wins", 0),
+                "best_session": d.get("best_session", 0)})
+    lb_rows.sort(key=lambda x: -x["career_cr"])
     server_inject = (
-        f"<script>window.__SERVER_SAVES__={json.dumps(user_saves)};</script>\n"
+        f"<script>"
+        f"window.__SERVER_SAVES__={json.dumps(user_saves)};"
+        f"window.__MY_CAREER__={json.dumps(my_career)};"
+        f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
+        f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
     resp = make_response(html)
@@ -1049,7 +1063,19 @@ def api_add_lb():
 
 @app.route("/api/get_leaderboard")
 def api_get_lb():
-    return json.dumps(load_jf(KB_LB, []))
+    """Vráti globálne kariéry zoradené podľa career_cr pre in-game leaderboard."""
+    if not _require_session():
+        return "[]", 401
+    career = load_jf(KB_CAREER, {})
+    rows = []
+    for uname, d in career.items():
+        if d.get("career_cr", 0) > 0:
+            rows.append({"username": uname, "career_cr": d.get("career_cr", 0),
+                "rank_name": d.get("rank_name", "Baník"), "rank": d.get("rank", 1),
+                "sessions": d.get("sessions", 0), "wins": d.get("wins", 0),
+                "best_session": d.get("best_session", 0)})
+    rows.sort(key=lambda x: -x["career_cr"])
+    return json.dumps(rows)
 
 @app.route("/api/clear_leaderboard", methods=["POST"])
 def api_clear_lb():
@@ -1095,6 +1121,27 @@ def api_get_career():
         return "{}", 401
     career = load_jf(KB_CAREER, {})
     return json.dumps(career.get(_uname(), {}))
+
+@app.route("/api/get_all_careers")
+def api_get_all_careers():
+    """Verejný globálny leaderboard — všetky účty zoradené podľa career_cr."""
+    if not _require_session():
+        return "[]", 401
+    career = load_jf(KB_CAREER, {})
+    rows = []
+    for uname, d in career.items():
+        if d.get("career_cr", 0) > 0:
+            rows.append({
+                "username": uname,
+                "career_cr": d.get("career_cr", 0),
+                "rank_name": d.get("rank_name", "Baník"),
+                "rank": d.get("rank", 1),
+                "sessions": d.get("sessions", 0),
+                "wins": d.get("wins", 0),
+                "best_session": d.get("best_session", 0),
+            })
+    rows.sort(key=lambda x: -x["career_cr"])
+    return json.dumps(rows)
 
 
 # ── Export / Import dát ────────────────────────────────────────────────────

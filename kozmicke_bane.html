@@ -432,10 +432,12 @@ function _sceneMainFull(pilot){
   document.getElementById('lbbtn').style.display='none';
   const saves=getSaves();
   const hasSave=Object.keys(saves).length>0;
-  const lb=getLB();
-  const lbTop=lb.slice(0,3).map((e,i)=>{
+  const glb=window.__GLOBAL_LB__||[];
+  const mc=window.__MY_CAREER__||{};
+  const myRankStr=mc.career_cr>0?`<div style="font-size:.85rem;color:#ffdd44;margin-bottom:.3rem">⭐ Tvoj rank: <strong>${mc.rank_name||'Baník'}</strong> — ${(mc.career_cr||0).toLocaleString()} CR kariéry</div>`:'';
+  const lbTop=glb.slice(0,3).map((e,i)=>{
     const medals=['🥇','🥈','🥉'];
-    return`<span style="font-size:.95rem">${medals[i]} ${e.username} — ${e.credits} CR (${e.turns} ťahov)</span>`;
+    return`<span style="font-size:.95rem">${medals[i]} ${e.username} — ${(e.career_cr||0).toLocaleString()} CR [${e.rank_name}]</span>`;
   }).join('<br>');
 
   setScr(`<div class="panel" style="text-align:center;min-width:700px;">
@@ -453,7 +455,8 @@ function _sceneMainFull(pilot){
 ██╔══██╗██╔══██║██║╚██╗██║██╔══╝    CIEĽ: 15 000 CR
 ██████╔╝██║  ██║██║ ╚████║███████╗  5 ÚROVNÍ HĹBKY
 ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝  SAVE / LOAD / LEADERBOARD</pre>
-    ${lb.length?`<div style="font-size:.9rem;color:var(--ad);margin-bottom:.5rem;">🏆 TOP SKÓRE:<br>${lbTop}</div>`:''}
+    ${myRankStr}
+    ${glb.length?`<div style="font-size:.9rem;color:var(--ad);margin-bottom:.5rem;">🏆 TOP HRÁČI:<br>${lbTop}</div>`:''}
     <div class="mg" style="max-width:540px;margin:0 auto;">
       <button class="btn bbig" onclick="sFX('click');sceneNewGame()">▶  NOVÁ HRA</button>
       ${hasSave?`<button class="btn btn-s" style="grid-column:1/-1;text-align:center;font-size:1.22rem;padding:.48rem;" onclick="sFX('click');sceneLoad()">📂  NAČÍTAŤ ULOžENÚ HRU</button>`:''}
@@ -659,37 +662,50 @@ function quickSave(){
 // ══════════════════════════════════════════════════════════════
 //  LEADERBOARD
 // ══════════════════════════════════════════════════════════════
-function aLead(){
-  const lb=getLB();
+function _buildLbRows(data){
   const medals=['🥇','🥈','🥉'];
-  let rows='';
-  if(!lb.length){rows='<div style="text-align:center;color:var(--ad);padding:1rem">Leaderboard je prázdny. Dohraj hru!</div>';}
-  else{
-    rows=`<div class="lb-row" style="color:var(--ad);font-size:.88rem;border-bottom:1px solid var(--a);">
-      <span>#</span><span>PILOT</span><span>SKÓRE</span><span>KREDITY</span><span>ŤAHY / HĹBKA</span></div>`;
-    lb.forEach((e,i)=>{
-      const medal=i<3?medals[i]:`${i+1}.`;
-      const cls=i===0?'lb-row gold':i===1?'lb-row silver':i===2?'lb-row bronze':'lb-row';
-      rows+=`<div class="${cls}">
-        <span>${medal}</span>
-        <span><strong>${e.username}</strong></span>
-        <span style="color:var(--a)">${e.score}</span>
-        <span>${e.credits} CR</span>
-        <span>${e.turns} ťahov · L${e.maxDepth}</span>
-      </div>`;
-    });
-  }
+  const me=(G.username||PILOT).toUpperCase();
+  if(!data||!data.length)return '<div style="text-align:center;color:var(--ad);padding:1rem">Žiadni hráči zatiaľ. Dohraj hru!</div>';
+  let rows=`<div class="lb-row" style="color:var(--ad);font-size:.88rem;border-bottom:1px solid var(--a);">
+    <span>#</span><span>PILOT</span><span>KARIÉRA CR</span><span>RANK</span><span>HRY / VÍŤAZSTVÁ</span></div>`;
+  data.forEach((e,i)=>{
+    const medal=i<3?medals[i]:`${i+1}.`;
+    const cls=(e.username.toUpperCase()===me?'lb-row me ':(i===0?'lb-row gold':i===1?'lb-row silver':i===2?'lb-row bronze':'lb-row'));
+    rows+=`<div class="${cls}">
+      <span>${medal}</span>
+      <span><strong>${e.username}</strong></span>
+      <span style="color:var(--a)">${(e.career_cr||0).toLocaleString()} CR</span>
+      <span style="color:#ffdd44">${e.rank_name||'Baník'}</span>
+      <span>${e.sessions||0} hier · ${e.wins||0} výhier</span>
+    </div>`;
+  });
+  return rows;
+}
+
+function aLead(){
+  const data=window.__GLOBAL_LB__||[];
+  const rows=_buildLbRows(data);
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">🏆 LEADERBOARD — KOZMICKÉ BANE v3.0</div>
-    <div style="margin-bottom:.4rem;font-size:.9rem;color:var(--ad);">Skóre = kredity ÷ 5 · ukladá sa lokálne v prehliadači</div>
-    ${rows}
+    <div class="st">🏆 GLOBÁLNY LEADERBOARD — VŠETKY ÚČTY</div>
+    <div id="lb-rows">${rows}</div>
     <div style="display:flex;gap:.4rem;margin-top:.7rem;">
       <button class="btn" style="flex:1;text-align:center;" onclick="sFX('click');${G.username?'rG([])':'sceneTitle(PILOT)'}">◀  Späť</button>
-      <button class="btn btn-d" style="flex:0 0 auto;" onclick="if(confirm('Vymazať leaderboard?')){localStorage.removeItem('${LB_KEY}');sFX('danger');aLead();}">🗑 Reset</button>
+      <button class="btn btn-b" style="flex:0 0 auto;" onclick="sFX('click');_refreshLb()">🔄 Obnoviť</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');G.username?rG([]):sceneTitle(PILOT);}};
+  _refreshLb();
+}
+
+function _refreshLb(){
+  const api=py();if(!api)return;
+  api.get_leaderboard().then(raw=>{
+    try{
+      const data=JSON.parse(raw);
+      if(data&&data.length){window.__GLOBAL_LB__=data;const el=document.getElementById('lb-rows');if(el)el.innerHTML=_buildLbRows(data);}
+    }catch(e){}
+  }).catch(()=>{});
 }
 
 // ══════════════════════════════════════════════════════════════
