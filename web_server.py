@@ -46,11 +46,8 @@ def _seed_default_user():
         "last_web_login": None,
         "score": 0, "games_played": 0, "kb_sessions": 0,
     }
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=4, ensure_ascii=False)
+    save_users(users)
     print(f"[seed] Účet '{username}' vytvorený z DEFAULT_USER env var.")
-
-_seed_default_user()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -113,6 +110,7 @@ def _migrate_saves():
     print(f"[migrate] kb_saves.json migrated: {list(new_saves.keys())}")
 
 _migrate_saves()
+_seed_default_user()
 
 def kb_rank(cr):
     for thr, r, name in [

@@ -3,7 +3,7 @@ services:
     name: kozmicke-bane
     runtime: python
     buildCommand: pip install -r requirements_cloud.txt
-    startCommand: gunicorn wsgi:app
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --worker-tmp-dir /tmp --timeout 120
     envVars:
       - key: SECRET_KEY
         generateValue: true
