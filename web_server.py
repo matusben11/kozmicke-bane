@@ -127,6 +127,7 @@ LOGIN_HTML = """\
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KOZMICKÉ BANE v3.0 — Login</title>
+<style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -460,6 +461,7 @@ WEB_BRIDGE = """\
 # ── Lobby HTML ────────────────────────────────────────────────────────────
 
 LOBBY_CSS = """
+<style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -642,6 +644,7 @@ def render_lobby(pilot):
 # ── Mini-hry HTML ─────────────────────────────────────────────────────────
 
 MINI_BASE_CSS = """
+<style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
