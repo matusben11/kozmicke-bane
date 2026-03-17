@@ -571,7 +571,15 @@ def render_lobby(pilot):
             lbl  = f"#{s} &nbsp; {uname} &nbsp; {crs:,} CR ({pct}%) &nbsp; Táh {d.get('turn',0)} &nbsp; [{dep}] &nbsp; {date}"
             html += f'<div class="slot-row">'
             html += f'<a href="/game?slot={s}" class="btn" style="margin:0;flex:1">{lbl}</a>'
-            html += f'<a href="/delete_save/{s}" class="btn btn-red" style="margin:0" onclick="return confirm(\'Vymazať slot #{s}?\')">&#128465;</a>'
+            del_js = (
+                f"if(confirm('Vymazať slot #{s}?'))"
+                "{var sv=JSON.parse(localStorage.getItem('kb_saves')||'{}');"
+                f"delete sv['{s}'];"
+                "localStorage.setItem('kb_saves',JSON.stringify(sv));"
+                f"window.location='/delete_save/{s}';"
+                "}return false;"
+            )
+            html += f'<a href="#" class="btn btn-red" style="margin:0" onclick="{del_js}">&#128465;</a>'
             html += f'</div>'
     html += '</div>'
 
