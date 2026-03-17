@@ -979,7 +979,12 @@ def game():
                 "kozmicke_bane.html nenájdený!</h2>"), 404
     with open(HTML_FILE, "r", encoding="utf-8") as f:
         html = f.read()
-    html = html.replace("<head>", "<head>\n" + WEB_BRIDGE, 1)
+    # Inject server-side saves so any device gets data immediately (no async needed)
+    user_saves = load_jf(KB_SAVES, {}).get(_uname(), {})
+    server_inject = (
+        f"<script>window.__SERVER_SAVES__={json.dumps(user_saves)};</script>\n"
+    )
+    html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
     resp = make_response(html)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     return resp

@@ -289,7 +289,15 @@ function py(){
 }
 
 function getSaves(){
-  try{return JSON.parse(localStorage.getItem(LS_KEY)||'{}');}catch(e){return {};}
+  try{
+    const ls=JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+    // Na novom zariadení: ak localStorage prázdny ale server injektoval dáta, použi ich
+    if(!Object.keys(ls).length&&window.__SERVER_SAVES__&&Object.keys(window.__SERVER_SAVES__).length){
+      localStorage.setItem(LS_KEY,JSON.stringify(window.__SERVER_SAVES__));
+      return window.__SERVER_SAVES__;
+    }
+    return ls;
+  }catch(e){return {};}
 }
 function getLB(){try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]');}catch(e){return[];}}
 
