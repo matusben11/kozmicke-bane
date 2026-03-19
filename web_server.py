@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v3.0 — Web Server
+KOZMICKÉ BANE v4.5 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -133,7 +133,7 @@ LOGIN_HTML = """\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KOZMICKÉ BANE v3.0 — Login</title>
+<title>KOZMICKÉ BANE v4.5 — Login</title>
 <style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -231,7 +231,7 @@ input:focus{border-color:#ffb000;}
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>
-<div class="subtitle">B A N E &nbsp; v3.0 &mdash; WEB EDITION</div>
+<div class="subtitle">B A N E &nbsp; v4.5 &mdash; WEB EDITION</div>
 
 <div class="card">
   <div class="tabs">
@@ -279,7 +279,7 @@ input:focus{border-color:#ffb000;}
     </form>
   </div>
 
-  <p class="hint">KOZMICKÉ BANE v3.0 &mdash; Web Edition &mdash; localhost:__PORT__</p>
+  <p class="hint">KOZMICKÉ BANE v4.5 &mdash; Web Edition &mdash; localhost:__PORT__</p>
 </div>
 
 <script>
@@ -536,7 +536,7 @@ def render_lobby(pilot):
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
-    html += f'<div class="subtitle">B A N E &nbsp; v3.0 &mdash; CAREER EDITION</div>'
+    html += f'<div class="subtitle">B A N E &nbsp; v4.5 &mdash; CAREER EDITION</div>'
     html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
 
     # ── Kariéra stats
@@ -560,7 +560,7 @@ def render_lobby(pilot):
 
     # ── Nová hra KB
     html += '<div class="card">'
-    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v3.0</div>'
+    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.5</div>'
     html += '<a href="/game" class="btn btn-green">&#9654; &nbsp; NOV&#193; HRA &mdash; Za&#269;ni od nuly</a>'
     html += '</div>'
 
@@ -617,6 +617,18 @@ def render_lobby(pilot):
     html += '<div class="card-title">&#128228; PRENOS DÁT &mdash; Import / Export</div>'
     html += '<a href="/import_data" class="btn" style="text-align:center">&#8597; Preniesť dáta z PC na server (alebo naopak)</a>'
     html += '</div>'
+
+    # ── Admin prístup priamo v lobby
+    html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
+    html += '<details style="border:1px solid #2a1500;padding:8px 14px;background:#0b0900">'
+    html += '<summary style="cursor:pointer;color:#555;font-size:0.92em;letter-spacing:0.06em;list-style:none">&#9881; ADMIN PR&#205;STUP</summary>'
+    html += '<form method="POST" action="/admin" style="margin-top:10px;display:flex;gap:8px;align-items:center">'
+    html += '<input type="password" name="code" placeholder="Admin k&#243;d" autocomplete="off" '
+    html += 'style="background:#000;border:1px solid #3a2800;color:#fff8e0;font-family:\'VT323\',monospace;'
+    html += 'font-size:1.1em;padding:6px 10px;flex:1;outline:none;">'
+    html += '<button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;'
+    html += 'padding:6px 16px;cursor:pointer;font-family:\'VT323\',monospace;font-size:1.1em;white-space:nowrap">Vstúpiť</button>'
+    html += '</form></details></div>'
 
     # ── Logout
     html += '<div style="width:100%;max-width:700px">'
@@ -1355,37 +1367,47 @@ def admin_panel():
     career  = load_jf(KB_CAREER, {})
     saves   = load_jf(KB_SAVES, {})
 
+    # Zlúč účty z users + career (aby sa zobrazili aj keď je users.json poškodený)
+    all_names = set(u.lower() for u in users.keys())
+    for ckey in career.keys():
+        all_names.add(ckey.lower())
+
     rows = ""
-    for uname, u in sorted(users.items()):
-        c    = career.get(uname.upper(), {})
-        sv   = saves.get(uname.upper(), {})
+    for uname_lower in sorted(all_names):
+        # nájdi original-case kľúč v users
+        u_orig = next((k for k in users if k.lower() == uname_lower), None)
+        u  = users.get(u_orig, {}) if u_orig else {}
+        c  = career.get(uname_lower.upper(), {})
+        sv = saves.get(uname_lower.upper(), {})
+        display = u_orig or uname_lower.upper()
+        pw_str = (u.get('password','')[:16] + '…') if u.get('password') else '<em style="color:#555">—bez hesla—</em>'
         rows += f"""<tr>
-          <td><strong>{uname}</strong></td>
-          <td style="font-size:.78rem;color:#888;word-break:break-all">{u.get('password','–')[:16]}…</td>
+          <td><strong>{display}</strong></td>
+          <td style="font-size:.78rem;color:#888;word-break:break-all">{pw_str}</td>
           <td>{u.get('registered','–')}</td>
-          <td>{u.get('last_login') or u.get('last_web_login') or '–'}</td>
-          <td style="color:#ffdd44">{c.get('rank_name','–')}</td>
+          <td>{u.get('last_login') or u.get('last_web_login') or c.get('last_seen','–')}</td>
+          <td style="color:#ffdd44">{c.get('rank_name','Baník')}</td>
           <td>{c.get('career_cr',0):,} CR</td>
           <td>{c.get('sessions',0)} / {c.get('wins',0)}</td>
           <td>{len(sv)} slotov</td>
           <td>
-            <a href="/admin/reset/{uname}" class="btn btn-r"
-               onclick="return confirm('Reset hesla pre {uname}?')">Reset hesla</a>
-            <a href="/admin/delete/{uname}" class="btn btn-r"
-               onclick="return confirm('Vymazať účet {uname}? Toto je nevratné!')">Zmazať</a>
+            <a href="/admin/reset/{display}" class="btn btn-r"
+               onclick="return confirm('Reset hesla pre {display}?')">Reset hesla</a>
+            <a href="/admin/delete/{display}" class="btn btn-r"
+               onclick="return confirm('Vymazať účet {display}? Toto je nevratné!')">Zmazať</a>
           </td>
         </tr>"""
 
-    total_cr = sum(career.get(u.upper(),{}).get("career_cr",0) for u in users)
+    total_cr = sum(d.get("career_cr", 0) for d in career.values())
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}</head><body>
-<h1>⚙ ADMIN PANEL — KOZMICKÉ BANE</h1>
+<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.5</h1>
 <p style="color:#888;font-size:.85rem">
-  Účty: <strong style="color:#ffb000">{len(users)}</strong> &nbsp;|&nbsp;
+  Účty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
   Celkové kariérne CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
   <a href="/admin/logout" class="btn btn-r">Odhlásiť admin</a>
   <a href="/lobby" class="btn">Lobby</a>
 </p>
-<h2>👥 VŠETKY ÚČTY</h2>
+<h2>&#128101; VŠETKY ÚČTY</h2>
 <table>
   <tr>
     <th>Používateľ</th><th>Hash hesla (prvých 16 znakov)</th>
@@ -1462,6 +1484,6 @@ def admin_delete_user(uname):
 # ── Štart ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print(f"\n  KOZMICKÉ BANE v3.0 — Web Server")
+    print(f"\n  KOZMICKÉ BANE v4.5 — Web Server")
     print(f"  Otvor: http://localhost:{PORT}\n")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
