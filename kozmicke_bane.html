@@ -2,7 +2,7 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
-<title>KOZMICKE BANE v4.5</title>
+<title>KOZMICKE BANE v4.6</title>
 <style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -82,6 +82,15 @@ html,body{width:100%;height:100%;background:#000;font-family:'VT323',monospace;c
 .btn-b{border-color:#38d1ff44;color:var(--b);}
 .btn-b:hover{background:#001520;border-color:var(--b);color:#aaeeff;}
 .bbig{grid-column:1/-1;text-align:center;font-size:1.28rem;padding:.52rem;border-color:var(--a);}
+/* MOBILE MODE */
+body.kb-mobile .panel{min-width:98vw;max-width:98vw;padding:1rem 1.1rem;}
+body.kb-mobile .btn{font-size:1.18rem;padding:.5rem .7rem;}
+body.kb-mobile .bbig{font-size:1.45rem;padding:.7rem;}
+body.kb-mobile #glog{height:170px;font-size:1.05rem;}
+body.kb-mobile #hud{font-size:1.08rem;gap:.28rem .8rem;}
+body.kb-mobile .mg{grid-template-columns:1fr 1fr;gap:.4rem;}
+body.kb-mobile .mg.g1{grid-template-columns:1fr;}
+body.kb-mobile .tbtn{font-size:1.1rem;padding:3px 10px;}
 /* SECTION */
 .st{font-size:1.12rem;color:var(--ad);letter-spacing:.09em;margin-bottom:.42rem;
   border-bottom:1px solid var(--border);padding-bottom:.2rem;}
@@ -358,8 +367,20 @@ function addToLeaderboard(entry){
 function reportSessionEnd(creditsEarned, mined, win){
   const api=py();
   if(api){
-    try{ api.report_session_end(creditsEarned, mined, win ? 1 : 0); }
-    catch(e){ console.warn('[KB] reportSessionEnd error:', e); }
+    try{
+      api.report_session_end(creditsEarned, mined, win ? 1 : 0)
+        .then(function(raw){
+          try{
+            const d=JSON.parse(raw||'{}');
+            if(d&&d.career_cr>=0){
+              // Záloha kariéry do localStorage — obnoví sa pri výpadku servera
+              const prev=JSON.parse(localStorage.getItem('kb_career')||'{}');
+              if(!prev.career_cr||d.career_cr>=prev.career_cr)
+                localStorage.setItem('kb_career',JSON.stringify(d));
+            }
+          }catch(e){}
+        }).catch(function(e){ console.warn('[KB] career save error:',e); });
+    }catch(e){ console.warn('[KB] reportSessionEnd error:', e); }
   }
 }
 
@@ -450,7 +471,7 @@ function _sceneMainFull(pilot){
 ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
 ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
 ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝
- ██████╗  █████╗ ███╗   ██╗███████╗  v4.5
+ ██████╗  █████╗ ███╗   ██╗███████╗  v4.6
 ██╔══██╗██╔══██╗████╗  ██║██╔════╝  ENHANCED EDITION
 ██████╔╝███████║██╔██╗ ██║█████╗
 ██╔══██╗██╔══██║██║╚██╗██║██╔══╝    CIEĽ: 15 000 CR
@@ -464,15 +485,19 @@ function _sceneMainFull(pilot){
       <button class="btn btn-b" style="text-align:center;" onclick="sFX('click');aLead()">🏆 LEADERBOARD</button>
       <button class="btn" style="text-align:center;" onclick="sFX('click');sceneHowTo()">❓ AKO HRAŤ</button>
       ${hasSave?`<button class="btn btn-d" style="text-align:center;" onclick="sFX('click');sceneClearSaves()">🗑 VYMAZAŤ ULOŽENIA</button>`:'<div></div>'}
+      <button class="btn" style="text-align:center;border-color:#555;color:#888;font-size:.95rem;"
+        onclick="sFX('click');_showLayoutSelect('sceneMain(PILOT)')">
+        ${localStorage.getItem('kb_layout')==='mobile'?'📱':'🖥️'} ZMENIŤ ZOBRAZENIE
+      </button>
     </div>
-    <div style="font-size:.82rem;color:var(--ad);margin-top:.8rem;">(c) 1987 NOVA SOFT · v4.5 · Pilot: ${pilot.toUpperCase()}</div>
+    <div style="font-size:.82rem;color:var(--ad);margin-top:.8rem;">(c) 1987 NOVA SOFT · v4.6 · Pilot: ${pilot.toUpperCase()}</div>
   </div>`);
 }
 
 function sceneHowTo(){
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">❓ AKO HRAŤ — KOZMICKÉ BANE v4.5</div>
+    <div class="st">❓ AKO HRAŤ — KOZMICKÉ BANE v4.6</div>
     <div style="font-size:1.05rem;line-height:1.9;">
 <div style="color:var(--b)">── CIEĽ ──</div>
 Vyzbieraj <strong>15 000 CR</strong> predajom nerastov a opusti planétu Zyrax-9.
@@ -765,7 +790,7 @@ function rG(logs=[]){
 
   setScr(`<div class="panel" style="min-width:750px;max-width:830px;">
     ${corners()}
-    <div id="plabel">◈  ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 KOLONIZÁCIA':G.planet===2?'ZYRAX-10':'ZYRAX-9'}  ${G.era===4?'v4.5':'v4.5'}  ◈  TÁH: ${G.turn}  ◈  ${G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?`Kolónia: 👷${G.colony?.workers||0} 🍞${G.colony?.food||0} ⚡${G.colony?.energy||0}`:`CIEĽ: ${G.goal} CR`}  ◈</div>
+    <div id="plabel">◈  ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 KOLONIZÁCIA':G.planet===2?'ZYRAX-10':'ZYRAX-9'}  ${G.era===4?'v4.6':'v4.6'}  ◈  TÁH: ${G.turn}  ◈  ${G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?`Kolónia: 👷${G.colony?.workers||0} 🍞${G.colony?.food||0} ⚡${G.colony?.energy||0}`:`CIEĽ: ${G.goal} CR`}  ◈</div>
     <div id="hud">
       <div><span class="hl">PILOT:</span> <strong>${G.username.toUpperCase()}</strong></div>
       <div><span class="hl">KREDITY:</span> <strong style="color:var(--a);text-shadow:0 0 7px var(--a)">${G.credits} CR</strong></div>
@@ -1762,7 +1787,7 @@ function sceneBoot(pilot){
   </div>`);
   const L=[
     {t:'NOVA SOFT SYSTEMS  (C) 1987',c:''},
-    {t:'KOZMICKE BANE  v4.5  ENHANCED EDITION',c:''},
+    {t:'KOZMICKE BANE  v4.6  ENHANCED EDITION',c:''},
     {t:'',c:''},
     {t:'CHECKING MEMORY .......... 640K  [OK]',c:'g'},
     {t:'LOADING SECTOR MAP ....... [OK]',c:'g'},
@@ -1840,7 +1865,7 @@ function sceneTitle(pilot){
     ${corners()}
     <pre style="font-size:.54rem;line-height:1.1;color:var(--a);animation:pglow 2.5s infinite;margin-bottom:.6rem;">${asc}</pre>
     <div style="font-size:.88rem;color:var(--ad);letter-spacing:.12em;margin-bottom:1rem;">
-      (c) 1987  NOVA SOFT  ·  v4.5 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY
+      (c) 1987  NOVA SOFT  ·  v4.6 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY
     </div>
     <div class="mg" style="max-width:500px;margin:0 auto;">
       <button class="btn bbig" onclick="sFX('click');sceneStory('${pilot}')">▶  NOVÁ MISIA — ZYRAX-9</button>
@@ -1951,6 +1976,36 @@ function startGameFromScene(pilot){
 }
 
 // ══════════════════════════════════════════════════════════════
+//  LAYOUT (mobile / pc)
+// ══════════════════════════════════════════════════════════════
+function applyLayout(mode){
+  localStorage.setItem('kb_layout', mode);
+  if(mode==='mobile') document.body.classList.add('kb-mobile');
+  else document.body.classList.remove('kb-mobile');
+}
+(function(){ const l=localStorage.getItem('kb_layout'); if(l) applyLayout(l); })();
+
+function _showLayoutSelect(next){
+  rG([`<div style="text-align:center;padding:1.2rem 0">
+    <div style="font-size:1.5rem;color:var(--a);letter-spacing:.1em;margin-bottom:1.2rem">
+      ⚙ VYBER ZOBRAZENIE
+    </div>
+    <div style="font-size:1rem;color:var(--ad);margin-bottom:1.6rem">
+      Aké zariadenie používaš? Môžeš to kedykoľvek zmeniť v nastaveniach.
+    </div>
+    <div class="mg g2" style="max-width:420px;margin:0 auto">
+      <button class="btn bbig" style="font-size:1.4rem;padding:.9rem;border-color:var(--b);color:var(--b)"
+        onclick="applyLayout('mobile');${next}">
+        📱<br><span style="font-size:1rem;color:var(--ad)">MOBIL</span>
+      </button>
+      <button class="btn bbig" style="font-size:1.4rem;padding:.9rem;border-color:var(--a);color:var(--a)"
+        onclick="applyLayout('pc');${next}">
+        🖥️<br><span style="font-size:1rem;color:var(--ad)">POČÍTAČ</span>
+      </button>
+    </div>
+  </div>`]);
+}
+
 //  ENTRY POINT
 // ══════════════════════════════════════════════════════════════
 const _params = new URLSearchParams(window.location.search);
@@ -1976,7 +2031,11 @@ if (_startSlot) {
   }
   setTimeout(_tryLoadSlot, 200);
 } else {
-  sceneBoot(PILOT);
+  if(!localStorage.getItem('kb_layout')){
+    _showLayoutSelect('sceneBoot(PILOT)');
+  } else {
+    sceneBoot(PILOT);
+  }
 }
 </script>
 </body>

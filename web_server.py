@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v4.5 — Web Server
+KOZMICKÉ BANE v4.6 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -133,7 +133,7 @@ LOGIN_HTML = """\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KOZMICKÉ BANE v4.5 — Login</title>
+<title>KOZMICKÉ BANE v4.6 — Login</title>
 <style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -231,7 +231,7 @@ input:focus{border-color:#ffb000;}
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>
-<div class="subtitle">B A N E &nbsp; v4.5 &mdash; WEB EDITION</div>
+<div class="subtitle">B A N E &nbsp; v4.6 &mdash; WEB EDITION</div>
 
 <div class="card">
   <div class="tabs">
@@ -279,7 +279,7 @@ input:focus{border-color:#ffb000;}
     </form>
   </div>
 
-  <p class="hint">KOZMICKÉ BANE v4.5 &mdash; Web Edition &mdash; localhost:__PORT__</p>
+  <p class="hint">KOZMICKÉ BANE v4.6 &mdash; Web Edition &mdash; localhost:__PORT__</p>
 </div>
 
 <script>
@@ -536,7 +536,7 @@ def render_lobby(pilot):
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
-    html += f'<div class="subtitle">B A N E &nbsp; v4.5 &mdash; CAREER EDITION</div>'
+    html += f'<div class="subtitle">B A N E &nbsp; v4.6 &mdash; CAREER EDITION</div>'
     html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
 
     # ── Kariéra stats
@@ -560,7 +560,7 @@ def render_lobby(pilot):
 
     # ── Nová hra KB
     html += '<div class="card">'
-    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.5</div>'
+    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.6</div>'
     html += '<a href="/game" class="btn btn-green">&#9654; &nbsp; NOV&#193; HRA &mdash; Za&#269;ni od nuly</a>'
     html += '</div>'
 
@@ -638,6 +638,13 @@ def render_lobby(pilot):
     html += """<script>
 (function(){
   try{
+    // ── Career záloha z localStorage → server
+    var lsCareer=JSON.parse(localStorage.getItem('kb_career')||'null');
+    if(lsCareer&&lsCareer.career_cr>0){
+      fetch('/api/sync_career',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(lsCareer)}).catch(function(){});
+    }
+    // ── Saves sync
     var saves=JSON.parse(localStorage.getItem('kb_saves')||'{}');
     var lb=JSON.parse(localStorage.getItem('kb_leaderboard')||'[]');
     var hasData=Object.keys(saves).length>0||lb.length>0;
@@ -982,6 +989,11 @@ def delete_save_route(slot):
     if uname in saves:
         saves[uname].pop(str(slot), None)
     save_jf(KB_SAVES, saves)
+    # Zapamätaj vymazaný slot — auto-sync ho nesmie znovu pridať
+    deleted = list(session.get("deleted_slots", []))
+    if str(slot) not in deleted:
+        deleted.append(str(slot))
+    session["deleted_slots"] = deleted
     return redirect("/lobby")
 
 
@@ -1145,6 +1157,33 @@ def api_get_career():
     career = load_jf(KB_CAREER, {})
     return json.dumps(career.get(_uname(), {}))
 
+@app.route("/api/sync_career", methods=["POST"])
+def api_sync_career():
+    """Záloha kariéry z localStorage → server (iba ak je server nižší alebo prázdny)."""
+    if not _require_session():
+        return "{}", 401
+    d = request.get_json(force=True, silent=True) or {}
+    client_cr = int(d.get("career_cr", 0))
+    if client_cr <= 0:
+        return "{}", 200
+    career = load_jf(KB_CAREER, {})
+    key = _uname()
+    server_cr = career.get(key, {}).get("career_cr", 0)
+    if client_cr > server_cr:
+        e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
+                              "total_mined": 0, "wins": 0, "last_seen": "–"})
+        e["career_cr"]   = client_cr
+        e["sessions"]    = max(e.get("sessions", 0),    int(d.get("sessions", 0)))
+        e["wins"]        = max(e.get("wins", 0),        int(d.get("wins", 0)))
+        e["total_mined"] = max(e.get("total_mined", 0), int(d.get("total_mined", 0)))
+        e["best_session"]= max(e.get("best_session", 0),int(d.get("best_session", 0)))
+        r, rname = kb_rank(client_cr)
+        e["rank"] = r; e["rank_name"] = rname
+        career[key] = e
+        save_jf(KB_CAREER, career)
+        return json.dumps(e)
+    return json.dumps(career.get(key, {}))
+
 @app.route("/api/get_all_careers")
 def api_get_all_careers():
     """Verejný globálny leaderboard — všetky účty zoradené podľa career_cr."""
@@ -1180,10 +1219,13 @@ def sync_local_saves():
 
     # Uloženia (kb_saves) — localStorage formát: {slot: saveData}
     raw_saves = body.get("saves", {})
+    deleted_slots = session.get("deleted_slots", [])
     if raw_saves:
         all_saves = load_jf(KB_SAVES, {})
         user_saves = all_saves.get(uname, {})
         for slot, data in raw_saves.items():
+            if slot in deleted_slots:           # preskočiť vymazané sloty
+                continue
             if slot not in user_saves:          # uložíme iba ak server slot chýba
                 user_saves[slot] = data
                 synced += 1
@@ -1484,6 +1526,6 @@ def admin_delete_user(uname):
 # ── Štart ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print(f"\n  KOZMICKÉ BANE v4.5 — Web Server")
+    print(f"\n  KOZMICKÉ BANE v4.6 — Web Server")
     print(f"  Otvor: http://localhost:{PORT}\n")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
