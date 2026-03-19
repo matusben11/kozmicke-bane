@@ -1020,7 +1020,7 @@ function aSell(){
   logs.push({txt:`  ► CELKOM: +${total} CR  |  ZOSTATOK: ${G.credits} CR`,cls:'lok'});
   flash('rgba(57,255,106,.13)');sFX('buy');
   quickSave();
-  if(G.era<4&&G.planet!==3&&G.credits>=G.goal){setTimeout(G.planet===2?sceneCorpOffer:sceneWin,600);return;}
+  if(G.era<4&&G.planet===2&&G.credits>=G.goal){setTimeout(sceneCorpOffer,600);return;}
   rG([{txt:'── VÝKUPNÁ STANICA ──',cls:'linf'},...logs]);}
 
 // ══════════════════════════════════════════════════════════════
