@@ -24,7 +24,17 @@ KB_CAREER = DATA_DIR / "kb_career.json"
 KB_SAVES  = DATA_DIR / "kb_saves.json"
 KB_LB     = DATA_DIR / "kb_leaderboard.json"
 
-print(f"[startup] DATA_DIR={DATA_DIR} | users exists={DATA_FILE.exists()}")
+# Migrácia zo starého disk path (pred zmenou mountPath)
+_OLD_SRC = pathlib.Path("/opt/render/project/src")
+for _fname in ["game_users.json", "kb_career.json", "kb_saves.json", "kb_leaderboard.json"]:
+    _old = _OLD_SRC / _fname
+    _new = DATA_DIR / _fname
+    if _old.exists() and not _new.exists():
+        import shutil
+        shutil.copy2(_old, _new)
+        print(f"[migrate] {_fname}: {_old} -> {_new}")
+
+print(f"[startup] DATA_DIR={DATA_DIR} | RENDER={bool(os.environ.get('RENDER'))} | users exists={DATA_FILE.exists()}")
 
 PORT       = int(os.environ.get("PORT", 5000))
 ADMIN_CODE = os.environ.get("ADMIN_CODE", "")   # nastav v env premenných na Render
@@ -1448,6 +1458,31 @@ def admin_login():
 def admin_logout():
     session.pop("admin", None)
     return redirect("/admin")
+
+@app.route("/admin/diag")
+def admin_diag():
+    if not _admin_check():
+        return redirect("/admin")
+    import platform, sys
+    users  = load_users()
+    career = load_jf(KB_CAREER, {})
+    saves  = load_jf(KB_SAVES,  {})
+    lines  = [
+        f"DATA_DIR: {DATA_DIR}",
+        f"DATA_DIR exists: {DATA_DIR.exists()}",
+        f"RENDER env: {os.environ.get('RENDER','not set')}",
+        f"game_users.json: {'EXISTS' if DATA_FILE.exists() else 'MISSING'} | {len(users)} users",
+        f"kb_career.json:  {'EXISTS' if KB_CAREER.exists() else 'MISSING'} | {len(career)} entries",
+        f"kb_saves.json:   {'EXISTS' if KB_SAVES.exists() else 'MISSING'} | {len(saves)} users",
+        f"Python: {sys.version}",
+        f"Platform: {platform.platform()}",
+        "",
+        "=== USERS ===",
+    ]
+    for u, d in sorted(users.items()):
+        lines.append(f"  {u}: pw={d.get('password','?')[:20]}  ban={d.get('banned_until')}")
+    pre = "\n".join(lines)
+    return f"<pre style='background:#000;color:#0f0;padding:20px;font-family:monospace'>{pre}</pre>"
 
 @app.route("/admin/panel")
 def admin_panel():
