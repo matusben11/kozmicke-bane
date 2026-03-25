@@ -12,11 +12,19 @@ from datetime import datetime
 from flask import Flask, request, redirect, session, make_response
 
 BASE_DIR  = pathlib.Path(__file__).parent.resolve()
-DATA_FILE = BASE_DIR / "game_users.json"
-KB_CAREER = BASE_DIR / "kb_career.json"
-KB_SAVES  = BASE_DIR / "kb_saves.json"
-KB_LB     = BASE_DIR / "kb_leaderboard.json"
 HTML_FILE = BASE_DIR / "kozmicke_bane.html"
+
+# Dáta: na Render v /opt/render/project/data (oddelené od kódu), lokálne v BASE_DIR
+_RENDER_DATA = pathlib.Path("/opt/render/project/data")
+DATA_DIR  = _RENDER_DATA if os.environ.get("RENDER") else BASE_DIR
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DATA_FILE = DATA_DIR / "game_users.json"
+KB_CAREER = DATA_DIR / "kb_career.json"
+KB_SAVES  = DATA_DIR / "kb_saves.json"
+KB_LB     = DATA_DIR / "kb_leaderboard.json"
+
+print(f"[startup] DATA_DIR={DATA_DIR} | users exists={DATA_FILE.exists()}")
 
 PORT       = int(os.environ.get("PORT", 5000))
 ADMIN_CODE = os.environ.get("ADMIN_CODE", "")   # nastav v env premenných na Render
