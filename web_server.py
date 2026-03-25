@@ -48,7 +48,7 @@ def _seed_default_user():
     if username in users:
         return  # účet už existuje, nič nerob
     users[username] = {
-        "password": hashlib.sha256(password.encode()).hexdigest(),
+        "password": password,
         "registered": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "last_login": None,
         "last_web_login": None,
@@ -86,11 +86,35 @@ def save_users(u):
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
+def check_pw(stored, entered):
+    """Podporuje plaintext (nové) aj SHA-256 hash (staré účty)."""
+    if stored == entered:
+        return True
+    if len(stored) == 64 and stored == hash_pw(entered):
+        return True
+    return False
+
+def check_ban(user):
+    """Vráti (is_banned, správa). banned_until: None=nie, -1=permanent, timestamp=čas."""
+    bu = user.get("banned_until")
+    if bu is None:
+        return False, ""
+    if bu == -1:
+        return True, "Tvoj účet bol trvalo zablokovaný administrátorom."
+    remaining = bu - datetime.now().timestamp()
+    if remaining <= 0:
+        return False, ""
+    if remaining < 3600:
+        t = f"{int(remaining/60)+1} minút"
+    elif remaining < 86400:
+        t = f"{int(remaining/3600)+1} hodín"
+    else:
+        t = f"{int(remaining/86400)+1} dní"
+    return True, f"Tvoj účet je zablokovaný ešte {t}."
+
 def validate_pw(pw):
-    if len(pw) < 6:
-        return False, "Heslo musí mať aspoň 6 znakov."
-    if not any(c.isdigit() for c in pw):
-        return False, "Heslo musí obsahovať aspoň jednu číslicu."
+    if len(pw) < 4:
+        return False, "Heslo musí mať aspoň 4 znaky."
     return True, "OK"
 
 def load_jf(path, default=None):
@@ -889,7 +913,10 @@ def login():
     users = load_users()
     if username not in users:
         return render_login(tab="login", err_login=f"Používateľ '{username}' neexistuje.")
-    if users[username]["password"] != hash_pw(password):
+    banned, ban_msg = check_ban(users[username])
+    if banned:
+        return render_login(tab="login", err_login=ban_msg)
+    if not check_pw(users[username]["password"], password):
         return render_login(tab="login", err_login="Nesprávne heslo.")
     session["username"] = username
     users[username]["last_web_login"] = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -913,8 +940,8 @@ def register():
     if password != password2:
         return render_login(tab="register", err_reg="Heslá sa nezhodujú.")
     users[username] = {
-        "password":    hash_pw(password),
-        "created_at":  datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "password":   password,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "score": 0, "games_played": 0, "kb_sessions": 0,
     }
     save_users(users)
@@ -938,7 +965,7 @@ def reset():
         return render_login(tab="reset", err_reset=msg)
     if new_pw != new_pw2:
         return render_login(tab="reset", err_reset="Heslá sa nezhodujú.")
-    users[username]["password"] = hash_pw(new_pw)
+    users[username]["password"] = new_pw
     save_users(users)
     return render_login(tab="login", ok_login="Heslo bolo zmenené. Prihlás sa.")
 
@@ -1422,62 +1449,99 @@ def admin_panel():
     for ckey in career.keys():
         all_names.add(ckey.lower())
 
+    now_ts = datetime.now().timestamp()
     rows = ""
     for uname_lower in sorted(all_names):
-        # nájdi original-case kľúč v users
         u_orig = next((k for k in users if k.lower() == uname_lower), None)
         u  = users.get(u_orig, {}) if u_orig else {}
         c  = career.get(uname_lower.upper(), {})
         sv = saves.get(uname_lower.upper(), {})
         display = u_orig or uname_lower.upper()
-        pw_str = (u.get('password','')[:16] + '…') if u.get('password') else '<em style="color:#555">—bez hesla—</em>'
+        pw_str = u.get("password", "") or "<em style='color:#555'>—</em>"
+        bu = u.get("banned_until")
+        if bu == -1:
+            ban_cell = "<span style='color:#ff4444'>&#128683; PERM</span>"
+        elif bu and bu > now_ts:
+            mins = int((bu - now_ts) / 60) + 1
+            ban_cell = f"<span style='color:#ff9900'>&#9203; {mins} min</span>"
+        else:
+            ban_cell = "<span style='color:#444'>—</span>"
+        cr_val = c.get("career_cr", 0)
         rows += f"""<tr>
           <td><strong>{display}</strong></td>
-          <td style="font-size:.78rem;color:#888;word-break:break-all">{pw_str}</td>
-          <td>{u.get('registered','–')}</td>
-          <td>{u.get('last_login') or u.get('last_web_login') or c.get('last_seen','–')}</td>
-          <td style="color:#ffdd44">{c.get('rank_name','Baník')}</td>
-          <td>{c.get('career_cr',0):,} CR</td>
-          <td>{c.get('sessions',0)} / {c.get('wins',0)}</td>
-          <td>{len(sv)} slotov</td>
-          <td>
-            <a href="/admin/reset/{display}" class="btn btn-r"
-               onclick="return confirm('Reset hesla pre {display}?')">Reset hesla</a>
-            <a href="/admin/delete/{display}" class="btn btn-r"
-               onclick="return confirm('Vymazať účet {display}? Toto je nevratné!')">Zmazať</a>
+          <td style="color:#ffee88">{pw_str}</td>
+          <td style="color:#888;font-size:.85em">{u.get('created_at') or u.get('registered','–')}</td>
+          <td style="color:#888;font-size:.85em">{u.get('last_web_login') or c.get('last_seen','–')}</td>
+          <td style="color:#ffdd44">{c.get('rank_name','Banik')}</td>
+          <td>{cr_val:,} CR</td>
+          <td>{ban_cell}</td>
+          <td>{len(sv)}</td>
+          <td style="white-space:nowrap">
+            <form method="POST" action="/admin/set_rank" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="number" name="cr" value="{cr_val}" min="0"
+                style="width:80px;background:#000;border:1px solid #3a2800;color:#fff8e0;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <button type="submit" style="background:#001a00;border:1px solid #39ff6a;
+                color:#39ff6a;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.85em">
+                CR
+              </button>
+            </form>
+            &nbsp;
+            <form method="POST" action="/admin/ban" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <select name="dur" style="background:#1a0000;border:1px solid #ff4444;
+                color:#ff4444;font-family:inherit;font-size:.85em;padding:2px">
+                <option value="10m">10 min</option>
+                <option value="1h">1 hod</option>
+                <option value="12h">12 hod</option>
+                <option value="24h">24 hod</option>
+                <option value="perm">Permanent</option>
+              </select>
+              <button type="submit" style="background:#1a0000;border:1px solid #ff4444;
+                color:#ff4444;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.85em">
+                Ban
+              </button>
+            </form>
+            <a href="/admin/unban/{display}"
+               style="color:#aaa;font-size:.8em;margin-left:3px">Unban</a>
+            &nbsp;
+            <form method="POST" action="/admin/reset_pw" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="text" name="new_pw" placeholder="nove heslo"
+                style="width:90px;background:#000;border:1px solid #555;color:#fff8e0;
+                font-family:inherit;font-size:.8em;padding:2px 4px">
+              <button type="submit" style="background:#000;border:1px solid #888;
+                color:#aaa;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
+                PW
+              </button>
+            </form>
+            &nbsp;
+            <a href="/admin/delete/{display}" style="color:#ff4444;font-size:.8em"
+               onclick="return confirm('Vymazat {display}?')">Del</a>
           </td>
         </tr>"""
 
     total_cr = sum(d.get("career_cr", 0) for d in career.values())
-    return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}</head><body>
-<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.5</h1>
+    return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
+<style>table{{font-size:.82em}}td,th{{padding:4px 6px;vertical-align:middle}}
+input[type=number],input[type=text],select{{outline:none}}</style>
+</head><body>
+<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.6</h1>
 <p style="color:#888;font-size:.85rem">
-  Účty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
-  Celkové kariérne CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
-  <a href="/admin/logout" class="btn btn-r">Odhlásiť admin</a>
+  Ucty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
+  Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
+  <a href="/admin/logout" class="btn btn-r">Logout</a>
   <a href="/lobby" class="btn">Lobby</a>
 </p>
-<h2>&#128101; VŠETKY ÚČTY</h2>
+<h2>&#128101; VSETKY UCTY</h2>
 <table>
   <tr>
-    <th>Používateľ</th><th>Hash hesla (prvých 16 znakov)</th>
-    <th>Registrovaný</th><th>Posledné prihlásenie</th>
-    <th>Rank</th><th>Kariéra</th><th>Hry / Výhry</th><th>Uloženia</th><th>Akcie</th>
+    <th>Pouzivatel</th><th>Heslo</th><th>Reg.</th><th>Posl. login</th>
+    <th>Rank</th><th>Kariera</th><th>Ban</th><th>Sloty</th><th>Akcie</th>
   </tr>
   {rows}
 </table>
-<h2>🔐 RESET HESLA</h2>
-<form method="POST" action="/admin/reset_pw">
-  <input type="text"     name="uname"   placeholder="Používateľ" style="width:180px">
-  <input type="password" name="new_pw"  placeholder="Nové heslo" style="width:180px">
-  <button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;
-    padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.3rem">
-    Nastaviť heslo
-  </button>
-</form>
-<p style="color:#555;font-size:.8rem;margin-top:.4rem">
-  * Heslá sú uložené ako SHA-256 hash — originálne heslá nie sú nikde uložené.
-</p>
 </body></html>"""
 
 @app.route("/admin/reset_pw", methods=["POST"])
@@ -1485,34 +1549,62 @@ def admin_reset_pw():
     if not _admin_check():
         return redirect("/admin")
     uname  = request.form.get("uname", "").strip()
-    new_pw = request.form.get("new_pw", "")
+    new_pw = request.form.get("new_pw", "").strip()
     users  = load_users()
-    if uname not in users:
-        return redirect("/admin/panel?err=notfound")
-    ok, msg = validate_pw(new_pw)
-    if not ok:
-        return redirect(f"/admin/panel?err={msg}")
-    users[uname]["password"] = hash_pw(new_pw)
+    if uname not in users or not new_pw:
+        return redirect("/admin/panel")
+    users[uname]["password"] = new_pw
     save_users(users)
     return redirect("/admin/panel")
 
-@app.route("/admin/reset/<uname>")
-def admin_reset_get(uname):
+@app.route("/admin/set_rank", methods=["POST"])
+def admin_set_rank():
     if not _admin_check():
         return redirect("/admin")
-    return f"""<!DOCTYPE html><html><head><title>Reset hesla</title>{ADMIN_CSS}</head><body>
-<h1>🔐 Reset hesla — {uname}</h1>
-<form method="POST" action="/admin/reset_pw">
-  <input type="hidden" name="uname" value="{uname}">
-  <input type="password" name="new_pw" placeholder="Nové heslo (min 6 znakov, 1 číslica)"
-    style="width:260px" autofocus>
-  <button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;
-    padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.3rem">
-    Uložiť nové heslo
-  </button>
-</form>
-<p style="margin-top:.8rem"><a href="/admin/panel" class="btn">◀ Späť</a></p>
-</body></html>"""
+    uname = request.form.get("uname", "").strip()
+    try:
+        cr = max(0, int(request.form.get("cr", 0)))
+    except ValueError:
+        return redirect("/admin/panel")
+    career = load_jf(KB_CAREER, {})
+    key = uname.upper()
+    e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
+                         "best_session": 0, "last_seen": "–"})
+    e["career_cr"] = cr
+    r, rname = kb_rank(cr)
+    e["rank"] = r
+    e["rank_name"] = rname
+    career[key] = e
+    save_jf(KB_CAREER, career)
+    return redirect("/admin/panel")
+
+@app.route("/admin/ban", methods=["POST"])
+def admin_ban():
+    if not _admin_check():
+        return redirect("/admin")
+    uname = request.form.get("uname", "").strip()
+    dur   = request.form.get("dur", "1h")
+    users = load_users()
+    if uname not in users:
+        return redirect("/admin/panel")
+    dur_map = {"10m": 600, "1h": 3600, "12h": 43200, "24h": 86400}
+    if dur == "perm":
+        users[uname]["banned_until"] = -1
+    else:
+        secs = dur_map.get(dur, 3600)
+        users[uname]["banned_until"] = datetime.now().timestamp() + secs
+    save_users(users)
+    return redirect("/admin/panel")
+
+@app.route("/admin/unban/<uname>")
+def admin_unban(uname):
+    if not _admin_check():
+        return redirect("/admin")
+    users = load_users()
+    if uname in users:
+        users[uname]["banned_until"] = None
+        save_users(users)
+    return redirect("/admin/panel")
 
 @app.route("/admin/delete/<uname>")
 def admin_delete_user(uname):
