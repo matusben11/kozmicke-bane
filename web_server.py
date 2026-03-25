@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v4.6 — Web Server
+KOZMICKÉ BANE v4.7 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -175,7 +175,7 @@ LOGIN_HTML = """\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KOZMICKÉ BANE v4.6 — Login</title>
+<title>KOZMICKÉ BANE v4.7 — Login</title>
 <style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -273,7 +273,7 @@ input:focus{border-color:#ffb000;}
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>
-<div class="subtitle">B A N E &nbsp; v4.6 &mdash; WEB EDITION</div>
+<div class="subtitle">B A N E &nbsp; v4.7 &mdash; WEB EDITION</div>
 
 <div class="card">
   <div class="tabs">
@@ -321,7 +321,7 @@ input:focus{border-color:#ffb000;}
     </form>
   </div>
 
-  <p class="hint">KOZMICKÉ BANE v4.6 &mdash; Web Edition &mdash; localhost:__PORT__</p>
+  <p class="hint">KOZMICKÉ BANE v4.7 &mdash; Web Edition &mdash; localhost:__PORT__</p>
 </div>
 
 <script>
@@ -578,7 +578,7 @@ def render_lobby(pilot):
  ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
-    html += f'<div class="subtitle">B A N E &nbsp; v4.6 &mdash; CAREER EDITION</div>'
+    html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
     html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
 
     # ── Kariéra stats
@@ -602,7 +602,7 @@ def render_lobby(pilot):
 
     # ── Nová hra KB
     html += '<div class="card">'
-    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.6</div>'
+    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.7</div>'
     html += '<a href="/game" class="btn btn-green">&#9654; &nbsp; NOV&#193; HRA &mdash; Za&#269;ni od nuly</a>'
     html += '</div>'
 
@@ -1575,7 +1575,7 @@ def admin_panel():
 <style>table{{font-size:.82em}}td,th{{padding:4px 6px;vertical-align:middle}}
 input[type=number],input[type=text],select{{outline:none}}</style>
 </head><body>
-<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.6</h1>
+<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.7</h1>
 <p style="color:#888;font-size:.85rem">
   Ucty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
   Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
@@ -1674,6 +1674,6 @@ def admin_delete_user(uname):
 # ── Štart ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print(f"\n  KOZMICKÉ BANE v4.6 — Web Server")
+    print(f"\n  KOZMICKÉ BANE v4.7 — Web Server")
     print(f"  Otvor: http://localhost:{PORT}\n")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
