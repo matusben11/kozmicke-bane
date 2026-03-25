@@ -566,6 +566,9 @@ def render_lobby(pilot):
     kb     = career.get(pilot.upper(), {})
     cr     = kb.get("career_cr", 0)
     r, rname = kb_rank(cr)
+    users_db = load_users()
+    u_data   = users_db.get(pilot, {})
+    sp_rank  = u_data.get("special_rank")  # admin-udelený špeciálny rank
 
     # ── Hlavička
     html  = f"<!DOCTYPE html><html lang='sk'><head><meta charset='UTF-8'>"
@@ -579,14 +582,22 @@ def render_lobby(pilot):
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
     html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
-    html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
+    if sp_rank:
+        html += (f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; '
+                 f'<span style="color:#ffd700;text-shadow:0 0 10px #ffd700">&#9733; {sp_rank} &#9733;</span>'
+                 f' &nbsp;|&nbsp; {cr:,} CR</div>')
+    else:
+        html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
 
     # ── Kariéra stats
     html += '<div class="card">'
     html += '<div class="card-title">&#128202; KARIÉRA</div>'
     html += '<div class="stats-grid">'
     html += f'<div class="stat">Kariérne CR: <span>{cr:,}</span></div>'
-    html += f'<div class="stat">Rang: <span>{r} &mdash; {rname}</span></div>'
+    if sp_rank:
+        html += f'<div class="stat">Rang: <span style="color:#ffd700">&#9733; {sp_rank}</span></div>'
+    else:
+        html += f'<div class="stat">Rang: <span>{r} &mdash; {rname}</span></div>'
     html += f'<div class="stat">Sessioni: <span>{kb.get("sessions", 0)}</span></div>'
     html += f'<div class="stat">Najlepší run: <span>{kb.get("best_session", 0):,} CR</span></div>'
     html += f'<div class="stat">Celkom ťažby: <span>{kb.get("total_mined", 0):,} ks</span></div>'
@@ -1063,6 +1074,10 @@ def game():
     user_saves  = load_jf(KB_SAVES,  {}).get(_uname(), {})
     all_career  = load_jf(KB_CAREER, {})
     my_career   = all_career.get(_uname(), {})
+    # Pridaj special_rank z users DB do career injekcie
+    _u = load_users().get(session["username"], {})
+    if _u.get("special_rank"):
+        my_career = dict(my_career, special_rank=_u["special_rank"])
     lb_rows = []
     for u, d in all_career.items():
         if d.get("career_cr", 0) > 0:
@@ -1514,7 +1529,9 @@ def admin_panel():
             ban_cell = f"<span style='color:#ff9900'>&#9203; {mins} min</span>"
         else:
             ban_cell = "<span style='color:#444'>—</span>"
-        cr_val = c.get("career_cr", 0)
+        cr_val  = c.get("career_cr", 0)
+        sp      = u.get("special_rank") or ""
+        sp_cell = f"<span style='color:#ffd700'>&#9733; {sp}</span>" if sp else "<span style='color:#444'>—</span>"
         rows += f"""<tr>
           <td><strong>{display}</strong></td>
           <td style="color:#ffee88">{pw_str}</td>
@@ -1522,6 +1539,7 @@ def admin_panel():
           <td style="color:#888;font-size:.85em">{u.get('last_web_login') or c.get('last_seen','–')}</td>
           <td style="color:#ffdd44">{c.get('rank_name','Banik')}</td>
           <td>{cr_val:,} CR</td>
+          <td>{sp_cell}</td>
           <td>{ban_cell}</td>
           <td>{len(sv)}</td>
           <td style="white-space:nowrap">
@@ -1565,12 +1583,29 @@ def admin_panel():
               </button>
             </form>
             &nbsp;
+            &nbsp;
+            <form method="POST" action="/admin/set_special_rank" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="text" name="title" value="{sp}" placeholder="Spec. rank"
+                style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
+                font-family:inherit;font-size:.8em;padding:2px 4px">
+              <button type="submit" style="background:#1a1400;border:1px solid #ffd700;
+                color:#ffd700;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
+                &#9733;
+              </button>
+            </form>
+            &nbsp;
             <a href="/admin/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
           </td>
         </tr>"""
 
-    total_cr = sum(d.get("career_cr", 0) for d in career.values())
+    total_cr  = sum(d.get("career_cr", 0) for d in career.values())
+    sp_count  = sum(1 for u in users.values() if u.get("special_rank"))
+    sp_holders = ", ".join(
+        f"<span style='color:#ffd700'>&#9733; {k} ({v.get('special_rank')})</span>"
+        for k, v in users.items() if v.get("special_rank")
+    ) or "—"
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
 <style>table{{font-size:.82em}}td,th{{padding:4px 6px;vertical-align:middle}}
 input[type=number],input[type=text],select{{outline:none}}</style>
@@ -1579,14 +1614,19 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <p style="color:#888;font-size:.85rem">
   Ucty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
   Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
+  Spec. ranky: <strong style="color:#ffd700">{sp_count}/2</strong> &nbsp;|&nbsp;
   <a href="/admin/logout" class="btn btn-r">Logout</a>
+  <a href="/admin/diag" class="btn">Diag</a>
   <a href="/lobby" class="btn">Lobby</a>
+</p>
+<p style="font-size:.85rem;margin-bottom:8px">
+  &#9733; Specialne ranky: {sp_holders}
 </p>
 <h2>&#128101; VSETKY UCTY</h2>
 <table>
   <tr>
     <th>Pouzivatel</th><th>Heslo</th><th>Reg.</th><th>Posl. login</th>
-    <th>Rank</th><th>Kariera</th><th>Ban</th><th>Sloty</th><th>Akcie</th>
+    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Sloty</th><th>Akcie</th>
   </tr>
   {rows}
 </table>
@@ -1624,6 +1664,27 @@ def admin_set_rank():
     e["rank_name"] = rname
     career[key] = e
     save_jf(KB_CAREER, career)
+    return redirect("/admin/panel")
+
+@app.route("/admin/set_special_rank", methods=["POST"])
+def admin_set_special_rank():
+    if not _admin_check():
+        return redirect("/admin")
+    uname = request.form.get("uname", "").strip()
+    title = request.form.get("title", "").strip()
+    users = load_users()
+    if uname not in users:
+        return redirect("/admin/panel")
+    # Max 2 špeciálne ranky celkovo
+    if title:
+        current_sp = [k for k, v in users.items()
+                      if v.get("special_rank") and k != uname]
+        if len(current_sp) >= 2:
+            return (f"<p style='color:#ff4444;font-family:monospace;padding:20px'>"
+                    f"Max 2 specialne ranky! Uz maju: {', '.join(current_sp)}<br>"
+                    f"<a href='/admin/panel'>Spat</a></p>"), 400
+    users[uname]["special_rank"] = title if title else None
+    save_users(users)
     return redirect("/admin/panel")
 
 @app.route("/admin/ban", methods=["POST"])
