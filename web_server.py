@@ -154,6 +154,14 @@ def _migrate_saves():
 _migrate_saves()
 _seed_default_user()
 
+def get_sp_ranks(user_dict):
+    """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
+    sr = user_dict.get("special_ranks")
+    if isinstance(sr, list):
+        return [s for s in sr if s][:2]
+    old = user_dict.get("special_rank")
+    return [old] if old else []
+
 def kb_rank(cr):
     for thr, r, name in [
         (10_000_000, 5, "Legenda"),
@@ -568,7 +576,8 @@ def render_lobby(pilot):
     r, rname = kb_rank(cr)
     users_db = load_users()
     u_data   = users_db.get(pilot, {})
-    sp_rank  = u_data.get("special_rank")  # admin-udelený špeciálny rank
+    sp_ranks = get_sp_ranks(u_data)
+    sp_stars = " ".join(f'<span style="color:#ffd700;text-shadow:0 0 8px #ffd700">&#9733;&nbsp;{s}</span>' for s in sp_ranks)
 
     # ── Hlavička
     html  = f"<!DOCTYPE html><html lang='sk'><head><meta charset='UTF-8'>"
@@ -582,22 +591,19 @@ def render_lobby(pilot):
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
     html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
-    if sp_rank:
-        html += (f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; '
-                 f'<span style="color:#ffd700;text-shadow:0 0 10px #ffd700">&#9733; {sp_rank} &#9733;</span>'
-                 f' &nbsp;|&nbsp; {cr:,} CR</div>')
-    else:
-        html += f'<div class="pilot">PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR</div>'
+    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR'
+    if sp_stars:
+        pilot_line += f' &nbsp;|&nbsp; {sp_stars}'
+    html += f'<div class="pilot">{pilot_line}</div>'
 
     # ── Kariéra stats
     html += '<div class="card">'
     html += '<div class="card-title">&#128202; KARIÉRA</div>'
     html += '<div class="stats-grid">'
     html += f'<div class="stat">Kariérne CR: <span>{cr:,}</span></div>'
-    if sp_rank:
-        html += f'<div class="stat">Rang: <span style="color:#ffd700">&#9733; {sp_rank}</span></div>'
-    else:
-        html += f'<div class="stat">Rang: <span>{r} &mdash; {rname}</span></div>'
+    html += f'<div class="stat">Rang: <span>{r} &mdash; {rname}</span></div>'
+    if sp_ranks:
+        html += f'<div class="stat">Spec. ranky: <span style="color:#ffd700">' + " | ".join(f"&#9733; {s}" for s in sp_ranks) + '</span></div>'
     html += f'<div class="stat">Sessioni: <span>{kb.get("sessions", 0)}</span></div>'
     html += f'<div class="stat">Najlepší run: <span>{kb.get("best_session", 0):,} CR</span></div>'
     html += f'<div class="stat">Celkom ťažby: <span>{kb.get("total_mined", 0):,} ks</span></div>'
@@ -652,6 +658,7 @@ def render_lobby(pilot):
     html += '<div class="card-title">&#127942; KARIÉRA &mdash; TOP HRÁČI</div>'
     medals = ["&#129351;", "&#129352;", "&#129353;"]
     shown = 0
+    users_for_lb = load_users()
     for i, (uname, d) in enumerate(entries[:5]):
         c = d.get("career_cr", 0)
         if c == 0:
@@ -659,7 +666,10 @@ def render_lobby(pilot):
         _, rn = kb_rank(c)
         m   = medals[i] if i < 3 else f"{i+1}."
         cls = "lb-row me" if uname.upper() == pilot.upper() else "lb-row"
-        html += f'<div class="{cls}">{m} &nbsp; <span>{uname}</span> &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} sess.</div>'
+        u_lb = next((v for k, v in users_for_lb.items() if k.upper() == uname), {})
+        spr  = get_sp_ranks(u_lb)
+        sp_tag = (" " + " ".join(f'<span style="color:#ffd700;font-size:.85em">&#9733;{s}</span>' for s in spr)) if spr else ""
+        html += f'<div class="{cls}">{m} &nbsp; <span>{uname}</span>{sp_tag} &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} sess.</div>'
         shown += 1
     if shown == 0:
         html += '<div class="lb-row">&ndash; zatiaľ žiadne záznamy &ndash;</div>'
@@ -1090,10 +1100,10 @@ def game():
     user_saves  = load_jf(KB_SAVES,  {}).get(_uname(), {})
     all_career  = load_jf(KB_CAREER, {})
     my_career   = all_career.get(_uname(), {})
-    # Pridaj special_rank z users DB do career injekcie
     _u = load_users().get(session["username"], {})
-    if _u.get("special_rank"):
-        my_career = dict(my_career, special_rank=_u["special_rank"])
+    _spr = get_sp_ranks(_u)
+    if _spr:
+        my_career = dict(my_career, special_ranks=_spr)
     lb_rows = []
     for u, d in all_career.items():
         if d.get("career_cr", 0) > 0:
@@ -1546,8 +1556,9 @@ def admin_panel():
         else:
             ban_cell = "<span style='color:#444'>—</span>"
         cr_val  = c.get("career_cr", 0)
-        sp      = u.get("special_rank") or ""
-        sp_cell = f"<span style='color:#ffd700'>&#9733; {sp}</span>" if sp else "<span style='color:#444'>—</span>"
+        spr     = get_sp_ranks(u)
+        sp_cell = (" ".join(f"<span style='color:#ffd700'>&#9733;{s}</span>" for s in spr)
+                   if spr else "<span style='color:#444'>—</span>")
         rows += f"""<tr>
           <td><strong>{display}</strong></td>
           <td style="color:#ffee88">{pw_str}</td>
@@ -1602,8 +1613,11 @@ def admin_panel():
             &nbsp;
             <form method="POST" action="/admin/set_special_rank" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
-              <input type="text" name="title" value="{sp}" placeholder="Spec. rank"
-                style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
+              <input type="text" name="title1" value="{spr[0] if len(spr)>0 else ''}" placeholder="Rank 1"
+                style="width:70px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
+                font-family:inherit;font-size:.8em;padding:2px 4px">
+              <input type="text" name="title2" value="{spr[1] if len(spr)>1 else ''}" placeholder="Rank 2"
+                style="width:70px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
                 font-family:inherit;font-size:.8em;padding:2px 4px">
               <button type="submit" style="background:#1a1400;border:1px solid #ffd700;
                 color:#ffd700;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
@@ -1617,10 +1631,9 @@ def admin_panel():
         </tr>"""
 
     total_cr  = sum(d.get("career_cr", 0) for d in career.values())
-    sp_count  = sum(1 for u in users.values() if u.get("special_rank"))
     sp_holders = ", ".join(
-        f"<span style='color:#ffd700'>&#9733; {k} ({v.get('special_rank')})</span>"
-        for k, v in users.items() if v.get("special_rank")
+        f"<span style='color:#ffd700'>{k}: " + " | ".join(f"&#9733;{s}" for s in get_sp_ranks(v)) + "</span>"
+        for k, v in users.items() if get_sp_ranks(v)
     ) or "—"
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
 <style>table{{font-size:.82em}}td,th{{padding:4px 6px;vertical-align:middle}}
@@ -1630,7 +1643,7 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <p style="color:#888;font-size:.85rem">
   Ucty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
   Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
-  Spec. ranky: <strong style="color:#ffd700">{sp_count}/2</strong> &nbsp;|&nbsp;
+  Spec. ranky: <strong style="color:#ffd700">{sum(1 for u in users.values() if get_sp_ranks(u))}</strong> &nbsp;|&nbsp;
   <a href="/admin/logout" class="btn btn-r">Logout</a>
   <a href="/admin/diag" class="btn">Diag</a>
   <a href="/lobby" class="btn">Lobby</a>
@@ -1687,19 +1700,14 @@ def admin_set_special_rank():
     if not _admin_check():
         return redirect("/admin")
     uname = request.form.get("uname", "").strip()
-    title = request.form.get("title", "").strip()
+    t1 = request.form.get("title1", "").strip()
+    t2 = request.form.get("title2", "").strip()
     users = load_users()
     if uname not in users:
         return redirect("/admin/panel")
-    # Max 2 špeciálne ranky celkovo
-    if title:
-        current_sp = [k for k, v in users.items()
-                      if v.get("special_rank") and k != uname]
-        if len(current_sp) >= 2:
-            return (f"<p style='color:#ff4444;font-family:monospace;padding:20px'>"
-                    f"Max 2 specialne ranky! Uz maju: {', '.join(current_sp)}<br>"
-                    f"<a href='/admin/panel'>Spat</a></p>"), 400
-    users[uname]["special_rank"] = title if title else None
+    new_ranks = [t for t in [t1, t2] if t][:2]
+    users[uname]["special_ranks"] = new_ranks
+    users[uname].pop("special_rank", None)  # odstráň starý formát
     save_users(users)
     return redirect("/admin/panel")
 
