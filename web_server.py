@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v4.7 — Web Server
+KOZMICKÉ BANE v4.8 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -37,7 +37,7 @@ for _fname in ["game_users.json", "kb_career.json", "kb_saves.json", "kb_leaderb
 print(f"[startup] DATA_DIR={DATA_DIR} | RENDER={bool(os.environ.get('RENDER'))} | users exists={DATA_FILE.exists()}")
 
 PORT       = int(os.environ.get("PORT", 5000))
-ADMIN_CODE = os.environ.get("ADMIN_CODE", "")   # nastav v env premenných na Render
+OWNER_CODE = os.environ.get("OWNER_CODE", os.environ.get("ADMIN_CODE", ""))  # nastav OWNER_CODE v env premenných na Render
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -692,12 +692,20 @@ def render_lobby(pilot):
              f'{"  |  Reg: " + reg_info if reg_info else ""}'
              f'</button></div>')
 
-    # ── Admin prístup priamo v lobby
+    # ── Admin Panel (pre is_admin hráčov)
+    if u_data.get("is_admin"):
+        html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
+        html += '<a href="/adminpanel" style="display:block;background:#000;border:1px solid #00ccff;'
+        html += 'color:#00ccff;font-family:\'VT323\',monospace;font-size:1.1em;padding:7px 14px;'
+        html += 'text-align:center;text-decoration:none;letter-spacing:.05em">&#9733; ADMIN PANEL</a>'
+        html += '</div>'
+
+    # ── Owner prístup priamo v lobby
     html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
     html += '<details style="border:1px solid #2a1500;padding:8px 14px;background:#0b0900">'
-    html += '<summary style="cursor:pointer;color:#555;font-size:0.92em;letter-spacing:0.06em;list-style:none">&#9881; ADMIN PR&#205;STUP</summary>'
-    html += '<form method="POST" action="/admin" style="margin-top:10px;display:flex;gap:8px;align-items:center">'
-    html += '<input type="password" name="code" placeholder="Admin k&#243;d" autocomplete="off" '
+    html += '<summary style="cursor:pointer;color:#555;font-size:0.92em;letter-spacing:0.06em;list-style:none">&#128081; OWNER PR&#205;STUP</summary>'
+    html += '<form method="POST" action="/owner" style="margin-top:10px;display:flex;gap:8px;align-items:center">'
+    html += '<input type="password" name="code" placeholder="Owner k&#243;d" autocomplete="off" '
     html += 'style="background:#000;border:1px solid #3a2800;color:#fff8e0;font-family:\'VT323\',monospace;'
     html += 'font-size:1.1em;padding:6px 10px;flex:1;outline:none;">'
     html += '<button type="submit" style="background:#1a0000;border:1px solid #ff4444;color:#ff4444;'
@@ -1467,27 +1475,34 @@ input{background:#111;border:1px solid #444;color:#ffb000;padding:.2rem .4rem;
 </style>
 """
 
-def _admin_check():
-    """Vráti True ak je admin session aktívna."""
-    return session.get("admin") is True
+def _owner_check():
+    """Vráti True ak je owner session aktívna."""
+    return session.get("owner") is True
 
-@app.route("/admin", methods=["GET", "POST"])
-def admin_login():
-    if _admin_check():
-        return redirect("/admin/panel")
+def _is_admin_user():
+    """Vráti True ak je prihlásený hráč s is_admin=True."""
+    if "username" not in session:
+        return False
+    users = load_users()
+    return users.get(session["username"], {}).get("is_admin") is True
+
+@app.route("/owner", methods=["GET", "POST"])
+def owner_login():
+    if _owner_check():
+        return redirect("/owner/panel")
     err = ""
     if request.method == "POST":
         code = request.form.get("code", "")
-        if ADMIN_CODE and code == ADMIN_CODE:
-            session["admin"] = True
-            return redirect("/admin/panel")
-        err = "Nesprávny admin kód."
-    return f"""<!DOCTYPE html><html><head><title>Admin</title>{ADMIN_CSS}</head><body>
-<h1>🔑 ADMIN PRÍSTUP</h1>
-<p style="color:#888;margin-bottom:1rem">Zadaj admin kód nastavený v env premennej <code>ADMIN_CODE</code>.</p>
+        if OWNER_CODE and code == OWNER_CODE:
+            session["owner"] = True
+            return redirect("/owner/panel")
+        err = "Nesprávny owner kód."
+    return f"""<!DOCTYPE html><html><head><title>Owner</title>{ADMIN_CSS}</head><body>
+<h1>&#128081; OWNER PR&#205;STUP</h1>
+<p style="color:#888;margin-bottom:1rem">Zadaj owner kód nastavený v env premennej <code>OWNER_CODE</code>.</p>
 {"<p class='warn'>"+err+"</p>" if err else ""}
 <form method="POST">
-  <input type="password" name="code" placeholder="Admin kód" autofocus style="width:220px">
+  <input type="password" name="code" placeholder="Owner kód" autofocus style="width:220px">
   <button type="submit" style="background:#1a1200;border:1px solid #ffb000;color:#ffb000;
     padding:.25rem .8rem;cursor:pointer;font-family:inherit;border-radius:3px;margin-left:.4rem">
     Vstúpiť
@@ -1495,15 +1510,15 @@ def admin_login():
 </form>
 </body></html>"""
 
-@app.route("/admin/logout")
-def admin_logout():
-    session.pop("admin", None)
-    return redirect("/admin")
+@app.route("/owner/logout")
+def owner_logout():
+    session.pop("owner", None)
+    return redirect("/owner")
 
-@app.route("/admin/diag")
-def admin_diag():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/diag")
+def owner_diag():
+    if not _owner_check():
+        return redirect("/owner")
     import platform, sys
     users  = load_users()
     career = load_jf(KB_CAREER, {})
@@ -1525,10 +1540,10 @@ def admin_diag():
     pre = "\n".join(lines)
     return f"<pre style='background:#000;color:#0f0;padding:20px;font-family:monospace'>{pre}</pre>"
 
-@app.route("/admin/panel")
-def admin_panel():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/panel")
+def owner_panel():
+    if not _owner_check():
+        return redirect("/owner")
     users   = load_users()
     career  = load_jf(KB_CAREER, {})
     saves   = load_jf(KB_SAVES, {})
@@ -1559,6 +1574,9 @@ def admin_panel():
         spr     = get_sp_ranks(u)
         sp_cell = (" ".join(f"<span style='color:#ffd700'>&#9733;{s}</span>" for s in spr)
                    if spr else "<span style='color:#444'>—</span>")
+        is_adm  = u.get("is_admin") is True
+        adm_cell = ("<span style='color:#00ccff'>&#9679; Admin</span>" if is_adm
+                    else "<span style='color:#444'>—</span>")
         rows += f"""<tr>
           <td><strong>{display}</strong></td>
           <td style="color:#ffee88">{pw_str}</td>
@@ -1568,9 +1586,10 @@ def admin_panel():
           <td>{cr_val:,} CR</td>
           <td>{sp_cell}</td>
           <td>{ban_cell}</td>
+          <td>{adm_cell}</td>
           <td>{len(sv)}</td>
           <td style="white-space:nowrap">
-            <form method="POST" action="/admin/set_rank" style="display:inline">
+            <form method="POST" action="/owner/set_rank" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
               <input type="number" name="cr" value="{cr_val}" min="0"
                 style="width:80px;background:#000;border:1px solid #3a2800;color:#fff8e0;
@@ -1581,7 +1600,7 @@ def admin_panel():
               </button>
             </form>
             &nbsp;
-            <form method="POST" action="/admin/ban" style="display:inline">
+            <form method="POST" action="/owner/ban" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
               <select name="dur" style="background:#1a0000;border:1px solid #ff4444;
                 color:#ff4444;font-family:inherit;font-size:.85em;padding:2px">
@@ -1596,10 +1615,10 @@ def admin_panel():
                 Ban
               </button>
             </form>
-            <a href="/admin/unban/{display}"
+            <a href="/owner/unban/{display}"
                style="color:#aaa;font-size:.8em;margin-left:3px">Unban</a>
             &nbsp;
-            <form method="POST" action="/admin/reset_pw" style="display:inline">
+            <form method="POST" action="/owner/reset_pw" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
               <input type="text" name="new_pw" placeholder="nove heslo"
                 style="width:90px;background:#000;border:1px solid #555;color:#fff8e0;
@@ -1611,7 +1630,7 @@ def admin_panel():
             </form>
             &nbsp;
             &nbsp;
-            <form method="POST" action="/admin/set_special_rank" style="display:inline">
+            <form method="POST" action="/owner/set_special_rank" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
               <input type="text" name="title1" value="{spr[0] if len(spr)>0 else ''}" placeholder="Rank 1"
                 style="width:70px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
@@ -1625,7 +1644,11 @@ def admin_panel():
               </button>
             </form>
             &nbsp;
-            <a href="/admin/delete/{display}" style="color:#ff4444;font-size:.8em"
+            <a href="/owner/toggle_admin/{display}"
+               style="color:{'#ff9900' if is_adm else '#00ccff'};font-size:.8em;margin-left:3px">
+               {'Revoke Admin' if is_adm else 'Make Admin'}</a>
+            &nbsp;
+            <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
           </td>
         </tr>"""
@@ -1635,17 +1658,17 @@ def admin_panel():
         f"<span style='color:#ffd700'>{k}: " + " | ".join(f"&#9733;{s}" for s in get_sp_ranks(v)) + "</span>"
         for k, v in users.items() if get_sp_ranks(v)
     ) or "—"
-    return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
+    return f"""<!DOCTYPE html><html><head><title>Owner Panel</title>{ADMIN_CSS}
 <style>table{{font-size:.82em}}td,th{{padding:4px 6px;vertical-align:middle}}
 input[type=number],input[type=text],select{{outline:none}}</style>
 </head><body>
-<h1>&#9881; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.7</h1>
+<h1>&#128081; OWNER PANEL &mdash; KOZMICK&#201; BANE v4.8</h1>
 <p style="color:#888;font-size:.85rem">
   Ucty: <strong style="color:#ffb000">{len(all_names)}</strong> &nbsp;|&nbsp;
   Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
   Spec. ranky: <strong style="color:#ffd700">{sum(1 for u in users.values() if get_sp_ranks(u))}</strong> &nbsp;|&nbsp;
-  <a href="/admin/logout" class="btn btn-r">Logout</a>
-  <a href="/admin/diag" class="btn">Diag</a>
+  <a href="/owner/logout" class="btn btn-r">Logout</a>
+  <a href="/owner/diag" class="btn">Diag</a>
   <a href="/lobby" class="btn">Lobby</a>
 </p>
 <p style="font-size:.85rem;margin-bottom:8px">
@@ -1655,34 +1678,34 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <table>
   <tr>
     <th>Pouzivatel</th><th>Heslo</th><th>Reg.</th><th>Posl. login</th>
-    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Sloty</th><th>Akcie</th>
+    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Admin</th><th>Sloty</th><th>Akcie</th>
   </tr>
   {rows}
 </table>
 </body></html>"""
 
-@app.route("/admin/reset_pw", methods=["POST"])
-def admin_reset_pw():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/reset_pw", methods=["POST"])
+def owner_reset_pw():
+    if not _owner_check():
+        return redirect("/owner")
     uname  = request.form.get("uname", "").strip()
     new_pw = request.form.get("new_pw", "").strip()
     users  = load_users()
     if uname not in users or not new_pw:
-        return redirect("/admin/panel")
+        return redirect("/owner/panel")
     users[uname]["password"] = new_pw
     save_users(users)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
 
-@app.route("/admin/set_rank", methods=["POST"])
-def admin_set_rank():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/set_rank", methods=["POST"])
+def owner_set_rank():
+    if not _owner_check():
+        return redirect("/owner")
     uname = request.form.get("uname", "").strip()
     try:
         cr = max(0, int(request.form.get("cr", 0)))
     except ValueError:
-        return redirect("/admin/panel")
+        return redirect("/owner/panel")
     career = load_jf(KB_CAREER, {})
     key = uname.upper()
     e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
@@ -1693,33 +1716,33 @@ def admin_set_rank():
     e["rank_name"] = rname
     career[key] = e
     save_jf(KB_CAREER, career)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
 
-@app.route("/admin/set_special_rank", methods=["POST"])
-def admin_set_special_rank():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/set_special_rank", methods=["POST"])
+def owner_set_special_rank():
+    if not _owner_check():
+        return redirect("/owner")
     uname = request.form.get("uname", "").strip()
     t1 = request.form.get("title1", "").strip()
     t2 = request.form.get("title2", "").strip()
     users = load_users()
     if uname not in users:
-        return redirect("/admin/panel")
+        return redirect("/owner/panel")
     new_ranks = [t for t in [t1, t2] if t][:2]
     users[uname]["special_ranks"] = new_ranks
     users[uname].pop("special_rank", None)  # odstráň starý formát
     save_users(users)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
 
-@app.route("/admin/ban", methods=["POST"])
-def admin_ban():
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/ban", methods=["POST"])
+def owner_ban():
+    if not _owner_check():
+        return redirect("/owner")
     uname = request.form.get("uname", "").strip()
     dur   = request.form.get("dur", "1h")
     users = load_users()
     if uname not in users:
-        return redirect("/admin/panel")
+        return redirect("/owner/panel")
     dur_map = {"10m": 600, "1h": 3600, "12h": 43200, "24h": 86400}
     if dur == "perm":
         users[uname]["banned_until"] = -1
@@ -1727,22 +1750,33 @@ def admin_ban():
         secs = dur_map.get(dur, 3600)
         users[uname]["banned_until"] = datetime.now().timestamp() + secs
     save_users(users)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
 
-@app.route("/admin/unban/<uname>")
-def admin_unban(uname):
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/unban/<uname>")
+def owner_unban(uname):
+    if not _owner_check():
+        return redirect("/owner")
     users = load_users()
     if uname in users:
         users[uname]["banned_until"] = None
         save_users(users)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
 
-@app.route("/admin/delete/<uname>")
-def admin_delete_user(uname):
-    if not _admin_check():
-        return redirect("/admin")
+@app.route("/owner/toggle_admin/<uname>")
+def owner_toggle_admin(uname):
+    if not _owner_check():
+        return redirect("/owner")
+    users = load_users()
+    if uname in users:
+        users[uname]["is_admin"] = not users[uname].get("is_admin", False)
+        save_users(users)
+    return redirect("/owner/panel")
+
+
+@app.route("/owner/delete/<uname>")
+def owner_delete_user(uname):
+    if not _owner_check():
+        return redirect("/owner")
     users = load_users()
     users.pop(uname, None)
     save_users(users)
@@ -1753,7 +1787,74 @@ def admin_delete_user(uname):
     saves = load_jf(KB_SAVES, {})
     saves.pop(uname.upper(), None)
     save_jf(KB_SAVES, saves)
-    return redirect("/admin/panel")
+    return redirect("/owner/panel")
+
+
+# ── Admin Panel (pre hráčov s is_admin=True) ────────────────────────────────
+
+@app.route("/adminpanel")
+def adminpanel():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    users = load_users()
+    career = load_jf(KB_CAREER, {})
+    rows = ""
+    for uname_orig in sorted(users.keys()):
+        u = users[uname_orig]
+        spr = get_sp_ranks(u)
+        rows += f"""<tr>
+          <td><strong>{uname_orig}</strong></td>
+          <td style="color:#ffdd44">{career.get(uname_orig.upper(), {}).get('rank_name', 'Banik')}</td>
+          <td>{"  ".join(f'<span style=\"color:#ffd700\">&#9733;{s}</span>' for s in spr) or '<span style=\"color:#444\">—</span>'}</td>
+          <td style="white-space:nowrap">
+            <form method="POST" action="/adminpanel/set_rank" style="display:inline">
+              <input type="hidden" name="uname" value="{uname_orig}">
+              <input type="text" name="title1" value="{spr[0] if len(spr)>0 else ''}" placeholder="Rank 1"
+                style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <input type="text" name="title2" value="{spr[1] if len(spr)>1 else ''}" placeholder="Rank 2"
+                style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <button type="submit" style="background:#1a1400;border:1px solid #ffd700;
+                color:#ffd700;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:.85em">
+                &#9733; Uloz
+              </button>
+            </form>
+          </td>
+        </tr>"""
+    return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
+<style>table{{font-size:.85em}}td,th{{padding:5px 8px;vertical-align:middle}}
+input[type=text]{{outline:none}}</style>
+</head><body>
+<h1>&#9733; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.8</h1>
+<p style="color:#888;font-size:.85rem">
+  Prihlasen&#253; ako: <strong style="color:#ffb000">{session['username']}</strong> &nbsp;|&nbsp;
+  <a href="/lobby" class="btn">Lobby</a>
+</p>
+<p style="color:#aaa;font-size:.85rem">Nastav&#237; maxim&#225;lne 2 &#353;peci&#225;lne ranky pre hr&#225;&#269;a.</p>
+<h2>&#128101; HR&#193;&#268;I</h2>
+<table>
+  <tr><th>Hrac</th><th>Rang</th><th>Spec. ranky</th><th>Nastav</th></tr>
+  {rows}
+</table>
+</body></html>"""
+
+
+@app.route("/adminpanel/set_rank", methods=["POST"])
+def adminpanel_set_rank():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    uname = request.form.get("uname", "").strip()
+    t1 = request.form.get("title1", "").strip()
+    t2 = request.form.get("title2", "").strip()
+    users = load_users()
+    if uname not in users:
+        return redirect("/adminpanel")
+    new_ranks = [t for t in [t1, t2] if t][:2]
+    users[uname]["special_ranks"] = new_ranks
+    users[uname].pop("special_rank", None)
+    save_users(users)
+    return redirect("/adminpanel")
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────

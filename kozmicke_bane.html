@@ -2,7 +2,7 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
-<title>KOZMICKE BANE v4.7</title>
+<title>KOZMICKE BANE v4.8</title>
 <style>html,body{background:#000;}</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -471,7 +471,7 @@ function _sceneMainFull(pilot){
 ██╔═██╗ ██║   ██║ ███╔╝  ██║╚██╔╝██║██║██║     ██╔═██╗ ██╔══╝
 ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
 ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝
- ██████╗  █████╗ ███╗   ██╗███████╗  v4.7
+ ██████╗  █████╗ ███╗   ██╗███████╗  v4.8
 ██╔══██╗██╔══██╗████╗  ██║██╔════╝  ENHANCED EDITION
 ██████╔╝███████║██╔██╗ ██║█████╗
 ██╔══██╗██╔══██║██║╚██╗██║██╔══╝    CIEĽ: 15 000 CR
@@ -490,14 +490,14 @@ function _sceneMainFull(pilot){
         ${localStorage.getItem('kb_layout')==='mobile'?'📱':'🖥️'} ZMENIŤ ZOBRAZENIE
       </button>
     </div>
-    <div style="font-size:.82rem;color:var(--ad);margin-top:.8rem;">(c) 1987 NOVA SOFT · v4.7 · Pilot: ${pilot.toUpperCase()}</div>
+    <div style="font-size:.82rem;color:var(--ad);margin-top:.8rem;">(c) 1987 NOVA SOFT · v4.8 · Pilot: ${pilot.toUpperCase()}</div>
   </div>`);
 }
 
 function sceneHowTo(){
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">❓ AKO HRAŤ — KOZMICKÉ BANE v4.7</div>
+    <div class="st">❓ AKO HRAŤ — KOZMICKÉ BANE v4.8</div>
     <div style="font-size:1.05rem;line-height:1.9;">
 <div style="color:var(--b)">── CIEĽ ──</div>
 Vyzbieraj <strong>15 000 CR</strong> predajom nerastov a opusti planétu Zyrax-9.
@@ -790,7 +790,7 @@ function rG(logs=[]){
 
   setScr(`<div class="panel" style="min-width:750px;max-width:830px;">
     ${corners()}
-    <div id="plabel">◈  ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 KOLONIZÁCIA':G.planet===2?'ZYRAX-10':'ZYRAX-9'}  ${G.era===4?'v4.7':'v4.7'}  ◈  TÁH: ${G.turn}  ◈  ${G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?`Kolónia: 👷${G.colony?.workers||0} 🍞${G.colony?.food||0} ⚡${G.colony?.energy||0}`:`CIEĽ: ${G.goal} CR`}  ◈</div>
+    <div id="plabel">◈  ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 KOLONIZÁCIA':G.planet===2?'ZYRAX-10':'ZYRAX-9'}  ${G.era===4?'v4.8':'v4.8'}  ◈  TÁH: ${G.turn}  ◈  ${G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?`Kolónia: 👷${G.colony?.workers||0} 🍞${G.colony?.food||0} ⚡${G.colony?.energy||0}`:`CIEĽ: ${G.goal} CR`}  ◈</div>
     <div id="hud">
       <div><span class="hl">PILOT:</span> <strong>${G.username.toUpperCase()}</strong></div>
       <div><span class="hl">KREDITY:</span> <strong style="color:var(--a);text-shadow:0 0 7px var(--a)">${G.credits} CR</strong></div>
@@ -1787,7 +1787,7 @@ function sceneBoot(pilot){
   </div>`);
   const L=[
     {t:'NOVA SOFT SYSTEMS  (C) 1987',c:''},
-    {t:'KOZMICKE BANE  v4.7  ENHANCED EDITION',c:''},
+    {t:'KOZMICKE BANE  v4.8  ENHANCED EDITION',c:''},
     {t:'',c:''},
     {t:'CHECKING MEMORY .......... 640K  [OK]',c:'g'},
     {t:'LOADING SECTOR MAP ....... [OK]',c:'g'},
@@ -1865,7 +1865,7 @@ function sceneTitle(pilot){
     ${corners()}
     <pre style="font-size:.54rem;line-height:1.1;color:var(--a);animation:pglow 2.5s infinite;margin-bottom:.6rem;">${asc}</pre>
     <div style="font-size:.88rem;color:var(--ad);letter-spacing:.12em;margin-bottom:1rem;">
-      (c) 1987  NOVA SOFT  ·  v4.7 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY
+      (c) 1987  NOVA SOFT  ·  v4.8 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY
     </div>
     <div class="mg" style="max-width:500px;margin:0 auto;">
       <button class="btn bbig" onclick="sFX('click');sceneStory('${pilot}')">▶  NOVÁ MISIA — ZYRAX-9</button>
