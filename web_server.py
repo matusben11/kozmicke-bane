@@ -671,6 +671,17 @@ def render_lobby(pilot):
     html += '<a href="/import_data" class="btn" style="text-align:center">&#8597; Preniesť dáta z PC na server (alebo naopak)</a>'
     html += '</div>'
 
+    # ── Obnova z prehliadača
+    html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
+    reg_info = u_data.get("created_at") or u_data.get("registered", "")
+    html += (f'<button onclick="window._forceSync(true)" '
+             f'style="background:#000;border:1px solid #3a2800;color:#a07000;'
+             f'font-family:\'VT323\',monospace;font-size:1em;padding:7px 14px;'
+             f'cursor:pointer;width:100%;letter-spacing:.05em">'
+             f'&#8635; OBNOVIŤ DÁTA Z PREHLIADAČA'
+             f'{"  |  Reg: " + reg_info if reg_info else ""}'
+             f'</button></div>')
+
     # ── Admin prístup priamo v lobby
     html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
     html += '<details style="border:1px solid #2a1500;padding:8px 14px;background:#0b0900">'
@@ -691,27 +702,30 @@ def render_lobby(pilot):
     html += """<script>
 (function(){
   try{
-    // ── Career záloha z localStorage → server
-    var lsCareer=JSON.parse(localStorage.getItem('kb_career')||'null');
-    if(lsCareer&&lsCareer.career_cr>0){
-      fetch('/api/sync_career',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(lsCareer)}).catch(function(){});
-    }
-    // ── Saves sync
-    var saves=JSON.parse(localStorage.getItem('kb_saves')||'{}');
-    var lb=JSON.parse(localStorage.getItem('kb_leaderboard')||'[]');
-    var hasData=Object.keys(saves).length>0||lb.length>0;
-    if(!hasData)return;
-    fetch('/api/sync_local_saves',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({saves:saves,leaderboard:lb})
-    }).then(function(r){return r.json();}).then(function(d){
-      if(d.synced>0){
-        console.log('[sync] Synchronizovaných slotov: '+d.synced);
-        window.location.reload();
+    function _doSync(showMsg){
+      var lsCareer=JSON.parse(localStorage.getItem('kb_career')||'null');
+      if(lsCareer&&lsCareer.career_cr>0){
+        fetch('/api/sync_career',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(lsCareer)}).then(function(){
+          if(showMsg)window.location.reload();
+        }).catch(function(){});
       }
-    }).catch(function(e){console.warn('[sync]',e);});
+      var saves=JSON.parse(localStorage.getItem('kb_saves')||'{}');
+      var lb=JSON.parse(localStorage.getItem('kb_leaderboard')||'[]');
+      var hasData=Object.keys(saves).length>0||lb.length>0;
+      if(!hasData){if(showMsg)alert('Ziadne lokalne data na obnovenie.');return;}
+      fetch('/api/sync_local_saves',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({saves:saves,leaderboard:lb})
+      }).then(function(r){return r.json();}).then(function(d){
+        if(d.synced>0||showMsg){
+          if(showMsg)alert('Obnovene '+d.synced+' slotov z prehliadaca!');
+          window.location.reload();
+        }
+      }).catch(function(e){if(showMsg)alert('Sync chyba: '+e);});
+    }
+    window._forceSync=_doSync;
+    _doSync(false);
   }catch(e){console.warn('[sync] Chyba:',e);}
 })();
 </script>"""
@@ -979,8 +993,10 @@ def reset():
     users = load_users()
     if username not in users:
         return render_login(tab="reset", err_reset="Používateľ neexistuje.")
-    if reg_date not in users[username].get("created_at", ""):
-        return render_login(tab="reset", err_reset="Nesprávny dátum registrácie.")
+    u = users[username]
+    date_field = u.get("created_at", "") or u.get("registered", "")
+    if not reg_date or reg_date not in date_field:
+        return render_login(tab="reset", err_reset="Nesprávny dátum registrácie (napr. 2024-01-15).")
     ok, msg = validate_pw(new_pw)
     if not ok:
         return render_login(tab="reset", err_reset=msg)
