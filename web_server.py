@@ -1010,14 +1010,14 @@ def api_update_score():
 
 @app.route("/lobby")
 def lobby():
-    if "username" not in session:
+    if not _require_session():
         return redirect("/")
     return render_lobby(session["username"])
 
 
 @app.route("/delete_save/<int:slot>")
 def delete_save_route(slot):
-    if "username" not in session:
+    if not _require_session():
         return redirect("/")
     saves = load_jf(KB_SAVES, {})
     uname = _uname()
@@ -1034,7 +1034,7 @@ def delete_save_route(slot):
 
 @app.route("/game")
 def game():
-    if "username" not in session:
+    if not _require_session():
         return redirect("/")
     pilot = session["username"]
     # Hra číta pilot z URL – ak tam nie je, presmeruj
@@ -1077,7 +1077,20 @@ def game():
 # ── Routes — Game API ──────────────────────────────────────────────────────
 
 def _require_session():
-    return "username" in session
+    if "username" not in session:
+        return False
+    # Ak účet neexistuje alebo je banned, zruš session
+    users = load_users()
+    uname = session["username"]
+    u = users.get(uname)
+    if u is None:
+        session.clear()
+        return False
+    banned, _ = check_ban(u)
+    if banned:
+        session.clear()
+        return False
+    return True
 
 @app.route("/api/save_game", methods=["POST"])
 def api_save_game():
