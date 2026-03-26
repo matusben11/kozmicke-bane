@@ -154,6 +154,31 @@ def _migrate_saves():
 _migrate_saves()
 _seed_default_user()
 
+def _seed_admin_users():
+    """
+    Env premenná ADMIN_USERS = čiarkou oddelené mená userov, ktorí majú mať is_admin=True.
+    Napr.: ADMIN_USERS=matus,tomas
+    Spúšťa sa pri každom štarte — takto admini pretrvajú aj po redeploy.
+    """
+    raw = os.environ.get("ADMIN_USERS", "").strip()
+    if not raw:
+        return
+    names = [n.strip() for n in raw.split(",") if n.strip()]
+    if not names:
+        return
+    users = load_users()
+    changed = False
+    for name in names:
+        match = next((k for k in users if k.lower() == name.lower()), None)
+        if match and not users[match].get("is_admin"):
+            users[match]["is_admin"] = True
+            changed = True
+            print(f"[seed] is_admin=True nastavené pre '{match}' (z ADMIN_USERS env var).")
+    if changed:
+        save_users(users)
+
+_seed_admin_users()
+
 def get_sp_ranks(user_dict):
     """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
     sr = user_dict.get("special_ranks")
