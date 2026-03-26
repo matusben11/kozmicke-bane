@@ -985,7 +985,7 @@ def register():
     users = load_users()
     if not username:
         return render_login(tab="register", err_reg="Meno nemôže byť prázdne.")
-    if username in users:
+    if any(k.lower() == username.lower() for k in users):
         return render_login(tab="register", err_reg=f"Meno '{username}' je obsadené.")
     ok, msg = validate_pw(password)
     if not ok:
@@ -1596,7 +1596,17 @@ def owner_panel():
                 font-family:inherit;font-size:.85em;padding:2px 4px">
               <button type="submit" style="background:#001a00;border:1px solid #39ff6a;
                 color:#39ff6a;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.85em">
-                CR
+                =CR
+              </button>
+            </form>
+            <form method="POST" action="/owner/add_cr" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="number" name="delta" value="0"
+                style="width:65px;background:#000;border:1px solid #3a2800;color:#fff8e0;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <button type="submit" style="background:#001a00;border:1px solid #39ff6a;
+                color:#39ff6a;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.85em">
+                +/-CR
               </button>
             </form>
             &nbsp;
@@ -1712,6 +1722,27 @@ def owner_set_rank():
                          "best_session": 0, "last_seen": "–"})
     e["career_cr"] = cr
     r, rname = kb_rank(cr)
+    e["rank"] = r
+    e["rank_name"] = rname
+    career[key] = e
+    save_jf(KB_CAREER, career)
+    return redirect("/owner/panel")
+
+@app.route("/owner/add_cr", methods=["POST"])
+def owner_add_cr():
+    if not _owner_check():
+        return redirect("/owner")
+    uname = request.form.get("uname", "").strip()
+    try:
+        delta = int(request.form.get("delta", 0))
+    except ValueError:
+        return redirect("/owner/panel")
+    career = load_jf(KB_CAREER, {})
+    key = uname.upper()
+    e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
+                         "best_session": 0, "last_seen": "–"})
+    e["career_cr"] = max(0, e.get("career_cr", 0) + delta)
+    r, rname = kb_rank(e["career_cr"])
     e["rank"] = r
     e["rank_name"] = rname
     career[key] = e
