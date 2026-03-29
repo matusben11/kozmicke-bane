@@ -930,8 +930,8 @@ const MINERALS=[
   {id:'starforged', name:'Starforged',  v:380, r:.013,sym:'⬟', col:'#ffcc00', tier:3},
   {id:'voidcrystal',  name:'Voidcrystal',   v:550,  r:.008, sym:'⬡', col:'#ff55ff', tier:4},
   {id:'omegaore',     name:'Omega Ore',     v:900,  r:.003, sym:'Ω', col:'#ff2244', tier:4},
-  {id:'titanium',     name:'Titanium',      v:1200, r:.0015,sym:'⊕', col:'#99ddff', tier:5},
-  {id:'exoternimium', name:'Exoternimium',  v:2800, r:.0007,sym:'⊗', col:'#ff44aa', tier:5},
+  {id:'titanium',     name:'Titanium',      v:1200, r:.0004,sym:'⊕', col:'#99ddff', tier:5},
+  {id:'exoternimium', name:'Exoternimium',  v:2800, r:.00012,sym:'⊗', col:'#ff44aa', tier:5},
 ];
 
 const UPGRADES=[
@@ -1653,7 +1653,7 @@ function doMine(){
     if(m.tier>=5&&G.planet!==3&&G.era<4)w=0;
     // Planetárne bonusy v 4.0
     if(G.era===4){
-      if(m.tier>=5)w*=8; // tier-5 minerals: boost base chance in era 4
+      if(m.tier>=5)w*=3; // tier-5 minerals: boost base chance in era 4
       if(m.id==='cryon'&&G.currentPlanet4==='kryon')w*=8;
       if(m.id==='volcanum'&&G.currentPlanet4==='sigma')w*=8;
       if(m.id==='neovoid'&&G.currentPlanet4==='omega7')w*=8;
