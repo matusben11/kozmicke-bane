@@ -917,18 +917,20 @@ def render_lobby(pilot):
     # ── TESTER — Beta features card
     if u_data.get("is_tester") is True:
         beta_features = [
-            L("🪐 Planéta OMEGA-VII — hlboký vesmír (odomknutá od štartu)",
-              "🪐 OMEGA-VII planet — deep space (unlocked from start)"),
-            L("⚗️ Nový minerál: Neo-Void (tier 5, 3500 CR/ks) — exkluzívne OMEGA-VII",
-              "⚗️ New mineral: Neo-Void (tier 5, 3500 CR/ea) — OMEGA-VII exclusive"),
-            L("🏗️ Rozšírená správa kolónie — viac nastavení pracovníkov [WIP]",
-              "🏗️ Extended colony management — more worker controls [WIP]"),
-            L("📡 Galaktický chat medzi hráčmi [WIP]",
-              "📡 Galaxy-wide player chat [WIP]"),
-            L("🎖️ Achievementy a výzvy [WIP]",
-              "🎖️ Achievements and challenges [WIP]"),
-            L("🔴 LIVE indikátor — koľko hráčov je práve online [WIP]",
-              "🔴 LIVE indicator — how many players are online now [WIP]"),
+            L("⚙ Klikni na [β TEST] tlačidlo v hre — otvorí sa tester panel",
+              "⚙ Click the [β TEST] button in game — opens tester panel"),
+            L("☑ God Mode — nesmrteľnosť, žiadna HP škoda (toggle v paneli)",
+              "☑ God Mode — immortality, no HP damage (toggle in panel)"),
+            L("💰 +10 000 CR okamžite (tlačidlo v tester paneli)",
+              "💰 +10 000 CR instantly (button in tester panel)"),
+            L("🔬 +200 RP okamžite (tlačidlo v tester paneli)",
+              "🔬 +200 RP instantly (button in tester panel)"),
+            L("⬇ Teleport na Jadro L5 (tlačidlo v tester paneli)",
+              "⬇ Teleport to Core L5 (button in tester panel)"),
+            L("🔓 Omega-VII odomknutá od štartu novej hry",
+              "🔓 Omega-VII unlocked from start of new game"),
+            L("⚡ Okamžité splnenie cieľa misie (tlačidlo v tester paneli)",
+              "⚡ Instant mission completion (button in tester panel)"),
         ]
         beta_items = "".join(
             f'<div style="padding:3px 0;border-bottom:1px solid #0d1a0d;font-size:.9em;color:#aaffaa">'
