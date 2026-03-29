@@ -1843,6 +1843,29 @@ def owner_panel():
         is_adm  = u.get("is_admin") is True
         adm_cell = ("<span style='color:#00ccff'>&#9679; Admin</span>" if is_adm
                     else "<span style='color:#444'>—</span>")
+        # Správy tohto hráča
+        notifs_all = u.get("notifications", [])
+        notif_hist = "".join(
+            f'<div style="font-size:.78em;color:{"#aaa" if n.get("read") else "#ffe08a"};'
+            f'border-bottom:1px solid #1a1a1a;padding:1px 0">'
+            f'<span style="color:#555">[{n.get("ts","")} {n.get("from","")}]</span> {n.get("text","")}'
+            f'</div>'
+            for n in notifs_all[-5:]  # posledných 5
+        ) or f'<span style="color:#333;font-size:.78em">—</span>'
+        msg_cell = (
+            f'<details style="min-width:160px">'
+            f'<summary style="cursor:pointer;color:#7788cc;font-size:.8em;list-style:none">'
+            f'&#9993; {len(notifs_all)} správ</summary>'
+            f'<div style="max-height:80px;overflow-y:auto;margin:3px 0">{notif_hist}</div>'
+            f'<form method="POST" action="/owner/message" style="display:flex;gap:3px;margin-top:3px">'
+            f'<input type="hidden" name="uname" value="{display}">'
+            f'<input type="text" name="msg_text" placeholder="správa..." '
+            f'style="flex:1;min-width:0;background:#000;border:1px solid #7788cc;color:#aabbff;'
+            f'font-family:inherit;font-size:.8em;padding:2px 4px;outline:none">'
+            f'<button type="submit" style="background:#000;border:1px solid #7788cc;'
+            f'color:#aabbff;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">&#9993;</button>'
+            f'</form></details>'
+        )
         rows += f"""<tr>
           <td><strong>{display}</strong></td>
           <td style="color:#ffee88">{pw_str}</td>
@@ -1854,6 +1877,7 @@ def owner_panel():
           <td>{ban_cell}</td>
           <td>{adm_cell}</td>
           <td>{len(sv)}</td>
+          <td>{msg_cell}</td>
           <td style="white-space:nowrap">
             <form method="POST" action="/owner/set_rank" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
@@ -1978,7 +2002,7 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <table>
   <tr>
     <th>Pouzivatel</th><th>Heslo</th><th>Reg.</th><th>Posl. login</th>
-    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Admin</th><th>Sloty</th><th>Akcie</th>
+    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Admin</th><th>Sloty</th><th>&#9993; Správy</th><th>Akcie</th>
   </tr>
   {rows}
 </table>
@@ -2212,10 +2236,33 @@ def adminpanel():
         )
         spr0 = spr[0] if len(spr) > 0 else ''
         spr1 = spr[1] if len(spr) > 1 else ''
+        notifs_a = u.get("notifications", [])
+        notif_hist_a = "".join(
+            f'<div style="font-size:.78em;color:{"#aaa" if n.get("read") else "#ffe08a"};'
+            f'border-bottom:1px solid #1a1a1a;padding:1px 0">'
+            f'<span style="color:#555">[{n.get("ts","")} {n.get("from","")}]</span> {n.get("text","")}'
+            f'</div>'
+            for n in notifs_a[-5:]
+        ) or f'<span style="color:#333;font-size:.78em">—</span>'
+        msg_cell_a = (
+            f'<details style="min-width:160px">'
+            f'<summary style="cursor:pointer;color:#7788cc;font-size:.8em;list-style:none">'
+            f'&#9993; {len(notifs_a)} správ</summary>'
+            f'<div style="max-height:80px;overflow-y:auto;margin:3px 0">{notif_hist_a}</div>'
+            f'<form method="POST" action="/adminpanel/message" style="display:flex;gap:3px;margin-top:3px">'
+            f'<input type="hidden" name="uname" value="{uname_orig}">'
+            f'<input type="text" name="msg_text" placeholder="správa..." '
+            f'style="flex:1;min-width:0;background:#000;border:1px solid #7788cc;color:#aabbff;'
+            f'font-family:inherit;font-size:.8em;padding:2px 4px;outline:none">'
+            f'<button type="submit" style="background:#000;border:1px solid #7788cc;'
+            f'color:#aabbff;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">&#9993;</button>'
+            f'</form></details>'
+        )
         rows += f"""<tr>
           <td><strong>{uname_orig}</strong></td>
           <td style="color:#ffdd44">{rank_name}</td>
           <td>{spr_html}</td>
+          <td>{msg_cell_a}</td>
           <td style="white-space:nowrap">
             <form method="POST" action="/adminpanel/set_rank" style="display:inline">
               <input type="hidden" name="uname" value="{uname_orig}">
@@ -2231,17 +2278,6 @@ def adminpanel():
               </button>
             </form>
             <div style="display:inline-flex;flex-wrap:wrap;gap:1px;vertical-align:middle">{rank_btns_a}</div>
-            &nbsp;
-            <form method="POST" action="/adminpanel/message" style="display:inline">
-              <input type="hidden" name="uname" value="{uname_orig}">
-              <input type="text" name="msg_text" placeholder="správa..."
-                style="width:110px;background:#000;border:1px solid #7788cc;color:#aabbff;
-                font-family:inherit;font-size:.85em;padding:2px 4px">
-              <button type="submit" style="background:#000;border:1px solid #7788cc;
-                color:#aabbff;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:.85em">
-                &#9993;
-              </button>
-            </form>
           </td>
         </tr>"""
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
@@ -2259,7 +2295,7 @@ input[type=text]{{outline:none}}</style>
 </p>
 <h2>&#128101; HR&#193;&#268;I</h2>
 <table>
-  <tr><th>Hrac</th><th>Rang</th><th>Spec. ranky</th><th>Nastav</th></tr>
+  <tr><th>Hrac</th><th>Rang</th><th>Spec. ranky</th><th>&#9993; Správy</th><th>Nastav</th></tr>
   {rows}
 </table>
 </body></html>"""
