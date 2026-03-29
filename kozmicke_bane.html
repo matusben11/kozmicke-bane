@@ -138,6 +138,7 @@ body.kb-mobile .tbtn{font-size:1.1rem;padding:3px 10px;}
   <button class="tbtn" onclick="quickSave()" id="qsbtn" style="display:none">💾 SAVE</button>
   <button class="tbtn" onclick="aLead()" id="lbbtn" style="display:none">🏆</button>
   <button class="tbtn" onclick="toggleLang()" id="lang-btn">SK</button>
+  <span id="tester-badge" style="display:none;color:#39ff6a;font-size:.78em;border:1px solid #39ff6a44;padding:1px 6px;letter-spacing:.08em;opacity:.7">β TEST</span>
 </div>
 <div id="scr"></div>
 
@@ -191,6 +192,7 @@ function corners(){return'<div class="c tl"></div><div class="c tr"></div><div c
 // ══════════════════════════════════════════════════════════════
 let LANG = localStorage.getItem('lang') || 'sk';
 (function(){ const b=document.getElementById('lang-btn'); if(b) b.textContent=LANG.toUpperCase(); })();
+(function(){ if(window.__IS_TESTER__){ const el=document.getElementById('tester-badge'); if(el)el.style.display='inline'; } })();
 
 const T = {
   sk: {
@@ -1161,8 +1163,9 @@ function newGame(username){
     stats:{mined:0,sold:0,events:0,polished:0,maxDepth:1},
     rp:0, weapon:null, rocket:0, planet:1,
     era:1, colony:null, currentPlanet4:'zyrax8', corpContract:false, corpFee:0,
-    omegaUnlocked:false,
+    omegaUnlocked: window.__IS_TESTER__ === true,
   };
+  if(window.__IS_TESTER__)G._tester=true;
 }
 function hU(id){return G.upgrades.some(u=>u.id===id);}
 function mBonus(){let b=0;if(hU('drill2'))b++;if(hU('drill3'))b+=2;if(hU('diamondtip'))b+=3;if(hU('drill4'))b+=4;return b;}

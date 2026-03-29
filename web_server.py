@@ -914,6 +914,37 @@ def render_lobby(pilot):
         )
         html += '</div>'
 
+    # ── TESTER — Beta features card
+    if any(r.lower() == "tester" for r in sp_ranks):
+        beta_features = [
+            L("🪐 Planéta OMEGA-VII — hlboký vesmír (odomknutá od štartu)",
+              "🪐 OMEGA-VII planet — deep space (unlocked from start)"),
+            L("⚗️ Nový minerál: Neo-Void (tier 5, 3500 CR/ks) — exkluzívne OMEGA-VII",
+              "⚗️ New mineral: Neo-Void (tier 5, 3500 CR/ea) — OMEGA-VII exclusive"),
+            L("🏗️ Rozšírená správa kolónie — viac nastavení pracovníkov [WIP]",
+              "🏗️ Extended colony management — more worker controls [WIP]"),
+            L("📡 Galaktický chat medzi hráčmi [WIP]",
+              "📡 Galaxy-wide player chat [WIP]"),
+            L("🎖️ Achievementy a výzvy [WIP]",
+              "🎖️ Achievements and challenges [WIP]"),
+            L("🔴 LIVE indikátor — koľko hráčov je práve online [WIP]",
+              "🔴 LIVE indicator — how many players are online now [WIP]"),
+        ]
+        beta_items = "".join(
+            f'<div style="padding:3px 0;border-bottom:1px solid #0d1a0d;font-size:.9em;color:#aaffaa">'
+            f'<span style="color:#39ff6a;margin-right:6px">▶</span>{f}</div>'
+            for f in beta_features
+        )
+        html += (
+            f'<div class="card" style="border-color:#39ff6a44;background:#010d01">'
+            f'<div class="card-title" style="color:#39ff6a">&#9881; TESTER BUILD &mdash; {L("BETA FUNKCIE","BETA FEATURES")}</div>'
+            f'<div style="color:#556655;font-size:.82em;margin-bottom:6px">'
+            f'{L("Máš prístup k funkciám ktoré ešte nie sú verejné. Hláš chyby adminovi.","You have access to features not yet public. Report bugs to an admin.")}'
+            f'</div>'
+            f'{beta_items}'
+            f'</div>'
+        )
+
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
         html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
@@ -1395,6 +1426,7 @@ def game():
     _spr = get_sp_ranks(_u)
     if _spr:
         my_career = dict(my_career, special_ranks=_spr)
+    _is_tester = any(r.lower() == "tester" for r in _spr)
     lb_rows = []
     for u, d in all_career.items():
         if d.get("career_cr", 0) > 0:
@@ -1408,6 +1440,7 @@ def game():
         f"window.__SERVER_SAVES__={json.dumps(user_saves)};"
         f"window.__MY_CAREER__={json.dumps(my_career)};"
         f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
+        f"window.__IS_TESTER__={'true' if _is_tester else 'false'};"
         f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
