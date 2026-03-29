@@ -207,6 +207,8 @@ RANKS = [
 
 # Špeciálne tituly, ktoré môže nastaviť IBA owner (nie admin)
 OWNER_ONLY_RANKS = {"Owner", "Creator", "Dev", "God", "Zakladateľ"}
+# Tituly, ktoré môžu nastavovať admini (ale nie owner-only tituly)
+ADMIN_RANKS_HINT = ["Tester", "VIP", "Veteran", "Pilot"]
 
 def kb_rank(cr):
     for thr, r, name in [
@@ -686,6 +688,8 @@ def render_lobby(pilot):
     kb     = career.get(pilot.upper(), {})
     cr     = kb.get("career_cr", 0)
     r, rname = kb_rank(cr)
+    rank_title = kb.get("rank_title", "")
+    display_rank = rank_title if rank_title else rname
     users_db = load_users()
     u_data   = users_db.get(pilot, {})
     sp_ranks = get_sp_ranks(u_data)
@@ -739,7 +743,7 @@ def render_lobby(pilot):
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
     html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
-    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; {L("RANG","RANK")} {r}: {rname} &nbsp;|&nbsp; {cr:,} CR'
+    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; {L("RANG","RANK")}: {display_rank} &nbsp;|&nbsp; {cr:,} CR'
     if sp_stars:
         pilot_line += f' &nbsp;|&nbsp; {sp_stars}'
     html += f'<div class="pilot">{pilot_line}</div>'
@@ -751,7 +755,7 @@ def render_lobby(pilot):
     html += f'<div class="card-title">&#128202; {L("KARIÉRA","CAREER")}</div>'
     html += '<div class="stats-grid">'
     html += f'<div class="stat">{L("Kariérne CR","Career CR")}: <span>{cr:,}</span></div>'
-    html += f'<div class="stat">{L("Rang","Rank")}: <span>{r} &mdash; {rname}</span></div>'
+    html += f'<div class="stat">{L("Rang","Rank")}: <span>{display_rank}{(" ★" if rank_title else "")}</span></div>'
     if sp_ranks:
         html += f'<div class="stat">{L("Spec. ranky","Spec. ranks")}: <span style="color:#ffd700">' + " | ".join(f"&#9733; {s}" for s in sp_ranks) + '</span></div>'
     html += f'<div class="stat">{L("Sessioni","Sessions")}: <span>{kb.get("sessions", 0)}</span></div>'
@@ -815,7 +819,7 @@ def render_lobby(pilot):
         c = d.get("career_cr", 0)
         if c == 0:
             continue
-        _, rn = kb_rank(c)
+        rn = d.get("rank_title") or kb_rank(c)[1]
         m   = medals[i] if i < 3 else f"{i+1}."
         cls = "lb-row me" if uname.upper() == pilot.upper() else "lb-row"
         u_lb = next((v for k, v in users_for_lb.items() if k.upper() == uname), {})
@@ -845,6 +849,30 @@ def render_lobby(pilot):
              f'&#8635; {restore_lbl}'
              f'{"  |  Reg: " + reg_info if reg_info else ""}'
              f'</button></div>')
+
+    # ── Kontaktovať admin/owner (dostupné pre všetkých hráčov)
+    admin_list = sorted(k for k, v in users_db.items()
+                        if v.get("is_admin") and k != pilot)
+    if admin_list:
+        admin_opts = "".join(f'<option value="{a}">{a}</option>' for a in admin_list)
+        html += '<div class="card">'
+        html += f'<div class="card-title">&#9993; {L("NAPÍSAŤ ADMINOVI","CONTACT ADMIN")}</div>'
+        html += (
+            f'<form method="POST" action="/api/message_admin" style="display:flex;flex-direction:column;gap:6px">'
+            f'<div style="display:flex;gap:8px;align-items:center">'
+            f'<label style="color:#888;font-size:.9em">{L("Komu:","To:")}</label>'
+            f'<select name="to" style="background:#000;border:1px solid #3a2800;color:#fff8e0;'
+            f'font-family:\'VT323\',monospace;font-size:1em;padding:3px 8px;flex:1;outline:none">'
+            f'{admin_opts}</select></div>'
+            f'<textarea name="msg" rows="2" placeholder="{L("Tvoja správa...","Your message...")}" '
+            f'style="background:#000;border:1px solid #3a2800;color:#fff8e0;resize:vertical;'
+            f'font-family:\'VT323\',monospace;font-size:1em;padding:6px 10px;outline:none"></textarea>'
+            f'<button type="submit" style="background:#000;border:1px solid #a07000;color:#ffb000;'
+            f'font-family:\'VT323\',monospace;font-size:1em;padding:6px 16px;cursor:pointer;'
+            f'letter-spacing:.05em">{L("Odoslať","Send")}</button>'
+            f'</form>'
+        )
+        html += '</div>'
 
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
@@ -1786,7 +1814,9 @@ def owner_panel():
         else:
             ban_cell = "<span style='color:#444'>—</span>"
         cr_val  = c.get("career_cr", 0)
-        cur_tier, _ = kb_rank(cr_val)
+        rtitle  = c.get("rank_title", "")
+        earned_rname = kb_rank(cr_val)[1]
+        cur_tier = next((t for t, name, _ in RANKS if name == rtitle), kb_rank(cr_val)[0])
         rank_opts = "".join(
             f'<option value="{t}" {"selected" if t==cur_tier else ""}>{name}</option>'
             for t, name, _ in RANKS
@@ -1802,7 +1832,7 @@ def owner_panel():
           <td style="color:#ffee88">{pw_str}</td>
           <td style="color:#888;font-size:.85em">{u.get('created_at') or u.get('registered','–')}</td>
           <td style="color:#888;font-size:.85em">{u.get('last_web_login') or c.get('last_seen','–')}</td>
-          <td style="color:#ffdd44">{c.get('rank_name','Banik')}</td>
+          <td style="color:#ffdd44">{rtitle if rtitle else earned_rname}{"&nbsp;<span style='color:#00ccff;font-size:.8em'>★</span>" if rtitle else ""}</td>
           <td>{cr_val:,} CR</td>
           <td>{sp_cell}</td>
           <td>{ban_cell}</td>
@@ -2084,16 +2114,16 @@ def owner_set_rank_tier():
         tier = int(request.form.get("tier", 1))
     except ValueError:
         return redirect("/owner/panel")
-    cr_map = {r: cr for r, _, cr in [(t[0], t[1], t[2]) for t in RANKS]}
-    cr = cr_map.get(tier, 0)
+    name_map = {t: name for t, name, _ in RANKS}
+    rank_title = name_map.get(tier, "")
     career = load_jf(KB_CAREER, {})
     key = uname.upper()
     e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
                          "best_session": 0, "last_seen": "–"})
-    e["career_cr"] = cr
-    rv, rname = kb_rank(cr)
-    e["rank"] = rv
-    e["rank_name"] = rname
+    if rank_title:
+        e["rank_title"] = rank_title
+    else:
+        e.pop("rank_title", None)
     career[key] = e
     save_jf(KB_CAREER, career)
     return redirect("/owner/panel")
@@ -2158,9 +2188,11 @@ def adminpanel():
         spr = get_sp_ranks(u)
         spr_html = ("  ".join(f'<span style="color:#ffd700">&#9733;{s}</span>' for s in spr)
                     or '<span style="color:#444">—</span>')
-        rank_name = career.get(uname_orig.upper(), {}).get('rank_name', 'Banik')
-        cr_val_a = career.get(uname_orig.upper(), {}).get('career_cr', 0)
-        cur_tier_a, _ = kb_rank(cr_val_a)
+        c_a = career.get(uname_orig.upper(), {})
+        cr_val_a = c_a.get('career_cr', 0)
+        rtitle_a = c_a.get('rank_title', '')
+        rank_name = rtitle_a if rtitle_a else c_a.get('rank_name', 'Baník')
+        cur_tier_a = next((t for t, name, _ in RANKS if name == rtitle_a), kb_rank(cr_val_a)[0])
         rank_opts_a = "".join(
             f'<option value="{t}" {"selected" if t==cur_tier_a else ""}>{name}</option>'
             for t, name, _ in RANKS
@@ -2220,7 +2252,8 @@ input[type=text]{{outline:none}}</style>
   <a href="/lobby" class="btn">Lobby</a>
 </p>
 <p style="color:#aaa;font-size:.85rem">Nastav&#237; maxim&#225;lne 2 &#353;peci&#225;lne ranky pre hr&#225;&#269;a.
-  <span style="color:#ff9900"> Tituly vyhradené len pre ownera: {", ".join(sorted(OWNER_ONLY_RANKS))}</span>
+  <span style="color:#39ff6a"> Napr.: {", ".join(ADMIN_RANKS_HINT)}</span> &nbsp;|&nbsp;
+  <span style="color:#ff9900"> Vyhradené pre ownera: {", ".join(sorted(OWNER_ONLY_RANKS))}</span>
 </p>
 <h2>&#128101; HR&#193;&#268;I</h2>
 <table>
@@ -2258,16 +2291,16 @@ def adminpanel_set_rank_tier():
         tier = int(request.form.get("tier", 1))
     except ValueError:
         return redirect("/adminpanel")
-    cr_map = {t: cr for t, _, cr in RANKS}
-    cr = cr_map.get(tier, 0)
+    name_map = {t: name for t, name, _ in RANKS}
+    rank_title = name_map.get(tier, "")
     career = load_jf(KB_CAREER, {})
     key = uname.upper()
     e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
                          "best_session": 0, "last_seen": "–"})
-    e["career_cr"] = cr
-    rv, rname = kb_rank(cr)
-    e["rank"] = rv
-    e["rank_name"] = rname
+    if rank_title:
+        e["rank_title"] = rank_title
+    else:
+        e.pop("rank_title", None)
     career[key] = e
     save_jf(KB_CAREER, career)
     return redirect("/adminpanel")
@@ -2282,6 +2315,24 @@ def adminpanel_message():
     if uname and text:
         send_notification(uname, text, from_role="Admin")
     return redirect("/adminpanel")
+
+
+@app.route("/api/message_admin", methods=["POST"])
+def api_message_admin():
+    if not _require_session():
+        return redirect("/")
+    sender    = session["username"]
+    recipient = request.form.get("to", "").strip()
+    text      = request.form.get("msg", "").strip()
+    if not recipient or not text:
+        return redirect("/lobby")
+    users = load_users()
+    # Príjemca musí byť admin a nesmie byť odosielateľ
+    if recipient in users and users[recipient].get("is_admin") and recipient != sender:
+        send_notification(recipient,
+                          f'{L("Správa od","Message from")} {sender}: {text}',
+                          from_role=sender)
+    return redirect("/lobby")
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────
