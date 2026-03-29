@@ -43,6 +43,13 @@ app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
 
 
+# ── Language helpers ────────────────────────────────────────────────────────
+
+def L(sk_text, en_text):
+    """Return en_text if session lang is 'en', otherwise sk_text."""
+    return en_text if session.get('lang') == 'en' else sk_text
+
+
 # ── Seed default user from env vars ────────────────────────────────────────
 def _seed_default_user():
     """
@@ -110,21 +117,22 @@ def check_ban(user):
     if bu is None:
         return False, ""
     if bu == -1:
-        return True, "Tvoj účet bol trvalo zablokovaný administrátorom."
+        return True, L("Tvoj účet bol trvalo zablokovaný administrátorom.",
+                        "Your account has been permanently banned by an administrator.")
     remaining = bu - datetime.now().timestamp()
     if remaining <= 0:
         return False, ""
     if remaining < 3600:
-        t = f"{int(remaining/60)+1} minút"
+        t = L(f"{int(remaining/60)+1} minút", f"{int(remaining/60)+1} minutes")
     elif remaining < 86400:
-        t = f"{int(remaining/3600)+1} hodín"
+        t = L(f"{int(remaining/3600)+1} hodín", f"{int(remaining/3600)+1} hours")
     else:
-        t = f"{int(remaining/86400)+1} dní"
-    return True, f"Tvoj účet je zablokovaný ešte {t}."
+        t = L(f"{int(remaining/86400)+1} dní", f"{int(remaining/86400)+1} days")
+    return True, L(f"Tvoj účet je zablokovaný ešte {t}.", f"Your account is banned for another {t}.")
 
 def validate_pw(pw):
     if len(pw) < 4:
-        return False, "Heslo musí mať aspoň 4 znaky."
+        return False, L("Heslo musí mať aspoň 4 znaky.", "Password must be at least 4 characters.")
     return True, "OK"
 
 def load_jf(path, default=None):
@@ -204,7 +212,7 @@ def kb_rank(cr):
 
 LOGIN_HTML = """\
 <!DOCTYPE html>
-<html lang="sk">
+<html lang="__LANG__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -296,9 +304,15 @@ input:focus{border-color:#ffb000;}
 .err{color:#ff3a3a;font-size:0.9em;margin-bottom:14px;border-left:2px solid #ff3a3a;padding-left:8px;}
 .ok{color:#39ff6a;font-size:0.9em;margin-bottom:14px;border-left:2px solid #39ff6a;padding-left:8px;}
 .hint{color:#3a2800;font-size:0.8em;margin-top:18px;text-align:center;}
+.lang-toggle{position:fixed;top:10px;right:14px;font-family:'VT323',monospace;font-size:1em;}
+.lang-toggle a{color:#a07000;text-decoration:none;padding:2px 6px;border:1px solid #3a2800;}
+.lang-toggle a:hover,.lang-toggle a.active{color:#ffb000;border-color:#ffb000;}
 </style>
 </head>
 <body>
+<div class="lang-toggle">
+  <a href="/lang/sk"__SK_ACTIVE__>SK</a><a href="/lang/en"__EN_ACTIVE__>EN</a>
+</div>
 <pre class="logo">
  ██╗  ██╗ ██████╗ ███████╗███╗   ███╗██╗ ██████╗██╗  ██╗███████╗
  ██║ ██╔╝██╔═══██╗╚══███╔╝████╗ ████║██║██╔════╝██║ ██╔╝██╔════╝
@@ -310,47 +324,47 @@ input:focus{border-color:#ffb000;}
 
 <div class="card">
   <div class="tabs">
-    <button class="tab __ON_LOGIN__" onclick="show('login',this)">&#128272; Prihlásenie</button>
-    <button class="tab __ON_REG__"   onclick="show('register',this)">&#128221; Registrácia</button>
-    <button class="tab __ON_RESET__" onclick="show('reset',this)">&#128273; Reset hesla</button>
+    <button class="tab __ON_LOGIN__" onclick="show('login',this)">&#128272; __TAB_LOGIN__</button>
+    <button class="tab __ON_REG__"   onclick="show('register',this)">&#128221; __TAB_REG__</button>
+    <button class="tab __ON_RESET__" onclick="show('reset',this)">&#128273; __TAB_RESET__</button>
   </div>
 
   <div id="login" class="panel __ON_LOGIN__">
     __FLASH_LOGIN__
     <form method="POST" action="/login">
-      <label>MENO</label>
+      <label>__LBL_USERNAME__</label>
       <input type="text" name="username" autocomplete="username" autofocus>
-      <label>HESLO</label>
+      <label>__LBL_PASSWORD__</label>
       <input type="password" name="password" autocomplete="current-password">
-      <button class="btn" type="submit">&#9654; &nbsp; PRIHLÁSIŤ SA</button>
+      <button class="btn" type="submit">&#9654; &nbsp; __BTN_SIGNIN__</button>
     </form>
   </div>
 
   <div id="register" class="panel __ON_REG__">
     __FLASH_REG__
     <form method="POST" action="/register">
-      <label>MENO</label>
+      <label>__LBL_USERNAME__</label>
       <input type="text" name="username">
-      <label>HESLO &nbsp;<span style="color:#555;font-size:0.85em">(min. 6 znakov, aspoň 1 číslica)</span></label>
+      <label>__LBL_PASSWORD_HINT__</label>
       <input type="password" name="password">
-      <label>POTVRĎ HESLO</label>
+      <label>__LBL_CONFIRM_PW__</label>
       <input type="password" name="password2">
-      <button class="btn" type="submit">&#10003; &nbsp; VYTVORIŤ ÚČET</button>
+      <button class="btn" type="submit">&#10003; &nbsp; __BTN_REGISTER__</button>
     </form>
   </div>
 
   <div id="reset" class="panel __ON_RESET__">
     __FLASH_RESET__
     <form method="POST" action="/reset">
-      <label>MENO</label>
+      <label>__LBL_USERNAME__</label>
       <input type="text" name="username">
-      <label>DÁTUM REGISTRÁCIE &nbsp;<span style="color:#555;font-size:0.85em">(YYYY-MM-DD)</span></label>
-      <input type="text" name="reg_date" placeholder="napr. 2024-03-10">
-      <label>NOVÉ HESLO</label>
+      <label>__LBL_REGDATE__</label>
+      <input type="text" name="reg_date" placeholder="__PLACEHOLDER_DATE__">
+      <label>__LBL_NEWPW__</label>
       <input type="password" name="new_password">
-      <label>POTVRĎ HESLO</label>
+      <label>__LBL_CONFIRM_PW__</label>
       <input type="password" name="new_password2">
-      <button class="btn" type="submit">&#128273; &nbsp; ZMENIŤ HESLO</button>
+      <button class="btn" type="submit">&#128273; &nbsp; __BTN_CHANGEPW__</button>
     </form>
   </div>
 
@@ -383,14 +397,38 @@ def render_login(tab="login", err_login="", err_reg="", err_reset="",
     on_reg   = "on" if tab == "register" else ""
     on_reset = "on" if tab == "reset"    else ""
 
+    lang = session.get('lang', 'sk')
+    sk_active = ' class="active"' if lang == 'sk' else ''
+    en_active = ' class="active"' if lang == 'en' else ''
+
     return (LOGIN_HTML
-        .replace("__ON_LOGIN__",   on_login)
-        .replace("__ON_REG__",     on_reg)
-        .replace("__ON_RESET__",   on_reset)
+        .replace("__LANG__",        lang)
+        .replace("__SK_ACTIVE__",   sk_active)
+        .replace("__EN_ACTIVE__",   en_active)
+        .replace("__ON_LOGIN__",    on_login)
+        .replace("__ON_REG__",      on_reg)
+        .replace("__ON_RESET__",    on_reset)
         .replace("__FLASH_LOGIN__", flash(err_login, ok_login))
         .replace("__FLASH_REG__",   flash(err_reg, ok_reg))
         .replace("__FLASH_RESET__", flash(err_reset, ""))
         .replace("__PORT__",        str(PORT))
+        .replace("__TAB_LOGIN__",   L("Prihlásenie", "Login"))
+        .replace("__TAB_REG__",     L("Registrácia", "Registration"))
+        .replace("__TAB_RESET__",   L("Reset hesla", "Reset Password"))
+        .replace("__LBL_USERNAME__",    L("MENO", "USERNAME"))
+        .replace("__LBL_PASSWORD__",    L("HESLO", "PASSWORD"))
+        .replace("__LBL_PASSWORD_HINT__",
+                 L('HESLO &nbsp;<span style="color:#555;font-size:0.85em">(min. 6 znakov, aspoň 1 číslica)</span>',
+                   'PASSWORD &nbsp;<span style="color:#555;font-size:0.85em">(min. 6 chars, at least 1 digit)</span>'))
+        .replace("__LBL_CONFIRM_PW__",  L("POTVRĎ HESLO", "CONFIRM PASSWORD"))
+        .replace("__BTN_SIGNIN__",      L("PRIHLÁSIŤ SA", "SIGN IN"))
+        .replace("__BTN_REGISTER__",    L("VYTVORIŤ ÚČET", "CREATE ACCOUNT"))
+        .replace("__LBL_REGDATE__",
+                 L('DÁTUM REGISTRÁCIE &nbsp;<span style="color:#555;font-size:0.85em">(YYYY-MM-DD)</span>',
+                   'REGISTRATION DATE &nbsp;<span style="color:#555;font-size:0.85em">(YYYY-MM-DD)</span>'))
+        .replace("__PLACEHOLDER_DATE__", L("napr. 2024-03-10", "e.g. 2024-03-10"))
+        .replace("__LBL_NEWPW__",       L("NOVÉ HESLO", "NEW PASSWORD"))
+        .replace("__BTN_CHANGEPW__",    L("ZMENIŤ HESLO", "CHANGE PASSWORD"))
     )
 
 
@@ -591,6 +629,7 @@ def fmt_date_ts(ts):
         return "–"
 
 DEPTHS = {1: "Povrch", 2: "Litosféra", 3: "Hlboká", 4: "Magma", 5: "Jadro"}
+DEPTHS_EN = {1: "Surface", 2: "Lithosphere", 3: "Deep", 4: "Magma", 5: "Core"}
 
 def render_lobby(pilot):
     all_saves = load_jf(KB_SAVES, {})
@@ -604,10 +643,24 @@ def render_lobby(pilot):
     sp_ranks = get_sp_ranks(u_data)
     sp_stars = " ".join(f'<span style="color:#ffd700;text-shadow:0 0 8px #ffd700">&#9733;&nbsp;{s}</span>' for s in sp_ranks)
 
-    # ── Hlavička
-    html  = f"<!DOCTYPE html><html lang='sk'><head><meta charset='UTF-8'>"
+    lang = session.get('lang', 'sk')
+    depth_map = DEPTHS_EN if lang == 'en' else DEPTHS
+    sk_active = ' class="active"' if lang == 'sk' else ''
+    en_active = ' class="active"' if lang == 'en' else ''
+    lang_toggle = (
+        f'<div style="position:fixed;top:10px;right:14px;font-family:\'VT323\',monospace;font-size:1em;z-index:9999">'
+        f'<a href="/lang/sk"{sk_active} style="color:#a07000;text-decoration:none;padding:2px 6px;border:1px solid #3a2800;">SK</a>'
+        f'<a href="/lang/en"{en_active} style="color:#a07000;text-decoration:none;padding:2px 6px;border:1px solid #3a2800;">EN</a>'
+        f'</div>'
+    )
+
+    # ── Header
+    html  = f"<!DOCTYPE html><html lang='{lang}'><head><meta charset='UTF-8'>"
     html += f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    html += f"<title>KOZMICKÉ BANE — Lobby</title>{LOBBY_CSS}</head><body>"
+    html += f"<title>KOZMICKÉ BANE — Lobby</title>{LOBBY_CSS}"
+    html += "<style>.lang-toggle a.active{color:#ffb000!important;border-color:#ffb000!important;}</style>"
+    html += "</head><body>"
+    html += lang_toggle
     html += """<pre class="logo">
  ██╗  ██╗ ██████╗ ███████╗███╗   ███╗██╗ ██████╗██╗  ██╗███████╗
  ██║ ██╔╝██╔═══██╗╚══███╔╝████╗ ████║██║██╔════╝██║ ██╔╝██╔════╝
@@ -616,57 +669,59 @@ def render_lobby(pilot):
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
     html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
-    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; RANG {r}: {rname} &nbsp;|&nbsp; {cr:,} CR'
+    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; {L("RANG","RANK")} {r}: {rname} &nbsp;|&nbsp; {cr:,} CR'
     if sp_stars:
         pilot_line += f' &nbsp;|&nbsp; {sp_stars}'
     html += f'<div class="pilot">{pilot_line}</div>'
 
-    # ── Kariéra stats
+    # ── Career stats
     html += '<div class="card">'
-    html += '<div class="card-title">&#128202; KARIÉRA</div>'
+    html += f'<div class="card-title">&#128202; {L("KARIÉRA","CAREER")}</div>'
     html += '<div class="stats-grid">'
-    html += f'<div class="stat">Kariérne CR: <span>{cr:,}</span></div>'
-    html += f'<div class="stat">Rang: <span>{r} &mdash; {rname}</span></div>'
+    html += f'<div class="stat">{L("Kariérne CR","Career CR")}: <span>{cr:,}</span></div>'
+    html += f'<div class="stat">{L("Rang","Rank")}: <span>{r} &mdash; {rname}</span></div>'
     if sp_ranks:
-        html += f'<div class="stat">Spec. ranky: <span style="color:#ffd700">' + " | ".join(f"&#9733; {s}" for s in sp_ranks) + '</span></div>'
-    html += f'<div class="stat">Sessioni: <span>{kb.get("sessions", 0)}</span></div>'
-    html += f'<div class="stat">Najlepší run: <span>{kb.get("best_session", 0):,} CR</span></div>'
-    html += f'<div class="stat">Celkom ťažby: <span>{kb.get("total_mined", 0):,} ks</span></div>'
-    html += f'<div class="stat">Posledná hra: <span>{kb.get("last_seen", "–")}</span></div>'
+        html += f'<div class="stat">{L("Spec. ranky","Spec. ranks")}: <span style="color:#ffd700">' + " | ".join(f"&#9733; {s}" for s in sp_ranks) + '</span></div>'
+    html += f'<div class="stat">{L("Sessioni","Sessions")}: <span>{kb.get("sessions", 0)}</span></div>'
+    html += f'<div class="stat">{L("Najlepší run","Best run")}: <span>{kb.get("best_session", 0):,} CR</span></div>'
+    html += f'<div class="stat">{L("Celkom ťažby","Total mined")}: <span>{kb.get("total_mined", 0):,} {L("ks","pcs")}</span></div>'
+    html += f'<div class="stat">{L("Posledná hra","Last game")}: <span>{kb.get("last_seen", "–")}</span></div>'
     html += '</div></div>'
 
-    # ── Mini hry
+    # ── Mini games
     html += '<div class="card">'
-    html += '<div class="card-title">&#127918; MINI HRY</div>'
-    html += '<a href="/mini/cislo" class="btn">&#128290; &nbsp; H&#193;DANIE &#268;&#205;SLA &nbsp; <span style="color:#a07000;font-size:0.85em">(1&ndash;100, 7 pokusov)</span></a>'
-    html += '<a href="/mini/obesenec" class="btn">&#128279; &nbsp; OBESENEC &nbsp; <span style="color:#a07000;font-size:0.85em">(h&#225;daj slovo)</span></a>'
+    html += f'<div class="card-title">&#127918; {L("MINI HRY","MINI GAMES")}</div>'
+    html += f'<a href="/mini/cislo" class="btn">&#128290; &nbsp; {L("HÁDANIE ČÍSLA","NUMBER GUESSING")} &nbsp; <span style="color:#a07000;font-size:0.85em">(1&ndash;100, 7 {L("pokusov","attempts")})</span></a>'
+    html += f'<a href="/mini/obesenec" class="btn">&#128279; &nbsp; {L("OBESENEC","HANGMAN")} &nbsp; <span style="color:#a07000;font-size:0.85em">({L("hádaj slovo","guess the word")})</span></a>'
     html += '</div>'
 
-    # ── Nová hra KB
+    # ── New game KB
     html += '<div class="card">'
-    html += '<div class="card-title">&#128640; KOZMICK&#201; BANE v4.7</div>'
-    html += '<a href="/game" class="btn btn-green">&#9654; &nbsp; NOV&#193; HRA &mdash; Za&#269;ni od nuly</a>'
+    html += f'<div class="card-title">&#128640; KOZMICK&#201; BANE v4.7</div>'
+    html += f'<a href="/game" class="btn btn-green">&#9654; &nbsp; {L("NOVÁ HRA &mdash; Začni od nuly","NEW GAME &mdash; Start fresh")}</a>'
     html += '</div>'
 
-    # ── Save sloty
+    # ── Save slots
     html += '<div class="card">'
-    html += '<div class="card-title">&#128193; POKRAČOVAŤ &mdash; Vyber uloženie</div>'
+    html += f'<div class="card-title">&#128193; {L("POKRAČOVAŤ &mdash; Vyber uloženie","CONTINUE &mdash; Choose save")}</div>'
     for s in range(1, 5):
         d = saves.get(str(s))
         if not d:
-            html += f'<div class="slot-row"><div class="slot-info">#{s} &nbsp; &ndash; prázdny slot &ndash;</div></div>'
+            html += f'<div class="slot-row"><div class="slot-info">#{s} &nbsp; &ndash; {L("prázdny slot","empty slot")} &ndash;</div></div>'
         else:
-            dep  = DEPTHS.get(d.get("depth", 1), "?")
+            dep  = depth_map.get(d.get("depth", 1), "?")
             crs  = d.get("credits", 0)
             goal = max(1, d.get("goal", 15000))
             pct  = min(100, round(crs / goal * 100))
             date = fmt_date_ts(d.get("ts", 0))
             uname = d.get("username", "?")
-            lbl  = f"#{s} &nbsp; {uname} &nbsp; {crs:,} CR ({pct}%) &nbsp; Táh {d.get('turn',0)} &nbsp; [{dep}] &nbsp; {date}"
+            turn_lbl = L("Táh","Turn")
+            lbl  = f"#{s} &nbsp; {uname} &nbsp; {crs:,} CR ({pct}%) &nbsp; {turn_lbl} {d.get('turn',0)} &nbsp; [{dep}] &nbsp; {date}"
             html += f'<div class="slot-row">'
             html += f'<a href="/game?slot={s}" class="btn" style="margin:0;flex:1">{lbl}</a>'
+            confirm_msg = L(f"Vymazať slot #{s}?", f"Delete slot #{s}?")
             del_js = (
-                f"if(confirm('Vymazať slot #{s}?'))"
+                f"if(confirm('{confirm_msg}'))"
                 "{var sv=JSON.parse(localStorage.getItem('kb_saves')||'{}');"
                 f"delete sv['{s}'];"
                 "localStorage.setItem('kb_saves',JSON.stringify(sv));"
@@ -680,7 +735,7 @@ def render_lobby(pilot):
     # ── Leaderboard top 5
     entries = sorted(career.items(), key=lambda x: -x[1].get("career_cr", 0))
     html += '<div class="card">'
-    html += '<div class="card-title">&#127942; KARIÉRA &mdash; TOP HRÁČI</div>'
+    html += f'<div class="card-title">&#127942; {L("KARIÉRA &mdash; TOP HRÁČI","CAREER &mdash; TOP PLAYERS")}</div>'
     medals = ["&#129351;", "&#129352;", "&#129353;"]
     shown = 0
     users_for_lb = load_users()
@@ -694,30 +749,32 @@ def render_lobby(pilot):
         u_lb = next((v for k, v in users_for_lb.items() if k.upper() == uname), {})
         spr  = get_sp_ranks(u_lb)
         sp_tag = (" " + " ".join(f'<span style="color:#ffd700;font-size:.85em">&#9733;{s}</span>' for s in spr)) if spr else ""
-        html += f'<div class="{cls}">{m} &nbsp; <span>{uname}</span>{sp_tag} &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} sess.</div>'
+        sess_lbl = L("sess.", "sess.")
+        html += f'<div class="{cls}">{m} &nbsp; <span>{uname}</span>{sp_tag} &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} {sess_lbl}</div>'
         shown += 1
     if shown == 0:
-        html += '<div class="lb-row">&ndash; zatiaľ žiadne záznamy &ndash;</div>'
+        html += f'<div class="lb-row">&ndash; {L("zatiaľ žiadne záznamy","no records yet")} &ndash;</div>'
     html += '</div>'
 
     # ── Import / Export
     html += '<div class="card">'
-    html += '<div class="card-title">&#128228; PRENOS DÁT &mdash; Import / Export</div>'
-    html += '<a href="/import_data" class="btn" style="text-align:center">&#8597; Preniesť dáta z PC na server (alebo naopak)</a>'
+    html += f'<div class="card-title">&#128228; {L("PRENOS DÁT &mdash; Import / Export","DATA TRANSFER &mdash; Import / Export")}</div>'
+    html += f'<a href="/import_data" class="btn" style="text-align:center">&#8597; {L("Preniesť dáta z PC na server (alebo naopak)","Transfer data between PC and server")}</a>'
     html += '</div>'
 
-    # ── Obnova z prehliadača
+    # ── Restore from browser
     html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
     reg_info = u_data.get("created_at") or u_data.get("registered", "")
+    restore_lbl = L("OBNOVIŤ DÁTA Z PREHLIADAČA", "RESTORE DATA FROM BROWSER")
     html += (f'<button onclick="window._forceSync(true)" '
              f'style="background:#000;border:1px solid #3a2800;color:#a07000;'
              f'font-family:\'VT323\',monospace;font-size:1em;padding:7px 14px;'
              f'cursor:pointer;width:100%;letter-spacing:.05em">'
-             f'&#8635; OBNOVIŤ DÁTA Z PREHLIADAČA'
+             f'&#8635; {restore_lbl}'
              f'{"  |  Reg: " + reg_info if reg_info else ""}'
              f'</button></div>')
 
-    # ── Admin Panel (pre is_admin hráčov)
+    # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
         html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
         html += '<a href="/adminpanel" style="display:block;background:#000;border:1px solid #00ccff;'
@@ -725,7 +782,7 @@ def render_lobby(pilot):
         html += 'text-align:center;text-decoration:none;letter-spacing:.05em">&#9733; ADMIN PANEL</a>'
         html += '</div>'
 
-    # ── Owner prístup priamo v lobby
+    # ── Owner access (kept in SK — admin-only)
     html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
     html += '<details style="border:1px solid #2a1500;padding:8px 14px;background:#0b0900">'
     html += '<summary style="cursor:pointer;color:#555;font-size:0.92em;letter-spacing:0.06em;list-style:none">&#128081; OWNER PR&#205;STUP</summary>'
@@ -739,38 +796,42 @@ def render_lobby(pilot):
 
     # ── Logout
     html += '<div style="width:100%;max-width:700px">'
-    html += '<a href="/logout" class="btn btn-logout">&#10007; &nbsp; Odhlásiť sa</a>'
+    html += f'<a href="/logout" class="btn btn-logout">&#10007; &nbsp; {L("Odhlásiť sa","Log out")}</a>'
     html += '</div>'
-    # ── Auto-sync script (localStorage → server pri každom otvorení lobby)
-    html += """<script>
-(function(){
-  try{
-    function _doSync(showMsg){
+    # ── Auto-sync script (localStorage → server on every lobby open)
+    msg_no_data   = L("Ziadne lokalne data na obnovenie.", "No local data to restore.")
+    msg_restored  = L("Obnovene", "Restored")
+    msg_slots     = L("slotov z prehliadaca!", "slot(s) from browser!")
+    msg_sync_err  = L("Sync chyba: ", "Sync error: ")
+    html += f"""<script>
+(function(){{
+  try{{
+    function _doSync(showMsg){{
       var lsCareer=JSON.parse(localStorage.getItem('kb_career')||'null');
-      if(lsCareer&&lsCareer.career_cr>0){
-        fetch('/api/sync_career',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(lsCareer)}).then(function(){
+      if(lsCareer&&lsCareer.career_cr>0){{
+        fetch('/api/sync_career',{{method:'POST',headers:{{'Content-Type':'application/json'}},
+          body:JSON.stringify(lsCareer)}}).then(function(){{
           if(showMsg)window.location.reload();
-        }).catch(function(){});
-      }
-      var saves=JSON.parse(localStorage.getItem('kb_saves')||'{}');
+        }}).catch(function(){{}});
+      }}
+      var saves=JSON.parse(localStorage.getItem('kb_saves')||'{{}}');
       var lb=JSON.parse(localStorage.getItem('kb_leaderboard')||'[]');
       var hasData=Object.keys(saves).length>0||lb.length>0;
-      if(!hasData){if(showMsg)alert('Ziadne lokalne data na obnovenie.');return;}
-      fetch('/api/sync_local_saves',{method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({saves:saves,leaderboard:lb})
-      }).then(function(r){return r.json();}).then(function(d){
-        if(d.synced>0||showMsg){
-          if(showMsg)alert('Obnovene '+d.synced+' slotov z prehliadaca!');
+      if(!hasData){{if(showMsg)alert('{msg_no_data}');return;}}
+      fetch('/api/sync_local_saves',{{method:'POST',
+        headers:{{'Content-Type':'application/json'}},
+        body:JSON.stringify({{saves:saves,leaderboard:lb}})
+      }}).then(function(r){{return r.json();}}).then(function(d){{
+        if(d.synced>0||showMsg){{
+          if(showMsg)alert('{msg_restored} '+d.synced+' {msg_slots}');
           window.location.reload();
-        }
-      }).catch(function(e){if(showMsg)alert('Sync chyba: '+e);});
-    }
+        }}
+      }}).catch(function(e){{if(showMsg)alert('{msg_sync_err}'+e);}});
+    }}
     window._forceSync=_doSync;
     _doSync(false);
-  }catch(e){console.warn('[sync] Chyba:',e);}
-})();
+  }}catch(e){{console.warn('[sync] error:',e);}}
+}})();
 </script>"""
 
     html += '</body></html>'
@@ -990,12 +1051,12 @@ def login():
     password = request.form.get("password", "")
     users = load_users()
     if username not in users:
-        return render_login(tab="login", err_login=f"Používateľ '{username}' neexistuje.")
+        return render_login(tab="login", err_login=L(f"Používateľ '{username}' neexistuje.", f"User '{username}' does not exist."))
     banned, ban_msg = check_ban(users[username])
     if banned:
         return render_login(tab="login", err_login=ban_msg)
     if not check_pw(users[username]["password"], password):
-        return render_login(tab="login", err_login="Nesprávne heslo.")
+        return render_login(tab="login", err_login=L("Nesprávne heslo.", "Incorrect password."))
     session["username"] = username
     users[username]["last_web_login"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     save_users(users)
@@ -1009,14 +1070,14 @@ def register():
     password2 = request.form.get("password2", "")
     users = load_users()
     if not username:
-        return render_login(tab="register", err_reg="Meno nemôže byť prázdne.")
+        return render_login(tab="register", err_reg=L("Meno nemôže byť prázdne.", "Username cannot be empty."))
     if any(k.lower() == username.lower() for k in users):
-        return render_login(tab="register", err_reg=f"Meno '{username}' je obsadené.")
+        return render_login(tab="register", err_reg=L(f"Meno '{username}' je obsadené.", f"Username '{username}' is already taken."))
     ok, msg = validate_pw(password)
     if not ok:
         return render_login(tab="register", err_reg=msg)
     if password != password2:
-        return render_login(tab="register", err_reg="Heslá sa nezhodujú.")
+        return render_login(tab="register", err_reg=L("Heslá sa nezhodujú.", "Passwords do not match."))
     users[username] = {
         "password":   password,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1024,7 +1085,7 @@ def register():
     }
     save_users(users)
     return render_login(tab="login",
-                        ok_login=f"Účet '{username}' vytvorený! Prihlás sa.")
+                        ok_login=L(f"Účet '{username}' vytvorený! Prihlás sa.", f"Account '{username}' created! Sign in."))
 
 
 @app.route("/reset", methods=["POST"])
@@ -1035,25 +1096,32 @@ def reset():
     new_pw2   = request.form.get("new_password2", "")
     users = load_users()
     if username not in users:
-        return render_login(tab="reset", err_reset="Používateľ neexistuje.")
+        return render_login(tab="reset", err_reset=L("Používateľ neexistuje.", "User does not exist."))
     u = users[username]
     date_field = u.get("created_at", "") or u.get("registered", "")
     if not reg_date or reg_date not in date_field:
-        return render_login(tab="reset", err_reset="Nesprávny dátum registrácie (napr. 2024-01-15).")
+        return render_login(tab="reset", err_reset=L("Nesprávny dátum registrácie (napr. 2024-01-15).", "Incorrect registration date (e.g. 2024-01-15)."))
     ok, msg = validate_pw(new_pw)
     if not ok:
         return render_login(tab="reset", err_reset=msg)
     if new_pw != new_pw2:
-        return render_login(tab="reset", err_reset="Heslá sa nezhodujú.")
+        return render_login(tab="reset", err_reset=L("Heslá sa nezhodujú.", "Passwords do not match."))
     users[username]["password"] = new_pw
     save_users(users)
-    return render_login(tab="login", ok_login="Heslo bolo zmenené. Prihlás sa.")
+    return render_login(tab="login", ok_login=L("Heslo bolo zmenené. Prihlás sa.", "Password changed. Sign in."))
 
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/")
+
+
+@app.route("/lang/<code>")
+def set_lang(code):
+    if code in ('sk', 'en'):
+        session['lang'] = code
+    return redirect(request.referrer or '/')
 
 
 # ── Routes — Mini hry ─────────────────────────────────────────────────────
@@ -1858,17 +1926,22 @@ def adminpanel():
     for uname_orig in sorted(users.keys()):
         u = users[uname_orig]
         spr = get_sp_ranks(u)
+        spr_html = ("  ".join(f'<span style="color:#ffd700">&#9733;{s}</span>' for s in spr)
+                    or '<span style="color:#444">—</span>')
+        rank_name = career.get(uname_orig.upper(), {}).get('rank_name', 'Banik')
+        spr0 = spr[0] if len(spr) > 0 else ''
+        spr1 = spr[1] if len(spr) > 1 else ''
         rows += f"""<tr>
           <td><strong>{uname_orig}</strong></td>
-          <td style="color:#ffdd44">{career.get(uname_orig.upper(), {}).get('rank_name', 'Banik')}</td>
-          <td>{"  ".join(f'<span style=\"color:#ffd700\">&#9733;{s}</span>' for s in spr) or '<span style=\"color:#444\">—</span>'}</td>
+          <td style="color:#ffdd44">{rank_name}</td>
+          <td>{spr_html}</td>
           <td style="white-space:nowrap">
             <form method="POST" action="/adminpanel/set_rank" style="display:inline">
               <input type="hidden" name="uname" value="{uname_orig}">
-              <input type="text" name="title1" value="{spr[0] if len(spr)>0 else ''}" placeholder="Rank 1"
+              <input type="text" name="title1" value="{spr0}" placeholder="Rank 1"
                 style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
                 font-family:inherit;font-size:.85em;padding:2px 4px">
-              <input type="text" name="title2" value="{spr[1] if len(spr)>1 else ''}" placeholder="Rank 2"
+              <input type="text" name="title2" value="{spr1}" placeholder="Rank 2"
                 style="width:80px;background:#1a1400;border:1px solid #ffd700;color:#ffd700;
                 font-family:inherit;font-size:.85em;padding:2px 4px">
               <button type="submit" style="background:#1a1400;border:1px solid #ffd700;

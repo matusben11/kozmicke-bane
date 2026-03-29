@@ -137,6 +137,7 @@ body.kb-mobile .tbtn{font-size:1.1rem;padding:3px 10px;}
   <button class="tbtn" onclick="tSnd()" id="sbtn">🔊</button>
   <button class="tbtn" onclick="quickSave()" id="qsbtn" style="display:none">💾 SAVE</button>
   <button class="tbtn" onclick="aLead()" id="lbbtn" style="display:none">🏆</button>
+  <button class="tbtn" onclick="toggleLang()" id="lang-btn">SK</button>
 </div>
 <div id="scr"></div>
 
@@ -184,6 +185,653 @@ const SCR=document.getElementById('scr'),FL=document.getElementById('fl');
 function setScr(h){SCR.innerHTML=h;}
 function flash(c='rgba(255,176,0,0.11)'){FL.style.background=c;FL.style.opacity='1';setTimeout(()=>FL.style.opacity='0',130);}
 function corners(){return'<div class="c tl"></div><div class="c tr"></div><div class="c bl"></div><div class="c br"></div>';}
+
+// ══════════════════════════════════════════════════════════════
+//  LANGUAGE
+// ══════════════════════════════════════════════════════════════
+let LANG = localStorage.getItem('lang') || 'sk';
+(function(){ const b=document.getElementById('lang-btn'); if(b) b.textContent=LANG.toUpperCase(); })();
+
+const T = {
+  sk: {
+    // topbar / UI
+    'save_btn': '💾 SAVE',
+    // main menu
+    'new_mission': '▶  NOVÁ MISIA — ZYRAX-9',
+    'continue_load': '📂  POKRAČOVAŤ — NAČÍTAŤ HRU',
+    'leaderboard': '🏆 Leaderboard',
+    'how_to_play': '❓ Ako hrať',
+    'goal_info': '(c) 1987  NOVA SOFT  ·  v4.8 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY',
+    // new game screen
+    'new_game_title': '▶  NOVÁ HRA — MENO PILOTA',
+    'new_game_hint': 'Zadaj meno pilota (alebo použi predvolené):',
+    'start_mission': '▶  ZAČAŤ MISIU',
+    'back': '✗  Späť',
+    // load screen
+    'load_title': '📂 NAČÍTAŤ HRU — SAVE SLOTY',
+    'load_btn': '▶ Načítať',
+    'empty_slot': '— prázdny slot',
+    'back_big': '◀  Späť',
+    // clear saves
+    'clear_confirm': '⚠ Vymazať VŠETKY uloženia?',
+    'clear_irreversible': 'Táto akcia je nevratná.',
+    'clear_yes': '✓ Áno, vymazať',
+    'clear_no': '✗ Nie, späť',
+    // save screen
+    'save_title': '💾 ULOŽIŤ HRU — VYBER SLOT',
+    'save_click_hint': 'Klikni na slot pre uloženie. Existujúce uloženie sa prepíše.',
+    'save_slot_btn': '💾 Uložiť',
+    'back_no_save': '◀  Späť do bane (neuložiť)',
+    // leaderboard
+    'lb_title': '🏆 GLOBÁLNY LEADERBOARD — VŠETKY ÚČTY',
+    'lb_no_players': 'Žiadni hráči zatiaľ. Dohraj hru!',
+    'lb_col_pilot': 'PILOT',
+    'lb_col_career': 'KARIÉRA CR',
+    'lb_col_rank': 'RANK',
+    'lb_col_sessions': 'HRY / VÍŤAZSTVÁ',
+    'lb_sessions': '{s} hier · {w} výhier',
+    'lb_refresh': '🔄 Obnoviť',
+    // HUD labels
+    'hud_pilot': 'PILOT:',
+    'hud_credits': 'KREDITY:',
+    'hud_turn': 'TÁH:',
+    'hud_hp': 'HP',
+    'hud_goal': 'CIEĽ',
+    'hud_depth': 'HĹBKA L{n}',
+    'hud_inv': 'INV:',
+    'hud_equip': 'VYBAV:',
+    'hud_research': 'VÝSKUM:',
+    'hud_missing': 'chýba {n} CR',
+    'hud_rocket_ready': '🚀 Raketa pripravená!',
+    'hud_colony': 'Kolónia: 👷{w} 🍞{f} ⚡{e}',
+    // game buttons
+    'btn_mine': '⛏ Ťažiť',
+    'btn_sell': '💰 Predať',
+    'btn_shop': '🔧 Obchod',
+    'btn_polish': '💎 Leštiť',
+    'btn_map': '🗺 Mapa',
+    'btn_lore': '📜 Záznamy',
+    'btn_stats': '📊 Štatistiky',
+    'btn_descend': '▼ Klesať',
+    'btn_ascend': '▲ Stúpať',
+    'btn_save': '💾 Uložiť',
+    'btn_research': '🔬 Výskum',
+    'btn_rocket_launch': '🚀 Štart Rakety → ZYRAX-10',
+    'btn_colony': '🏗 Kolónia',
+    'btn_planets': '🪐 Planéty',
+    'btn_corp': '🏢 NOVA Corp',
+    'btn_depart': '🚀 Odletieť',
+    'btn_back': '◀  Späť',
+    'btn_back_cross': '✗ Späť',
+    // shop
+    'shop_title': '🔧 Obchod',
+    'shop_upgrades': '{n}/{t} upgradov',
+    'shop_no_weapon': 'žiadna zbraň',
+    'shop_owned': 'ZAKÚPENÉ',
+    'shop_colony_supplies': '[KOLÓNIA — ZÁSOBY]',
+    // polish station
+    'pol_title': '💎 LEŠTIACA STANICA',
+    'pol_nano': ' — Nano Leštička ×3',
+    'pol_basic': ' — Leštička ×2',
+    'pol_hint': 'Leštenie zvyšuje predajnú hodnotu. ★=×2  ★★=×3 (vyžaduje Nano Leštičku)',
+    'pol_empty': 'prázdne',
+    'pol_max': 'MAX',
+    'pol_raw': 'RAW',
+    'pol_polished': '★ LEŠTENÉ',
+    'pol_nano_lbl': '★★ NANO-LEŠTENÉ',
+    'pol_nano_done': '★★ NANO',
+    // mine log
+    'mine_drilling': '⛏  Vŕtačka sa zahryza do horniny...',
+    'mine_locked': '⛏  Vŕtačka ešte pracuje — počkaj!',
+    'mine_chrono': '  ⏱ CHRONO BEACON: Nález zdvojnásobený!',
+    'mine_depth_dmg': '  [HĹBKA L{n}] Prostredie spôsobilo HP -{dmg}',
+    'mine_colony_collapsed': '🚫 KOLÓNIA SKOLABOVALA — ťažba nie je možná!',
+    'mine_colony_no_corp': '  Bez zmluvy s NOVA Corp musíš sám zásobovať kolóniu.',
+    'mine_colony_buy': '  Kúp jedlo ⚡ energiu 👷 pracovníkov v [3] Obchode alebo',
+    'mine_colony_sign': '  podpíš zmluvu s NOVA Corp cez [N].',
+    'mine_colony_fee_warn': '⚠ NOVA CORP: Nemáš dostatok CR na poplatok! Zmluva pozastavená.',
+    'mine_food_depleted': '🍞 Jedlo vyčerpané! Pracovník odišiel. ({n} zostalo)',
+    'mine_energy_depleted': '⚡ Energia vyčerpaná! Efektivita ťažby klesla.',
+    'mine_food_low': '⚠ Jedlo dochádzajúce: {n} jednotiek!',
+    'mine_energy_low': '⚠ Energia kritická: {n}!',
+    'mine_scanner': '[SCANNER] Sektor: {sec} · Hĺbka: {m}m',
+    'mine_turn': '[ TÁH {n} · {sec} · {m}m ]',
+    // sell
+    'sell_empty': '── Inventár je prázdny.',
+    'sell_col_ores_warn': '  ⚠ PREDAL SI KOLONIZAČNÉ RUDY: {ores} — stratíš pokrok!',
+    'sell_total': '  ► CELKOM: +{total} CR  |  ZOSTATOK: {cr} CR',
+    'sell_station': '── VÝKUPNÁ STANICA ──',
+    // shop buy messages
+    'buy_weapon': '⚔ ZAKÚPENÁ ZBRAŇ: {name}  (−{cost} CR)  |  Zostatok: {cr} CR',
+    'buy_upgrade': '✓ ZAKÚPENÉ: {name}  (−{cost} CR)  |  Zostatok: {cr} CR',
+    'buy_no_cr': '✗ Nedostatok CR! Chýba {n} CR.',
+    'buy_no_rp': '✗ Nedostatok RP! Máš {rp}/500 RP. Pokračuj vo výskume.',
+    'buy_no_cr_omega': '✗ Nedostatok CR! Chýba {n} CR.',
+    'omega_unlocked': '🔓 OMEGA-VII ODOMKNUTÝ! Priprav sa na hlboký vesmír.',
+    'omega_cost': '  Spotrebované: 500 RP + 20 000 CR',
+    // polish messages
+    'pol_done': '💎 LEŠTENIE: {sym} {name} → {lbl}',
+    'pol_value': '   Nová hodnota: {val} CR/ks (×{mult})  |  −{cost} CR',
+    'pol_profit': '   Predaj pre {mult}× zisk!',
+    'pol_no_cr': '✗ Chýba {n} CR na leštenie.',
+    // depth
+    'depth_descend': '▼ ZOSTUP NA {name} [L{n}]  — hĺbka {m}m',
+    'depth_descend_warn': '  Vzácnejšie minerály, vyššia HP škoda. Buď opatrný.',
+    'depth_ascend': '▲ VÝSTUP NA {name} [L{n}]  — hĺbka {m}m',
+    // lore
+    'lore_title': '📜 ARCHÍVNY ZÁZNAM — PREDCHÁDZAJÚCA POSÁDKA',
+    'lore_back_msg': '📜 Záznamy... znepokojivé.',
+    'lore_click_hint': 'Klikni pre preskoč',
+    // stats
+    'stat_title': '📊 ŠTATISTIKY MISIE',
+    'stat_pilot': 'Pilot:         ',
+    'stat_credits': 'Kredity:       ',
+    'stat_goal': 'Cieľ:          ',
+    'stat_hp': 'HP:            ',
+    'stat_turn': 'Táh:           ',
+    'stat_depth': 'Hĺbka:         ',
+    'stat_maxdepth': 'Max hĺbka:     ',
+    'stat_mined': 'Vyťažené:      ',
+    'stat_sold': 'Predané:       ',
+    'stat_events': 'Udalosti:      ',
+    'stat_polished': 'Leštenia:      ',
+    'stat_invval': 'Hodnota inv.:  ',
+    'stat_sectors': 'Sektory:       ',
+    'stat_upgrades': 'Upgrady:       ',
+    'stat_weapon': 'Zbraň:         ',
+    'stat_research': 'Výskum (RP):   ',
+    'stat_rocket': 'Raketa:        ',
+    'stat_planet': 'Planéta:       ',
+    'stat_no_weapon': 'žiadna',
+    'stat_rocket_yes': '✓ zostrojená',
+    'stat_rocket_no': '✗ nezostrojená',
+    // quit
+    'quit_question': 'Opustiť {planet}?',
+    'quit_have': 'Máš',
+    'quit_of': 'z',
+    'quit_save_first': '💾 Najprv uložiť',
+    'quit_depart': '🚀 Odletieť',
+    'quit_stay': '✗ Zostať',
+    // research
+    'research_title': '🔬 VÝSKUMNÁ STANICA',
+    'research_rp': 'Výskumné body: ',
+    'research_rocket_ready': '✅ RAKETA ZOSTROJENÁ — pripravená na štart!',
+    'research_rocket_hint': 'Vráť sa do hry a stlač [L] alebo klikni tlačidlo Štart Rakety',
+    'research_on_zyrax10': '★ Nachádzaš sa na ZYRAX-10. Výskum pokračuje...',
+    'research_rocket_req': '🚀 RAKETA NA ZYRAX-10 — Požiadavky:',
+    'research_btn': '🔬 Skúmať',
+    'research_cost_hint': '(-50 CR, +8~20 RP, 1 táh)',
+    'research_build_rocket': '⚙ ZOSTROJIŤ RAKETU',
+    'research_log': '🔬 VÝSKUM: Analyzujem vzorky...',
+    'research_breakthrough': '  ★ PRIELOM! +{rp} RP  (celkom: {total} RP)',
+    'research_normal': '  +{rp} RP  (celkom: {total} RP)  |  −50 CR',
+    'research_no_cr': '✗ Chýba 50 CR na výskum.',
+    'rocket_built': '⚙ RAKETA ZOSTROJENÁ! Vráť sa do hry a stlač [L] pre štart.',
+    'rocket_built_cost': '  Spotrebované: 200 RP, 2×Omega Ore, 2×Voidcrystal, 8000 CR',
+    // launch
+    'launch_title': '🚀 ŠTART NA ZYRAX-10',
+    'launch_ready': 'Raketa je pripravená.',
+    'launch_to': 'Presunieš sa na',
+    'launch_danger': 'Nebezpečnejšia (+80% škoda z prostredia)',
+    'launch_new_goal': 'Nový cieľ:',
+    'launch_keep': 'Zachováš: kredity, upgrady, zbraň, RP',
+    'launch_btn': '🚀 ŠTART!',
+    'launch_cancel': '✗ Zrušiť',
+    // load/save messages
+    'game_loaded': '📂 Hra načítaná zo slotu #{n}. Vitaj späť, {name}!',
+    'game_saved': '💾 HRA ULOŽENÁ do slotu #{n}. Pokračuj kedykoľvek!',
+    'game_loaded_slot': '📂 Hra načítaná — Vitaj späť, {name}!',
+    // how to play
+    'howto_title': '❓ AKO HRAŤ — KOZMICKÉ BANE v4.8',
+    // map
+    'map_title': '🗺  MAPA PLANÉTY ZYRAX-9  (13×13)',
+    'map_visited': 'Navštívené: {n}  ·  Hĺbka: {m}m  ·  Táh: {t}',
+    'map_you': '◉=TY  ✓=navštívené',
+    // planet labels
+    'planet_zyrax9': 'ZYRAX-9',
+    'planet_zyrax10': 'ZYRAX-10',
+    'planet_zyrax8_col': 'ZYRAX-8 KOLONIZÁCIA',
+    'planet_col_zyrax8': 'ZYRAX-8 Kolonizácia',
+    // upgrades no equip
+    'equip_none': 'žiadne',
+    // game over / win
+    'win_title': '★  VÍŤAZSTVO!  ★',
+    'lose_title': '✗  GAME OVER  ✗',
+    'score_label': 'SKÓRE: ',
+    'score_saved': 'Skóre uložené do Leaderboardu!',
+    'main_menu': '🏠 Hlavné menu',
+    // end screen messages (non-translatable lore, keep SK)
+    // colony
+    'colony_title': '🏗 KOLÓNIA NOVA-{name}-1 — ZYRAX-8',
+    'colony_workers': '👷 Pracovníci:',
+    'colony_housing': '🏠 Obydlia:',
+    'colony_food': '🍞 Jedlo:',
+    'colony_energy': '⚡ Energia:',
+    'colony_medicine': '💊 Medicina:',
+    'colony_fuel': '🚀 Palivo:',
+    'colony_worker_bonus': '+{n} ťažba/ťah',
+    'colony_food_per_turn': '−{n}/ťah',
+    'colony_energy_per_turn': '−{n}/ťah',
+    'colony_medicine_hint': '(−HP mod)',
+    'colony_fuel_hint': '(cestovanie)',
+    'colony_food_warn': '⚠ Jedlo dochádzajúce! Kúp v obchode [3].',
+    'colony_energy_warn': '⚠ Energia dochádzajúca! Kúp v obchode [3].',
+    'colony_hint': 'Pracovníci spotrebúvajú jedlo a energiu každý ťah. Viac pracovníkov = viac minerálov.',
+    // planet travel
+    'travel_title': '🪐 MAPA GALAXIE — Aktuálna: ',
+    'travel_fuel_cr': 'Palivo: 🚀 {fuel}  ·  Kredity: {cr} CR  ·  Výskum: {rp} RP',
+    'travel_here': '◉ TU',
+    'travel_locked_btn': 'Odomkni výskumom',
+    'travel_base': 'ZÁKLADŇA',
+    'travel_cost': '{cr} CR + {fuel} palivo',
+    'travel_no_cr_fuel': '✗ Nedostatok CR alebo paliva na cestu!',
+    'travel_flying': '🚀 Letiš na {planet}...',
+    'travel_expenses': '  Výdavky: {cr} CR + {fuel} palivo',
+    // corp
+    'corp_title': '🏢 NOVA MINING CORP. — DASHBOARD',
+    'corp_contract': 'Zmluva:    ',
+    'corp_fee': 'Poplatok:  ',
+    'corp_benefits': 'Výhody:    ',
+    'corp_active': '✓ AKTÍVNA',
+    'corp_inactive': '✗ NEAKTÍVNA',
+    'corp_no_fee': 'žiadny',
+    'corp_benefits_yes': 'Logistika · Zásoby · +15% minerálov',
+    'corp_benefits_no': '—',
+    'corp_desc_active': 'NOVA Corp riadi logistiku tvojej kolónie. Môžeš zmluvu kedykoľvek ukončiť — potom musíš jedlo, energiu a obydlia kupovať sám.',
+    'corp_desc_inactive': 'Bez zmluvy si samostatný. Musíš sám manažovať zásoby. Zmluva stojí 400 CR/ťah.',
+    'corp_terminate': '✗ Ukončiť zmluvu',
+    'corp_activate': '✓ Aktivovať zmluvu (400 CR/ťah)',
+    'corp_terminated': '✗ Zmluva s NOVA Corp ukončená. Teraz si na vlastnú päsť.',
+    'corp_activated': '✓ Zmluva s NOVA Corp aktivovaná. Poplatok: 400 CR/ťah.',
+    // omega unlock
+    'omega_unlock_btn': '🔓 Odomknúť OMEGA-VII',
+    'omega_req_rp': 'Výskum: {rp} / 500 RP',
+    'omega_req_cr': 'Kredity: {cr} / 20 000 CR',
+    'omega_meet_conds': 'Splň obe podmienky pre odomknutie.',
+    // sector types
+    'sec_Normal': 'Štandardný sektor.',
+    'sec_Hot': 'HORÚCA ZÓNA!',
+    'sec_Toxic': 'JEDOVATÝ SEKTOR',
+    'sec_Rich': '★ BOHATÉ LOŽISKO!',
+    'sec_Deep': '🔵 HLBOKÝ SEKTOR',
+    'sec_Frozen': '❄ ZMRZNUTÝ',
+    'sec_Ancient': '⚡ STAROVEKÝ SEKTOR',
+    // boot
+    'boot_continue': '▶  POKRAČOVAŤ',
+    // story / landing
+    'story_date': '── GALAKTICKÝ DÁTUM: 2387.156  ──  SEKTOR OUTER RIM ──',
+    'landing_enter': '▶  VSTUP DO ATMOSFÉRY ZYRAX-9',
+    'landing_click_hint': '(klikni na text pre rýchle prečítanie)',
+    'enter_mine_zyrax9': '⛏  VSTÚPIŤ DO BANE  ALPHA-7',
+    'start_log': '★ Pristál si na Zyrax-9. Baňa Alpha-7 ťa čaká. Cieľ: 15 000 CR!',
+    // layout
+    'layout_title': '⚙ VYBER ZOBRAZENIE',
+    'layout_hint': 'Aké zariadenie používaš? Môžeš to kedykoľvek zmeniť v nastaveniach.',
+    'layout_mobile': 'MOBIL',
+    'layout_pc': 'POČÍTAČ',
+    // how to play content labels
+    'howto_goal_hdr': '── CIEĽ ──',
+    'howto_mining_hdr': '── ŤAŽBA ──',
+    'howto_depth_hdr': '── HĹBKA ──',
+    'howto_polish_hdr': '── LEŠTENIE ──',
+    'howto_save_hdr': '── UKLADANIE ──',
+    'howto_lb_hdr': '── LEADERBOARD ──',
+    'howto_weapons_hdr': '── ZBRANE ──',
+    'howto_research_hdr': '── VÝSKUM + RAKETA ──',
+    'howto_colony_hdr': '── KOLONIZÁCIA ZYRAX-8 ──',
+    // fmtDuration
+    'duration_short': 'krátka',
+    'duration_medium': 'stredná',
+    'duration_long': 'dlhá',
+    'duration_epic': 'epická',
+    // arrive/era messages
+    'arrive_zyrax10_1': '★ Pristál si na ZYRAX-10 — planéta BETA-1! Cieľ: 30 000 CR!',
+    'arrive_zyrax10_2': '  Varovanie: Prostredie je 1.8× nebezpečnejšie ako Zyrax-9!',
+    'arrive_zyrax10_3': '  Zachované: kredity, upgrady, zbraň, výskumné body.',
+    'arrive_zyrax8_1': '⊕ Pristál si na ZYRAX-8 — KOLONIZAČNÁ MISIA!',
+    'arrive_zyrax8_2': '  Cieľ: nazbieraj 5× Titanium a 3× Exoternimium.',
+    'arrive_zyrax8_3': '  Varovanie: Zyrax-8 je 2.5× nebezpečnejšia ako Zyrax-9!',
+    'arrive_zyrax8_4': '  Nové minerály (tier 5) sa objavujú iba tu.',
+    'era4_start_1': '★ VÍTAJ V UPDATE 4.0 — GALAKTICKÁ EXPANZIA ★',
+    'era4_start_2': '  Základňa: Zyrax-8  ·  Kolónia aktívna',
+    'era4_corp_yes': '  NOVA CORP partnerstvo: −400 CR/ťah. Logistika zabezpečená.',
+    'era4_corp_no': '  Samostatná kolónia. Musíš riadiť jedlo, energiu a pracovníkov sám.',
+    'era4_new_btns': '  Nové tlačidlá: [C] Kolónia  [P] Planéty  [N] NOVA Corp',
+    'era4_colony_locked': '✗ Kolónia sa odomkne v Update 4.0.',
+    'era4_travel_locked': '✗ Cestovanie medzi planétami sa odomkne v Update 4.0.',
+    'era4_corp_locked': '✗ NOVA Corp dashboard v Update 4.0.',
+  },
+  en: {
+    // topbar / UI
+    'save_btn': '💾 SAVE',
+    // main menu
+    'new_mission': '▶  NEW MISSION — ZYRAX-9',
+    'continue_load': '📂  CONTINUE — LOAD GAME',
+    'leaderboard': '🏆 Leaderboard',
+    'how_to_play': '❓ How to play',
+    'goal_info': '(c) 1987  NOVA SOFT  ·  v4.8 ENHANCED  ·  GOAL: 15 000 CR  ·  5 DEPTH LEVELS',
+    // new game screen
+    'new_game_title': '▶  NEW GAME — PILOT NAME',
+    'new_game_hint': 'Enter pilot name (or use default):',
+    'start_mission': '▶  START MISSION',
+    'back': '✗  Back',
+    // load screen
+    'load_title': '📂 LOAD GAME — SAVE SLOTS',
+    'load_btn': '▶ Load',
+    'empty_slot': '— empty slot',
+    'back_big': '◀  Back',
+    // clear saves
+    'clear_confirm': '⚠ Delete ALL saves?',
+    'clear_irreversible': 'This action cannot be undone.',
+    'clear_yes': '✓ Yes, delete',
+    'clear_no': '✗ No, go back',
+    // save screen
+    'save_title': '💾 SAVE GAME — CHOOSE SLOT',
+    'save_click_hint': 'Click a slot to save. Existing save will be overwritten.',
+    'save_slot_btn': '💾 Save',
+    'back_no_save': '◀  Back to mine (no save)',
+    // leaderboard
+    'lb_title': '🏆 GLOBAL LEADERBOARD — ALL ACCOUNTS',
+    'lb_no_players': 'No players yet. Finish a game!',
+    'lb_col_pilot': 'PILOT',
+    'lb_col_career': 'CAREER CR',
+    'lb_col_rank': 'RANK',
+    'lb_col_sessions': 'GAMES / WINS',
+    'lb_sessions': '{s} games · {w} wins',
+    'lb_refresh': '🔄 Refresh',
+    // HUD labels
+    'hud_pilot': 'PILOT:',
+    'hud_credits': 'CREDITS:',
+    'hud_turn': 'TURN:',
+    'hud_hp': 'HP',
+    'hud_goal': 'GOAL',
+    'hud_depth': 'DEPTH L{n}',
+    'hud_inv': 'INV:',
+    'hud_equip': 'EQUIP:',
+    'hud_research': 'RESEARCH:',
+    'hud_missing': 'missing {n} CR',
+    'hud_rocket_ready': '🚀 Rocket ready!',
+    'hud_colony': 'Colony: 👷{w} 🍞{f} ⚡{e}',
+    // game buttons
+    'btn_mine': '⛏ Mine',
+    'btn_sell': '💰 Sell',
+    'btn_shop': '🔧 Shop',
+    'btn_polish': '💎 Polish',
+    'btn_map': '🗺 Map',
+    'btn_lore': '📜 Logs',
+    'btn_stats': '📊 Stats',
+    'btn_descend': '▼ Descend',
+    'btn_ascend': '▲ Ascend',
+    'btn_save': '💾 Save',
+    'btn_research': '🔬 Research',
+    'btn_rocket_launch': '🚀 Launch Rocket → ZYRAX-10',
+    'btn_colony': '🏗 Colony',
+    'btn_planets': '🪐 Planets',
+    'btn_corp': '🏢 NOVA Corp',
+    'btn_depart': '🚀 Depart',
+    'btn_back': '◀  Back',
+    'btn_back_cross': '✗ Back',
+    // shop
+    'shop_title': '🔧 Shop',
+    'shop_upgrades': '{n}/{t} upgrades',
+    'shop_no_weapon': 'no weapon',
+    'shop_owned': 'PURCHASED',
+    'shop_colony_supplies': '[COLONY — SUPPLIES]',
+    // polish station
+    'pol_title': '💎 POLISHING STATION',
+    'pol_nano': ' — Nano Polisher ×3',
+    'pol_basic': ' — Polisher ×2',
+    'pol_hint': 'Polishing increases sale value. ★=×2  ★★=×3 (requires Nano Polisher)',
+    'pol_empty': 'empty',
+    'pol_max': 'MAX',
+    'pol_raw': 'RAW',
+    'pol_polished': '★ POLISHED',
+    'pol_nano_lbl': '★★ NANO-POLISHED',
+    'pol_nano_done': '★★ NANO',
+    // mine log
+    'mine_drilling': '⛏  Drill bites into the rock...',
+    'mine_locked': '⛏  Drill still working — wait!',
+    'mine_chrono': '  ⏱ CHRONO BEACON: Find doubled!',
+    'mine_depth_dmg': '  [DEPTH L{n}] Environment caused HP -{dmg}',
+    'mine_colony_collapsed': '🚫 COLONY COLLAPSED — mining not possible!',
+    'mine_colony_no_corp': '  Without a NOVA Corp contract you must supply the colony yourself.',
+    'mine_colony_buy': '  Buy food ⚡ energy 👷 workers in [3] Shop or',
+    'mine_colony_sign': '  sign a contract with NOVA Corp via [N].',
+    'mine_colony_fee_warn': '⚠ NOVA CORP: Not enough CR for the fee! Contract suspended.',
+    'mine_food_depleted': '🍞 Food depleted! Worker left. ({n} remaining)',
+    'mine_energy_depleted': '⚡ Energy depleted! Mining efficiency reduced.',
+    'mine_food_low': '⚠ Food running low: {n} units!',
+    'mine_energy_low': '⚠ Energy critical: {n}!',
+    'mine_scanner': '[SCANNER] Sector: {sec} · Depth: {m}m',
+    'mine_turn': '[ TURN {n} · {sec} · {m}m ]',
+    // sell
+    'sell_empty': '── Inventory is empty.',
+    'sell_col_ores_warn': '  ⚠ YOU SOLD COLONIZATION ORES: {ores} — you will lose progress!',
+    'sell_total': '  ► TOTAL: +{total} CR  |  BALANCE: {cr} CR',
+    'sell_station': '── TRADING STATION ──',
+    // shop buy messages
+    'buy_weapon': '⚔ WEAPON PURCHASED: {name}  (−{cost} CR)  |  Balance: {cr} CR',
+    'buy_upgrade': '✓ PURCHASED: {name}  (−{cost} CR)  |  Balance: {cr} CR',
+    'buy_no_cr': '✗ Not enough CR! Missing {n} CR.',
+    'buy_no_rp': '✗ Not enough RP! You have {rp}/500 RP. Keep researching.',
+    'buy_no_cr_omega': '✗ Not enough CR! Missing {n} CR.',
+    'omega_unlocked': '🔓 OMEGA-VII UNLOCKED! Prepare for deep space.',
+    'omega_cost': '  Consumed: 500 RP + 20 000 CR',
+    // polish messages
+    'pol_done': '💎 POLISHED: {sym} {name} → {lbl}',
+    'pol_value': '   New value: {val} CR/pc (×{mult})  |  −{cost} CR',
+    'pol_profit': '   Sell for {mult}× profit!',
+    'pol_no_cr': '✗ Missing {n} CR for polishing.',
+    // depth
+    'depth_descend': '▼ DESCENDING TO {name} [L{n}]  — depth {m}m',
+    'depth_descend_warn': '  Rarer minerals, higher HP damage. Be careful.',
+    'depth_ascend': '▲ ASCENDING TO {name} [L{n}]  — depth {m}m',
+    // lore
+    'lore_title': '📜 ARCHIVE LOG — PREVIOUS CREW',
+    'lore_back_msg': '📜 Logs... unsettling.',
+    'lore_click_hint': 'Click to skip',
+    // stats
+    'stat_title': '📊 MISSION STATISTICS',
+    'stat_pilot': 'Pilot:         ',
+    'stat_credits': 'Credits:       ',
+    'stat_goal': 'Goal:          ',
+    'stat_hp': 'HP:            ',
+    'stat_turn': 'Turn:          ',
+    'stat_depth': 'Depth:         ',
+    'stat_maxdepth': 'Max depth:     ',
+    'stat_mined': 'Mined:         ',
+    'stat_sold': 'Sold:          ',
+    'stat_events': 'Events:        ',
+    'stat_polished': 'Polished:      ',
+    'stat_invval': 'Inv. value:    ',
+    'stat_sectors': 'Sectors:       ',
+    'stat_upgrades': 'Upgrades:      ',
+    'stat_weapon': 'Weapon:        ',
+    'stat_research': 'Research (RP): ',
+    'stat_rocket': 'Rocket:        ',
+    'stat_planet': 'Planet:        ',
+    'stat_no_weapon': 'none',
+    'stat_rocket_yes': '✓ built',
+    'stat_rocket_no': '✗ not built',
+    // quit
+    'quit_question': 'Leave {planet}?',
+    'quit_have': 'You have',
+    'quit_of': 'of',
+    'quit_save_first': '💾 Save first',
+    'quit_depart': '🚀 Depart',
+    'quit_stay': '✗ Stay',
+    // research
+    'research_title': '🔬 RESEARCH STATION',
+    'research_rp': 'Research points: ',
+    'research_rocket_ready': '✅ ROCKET BUILT — ready for launch!',
+    'research_rocket_hint': 'Return to game and press [L] or click Launch Rocket button',
+    'research_on_zyrax10': '★ You are on ZYRAX-10. Research continues...',
+    'research_rocket_req': '🚀 ROCKET TO ZYRAX-10 — Requirements:',
+    'research_btn': '🔬 Research',
+    'research_cost_hint': '(-50 CR, +8~20 RP, 1 turn)',
+    'research_build_rocket': '⚙ BUILD ROCKET',
+    'research_log': '🔬 RESEARCH: Analyzing samples...',
+    'research_breakthrough': '  ★ BREAKTHROUGH! +{rp} RP  (total: {total} RP)',
+    'research_normal': '  +{rp} RP  (total: {total} RP)  |  −50 CR',
+    'research_no_cr': '✗ Missing 50 CR for research.',
+    'rocket_built': '⚙ ROCKET BUILT! Return to game and press [L] to launch.',
+    'rocket_built_cost': '  Consumed: 200 RP, 2×Omega Ore, 2×Voidcrystal, 8000 CR',
+    // launch
+    'launch_title': '🚀 LAUNCH TO ZYRAX-10',
+    'launch_ready': 'Rocket is ready.',
+    'launch_to': 'You will travel to',
+    'launch_danger': 'More dangerous (+80% environmental damage)',
+    'launch_new_goal': 'New goal:',
+    'launch_keep': 'Kept: credits, upgrades, weapon, RP',
+    'launch_btn': '🚀 LAUNCH!',
+    'launch_cancel': '✗ Cancel',
+    // load/save messages
+    'game_loaded': '📂 Game loaded from slot #{n}. Welcome back, {name}!',
+    'game_saved': '💾 GAME SAVED to slot #{n}. Continue any time!',
+    'game_loaded_slot': '📂 Game loaded — Welcome back, {name}!',
+    // how to play
+    'howto_title': '❓ HOW TO PLAY — KOZMICKE BANE v4.8',
+    // map
+    'map_title': '🗺  PLANET MAP ZYRAX-9  (13×13)',
+    'map_visited': 'Visited: {n}  ·  Depth: {m}m  ·  Turn: {t}',
+    'map_you': '◉=YOU  ✓=visited',
+    // planet labels
+    'planet_zyrax9': 'ZYRAX-9',
+    'planet_zyrax10': 'ZYRAX-10',
+    'planet_zyrax8_col': 'ZYRAX-8 COLONIZATION',
+    'planet_col_zyrax8': 'ZYRAX-8 Colonization',
+    // upgrades no equip
+    'equip_none': 'none',
+    // game over / win
+    'win_title': '★  VICTORY!  ★',
+    'lose_title': '✗  GAME OVER  ✗',
+    'score_label': 'SCORE: ',
+    'score_saved': 'Score saved to Leaderboard!',
+    'main_menu': '🏠 Main Menu',
+    // colony
+    'colony_title': '🏗 COLONY NOVA-{name}-1 — ZYRAX-8',
+    'colony_workers': '👷 Workers:',
+    'colony_housing': '🏠 Housing:',
+    'colony_food': '🍞 Food:',
+    'colony_energy': '⚡ Energy:',
+    'colony_medicine': '💊 Medicine:',
+    'colony_fuel': '🚀 Fuel:',
+    'colony_worker_bonus': '+{n} mining/turn',
+    'colony_food_per_turn': '−{n}/turn',
+    'colony_energy_per_turn': '−{n}/turn',
+    'colony_medicine_hint': '(−HP mod)',
+    'colony_fuel_hint': '(travel)',
+    'colony_food_warn': '⚠ Food running low! Buy in shop [3].',
+    'colony_energy_warn': '⚠ Energy running low! Buy in shop [3].',
+    'colony_hint': 'Workers consume food and energy each turn. More workers = more minerals.',
+    // planet travel
+    'travel_title': '🪐 GALAXY MAP — Current: ',
+    'travel_fuel_cr': 'Fuel: 🚀 {fuel}  ·  Credits: {cr} CR  ·  Research: {rp} RP',
+    'travel_here': '◉ HERE',
+    'travel_locked_btn': 'Unlock via research',
+    'travel_base': 'BASE',
+    'travel_cost': '{cr} CR + {fuel} fuel',
+    'travel_no_cr_fuel': '✗ Not enough CR or fuel for travel!',
+    'travel_flying': '🚀 Flying to {planet}...',
+    'travel_expenses': '  Expenses: {cr} CR + {fuel} fuel',
+    // corp
+    'corp_title': '🏢 NOVA MINING CORP. — DASHBOARD',
+    'corp_contract': 'Contract:  ',
+    'corp_fee': 'Fee:       ',
+    'corp_benefits': 'Benefits:  ',
+    'corp_active': '✓ ACTIVE',
+    'corp_inactive': '✗ INACTIVE',
+    'corp_no_fee': 'none',
+    'corp_benefits_yes': 'Logistics · Supplies · +15% minerals',
+    'corp_benefits_no': '—',
+    'corp_desc_active': 'NOVA Corp manages your colony logistics. You can terminate the contract at any time — then you must buy food, energy and housing yourself.',
+    'corp_desc_inactive': 'Without a contract you are independent. You must manage supplies yourself. Contract costs 400 CR/turn.',
+    'corp_terminate': '✗ Terminate contract',
+    'corp_activate': '✓ Activate contract (400 CR/turn)',
+    'corp_terminated': '✗ NOVA Corp contract terminated. You are on your own.',
+    'corp_activated': '✓ NOVA Corp contract activated. Fee: 400 CR/turn.',
+    // omega unlock
+    'omega_unlock_btn': '🔓 Unlock OMEGA-VII',
+    'omega_req_rp': 'Research: {rp} / 500 RP',
+    'omega_req_cr': 'Credits: {cr} / 20 000 CR',
+    'omega_meet_conds': 'Meet both conditions to unlock.',
+    // sector types
+    'sec_Normal': 'Standard sector.',
+    'sec_Hot': 'HOT ZONE!',
+    'sec_Toxic': 'TOXIC SECTOR',
+    'sec_Rich': '★ RICH DEPOSIT!',
+    'sec_Deep': '🔵 DEEP SECTOR',
+    'sec_Frozen': '❄ FROZEN',
+    'sec_Ancient': '⚡ ANCIENT SECTOR',
+    // boot
+    'boot_continue': '▶  CONTINUE',
+    // story / landing
+    'story_date': '── GALACTIC DATE: 2387.156  ──  OUTER RIM SECTOR ──',
+    'landing_enter': '▶  ENTER ATMOSPHERE ZYRAX-9',
+    'landing_click_hint': '(click text to skip)',
+    'enter_mine_zyrax9': '⛏  ENTER MINE  ALPHA-7',
+    'start_log': '★ You have landed on Zyrax-9. Mine Alpha-7 awaits. Goal: 15 000 CR!',
+    // layout
+    'layout_title': '⚙ CHOOSE DISPLAY',
+    'layout_hint': 'What device are you using? You can change this any time in settings.',
+    'layout_mobile': 'MOBILE',
+    'layout_pc': 'DESKTOP',
+    // how to play content labels
+    'howto_goal_hdr': '── GOAL ──',
+    'howto_mining_hdr': '── MINING ──',
+    'howto_depth_hdr': '── DEPTH ──',
+    'howto_polish_hdr': '── POLISHING ──',
+    'howto_save_hdr': '── SAVING ──',
+    'howto_lb_hdr': '── LEADERBOARD ──',
+    'howto_weapons_hdr': '── WEAPONS ──',
+    'howto_research_hdr': '── RESEARCH + ROCKET ──',
+    'howto_colony_hdr': '── ZYRAX-8 COLONIZATION ──',
+    // fmtDuration
+    'duration_short': 'short',
+    'duration_medium': 'medium',
+    'duration_long': 'long',
+    'duration_epic': 'epic',
+    // arrive/era messages
+    'arrive_zyrax10_1': '★ You have landed on ZYRAX-10 — planet BETA-1! Goal: 30 000 CR!',
+    'arrive_zyrax10_2': '  Warning: Environment is 1.8× more dangerous than Zyrax-9!',
+    'arrive_zyrax10_3': '  Kept: credits, upgrades, weapon, research points.',
+    'arrive_zyrax8_1': '⊕ You have landed on ZYRAX-8 — COLONIZATION MISSION!',
+    'arrive_zyrax8_2': '  Goal: collect 5× Titanium and 3× Exoternimium.',
+    'arrive_zyrax8_3': '  Warning: Zyrax-8 is 2.5× more dangerous than Zyrax-9!',
+    'arrive_zyrax8_4': '  New tier-5 minerals appear exclusively here.',
+    'era4_start_1': '★ WELCOME TO UPDATE 4.0 — GALACTIC EXPANSION ★',
+    'era4_start_2': '  Base: Zyrax-8  ·  Colony active',
+    'era4_corp_yes': '  NOVA CORP partnership: −400 CR/turn. Logistics secured.',
+    'era4_corp_no': '  Independent colony. You must manage food, energy and workers yourself.',
+    'era4_new_btns': '  New buttons: [C] Colony  [P] Planets  [N] NOVA Corp',
+    'era4_colony_locked': '✗ Colony unlocks in Update 4.0.',
+    'era4_travel_locked': '✗ Planet travel unlocks in Update 4.0.',
+    'era4_corp_locked': '✗ NOVA Corp dashboard in Update 4.0.',
+  }
+};
+
+function t(key, vars={}) {
+  let s = (T[LANG]||T.sk)[key] || T.sk[key] || key;
+  for(const [k,v] of Object.entries(vars)) s = s.replaceAll('{'+k+'}', v);
+  return s;
+}
+
+function toggleLang() {
+  LANG = LANG === 'sk' ? 'en' : 'sk';
+  localStorage.setItem('lang', LANG);
+  const b = document.getElementById('lang-btn');
+  if(b) b.textContent = LANG.toUpperCase();
+  redrawCurrentView();
+}
+
+function redrawCurrentView() {
+  // Determine which screen is currently showing and redraw it
+  if(G && G.username) {
+    rG([]);
+  } else {
+    sceneTitle(PILOT);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 //  GAME DATA
@@ -411,7 +1059,7 @@ function fmtDate(ts){
   const d=new Date(ts);
   return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
 }
-function fmtDuration(turns){return turns<50?'krátka':turns<120?'stredná':turns<250?'dlhá':'epická';}
+function fmtDuration(turns){return turns<50?t('duration_short'):turns<120?t('duration_medium'):turns<250?t('duration_long'):t('duration_epic');}
 
 // ══════════════════════════════════════════════════════════════
 //  GAME STATE
@@ -544,7 +1192,7 @@ Zbieraj <strong>⊕ 5× Titanium</strong> a <strong>⊗ 3× Exoternimium</strong
 Zyrax-8 je 2.5× nebezpečnejšia. Skóre bonus: <strong>+3000</strong>.
     </div>
     <div class="mg g1" style="margin-top:.8rem;">
-      <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">◀  Späť</button>
+      <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">${t('back_big')}</button>
     </div>
   </div>`);
 }
@@ -552,15 +1200,15 @@ Zyrax-8 je 2.5× nebezpečnejšia. Skóre bonus: <strong>+3000</strong>.
 function sceneNewGame(){
   setScr(`<div class="panel" style="min-width:620px;text-align:center;">
     ${corners()}
-    <div class="st" style="text-align:left">▶  NOVÁ HRA — MENO PILOTA</div>
-    <div style="font-size:1.1rem;color:var(--ad);margin-bottom:.8rem;">Zadaj meno pilota (alebo použi predvolené):</div>
+    <div class="st" style="text-align:left">${t('new_game_title')}</div>
+    <div style="font-size:1.1rem;color:var(--ad);margin-bottom:.8rem;">${t('new_game_hint')}</div>
     <input id="piname" type="text" value="${PILOT}" maxlength="18"
       style="background:#0d0a00;border:1px solid var(--a);color:var(--a);font-family:'VT323',monospace;
       font-size:1.5rem;padding:.4rem .8rem;width:100%;outline:none;margin-bottom:.8rem;"
       onkeydown="if(event.key==='Enter')startNewGame()">
     <div class="mg g2">
-      <button class="btn bbig" onclick="startNewGame()">▶  ZAČAŤ MISIU</button>
-      <button class="btn" onclick="sFX('click');sceneTitle(PILOT)">✗  Späť</button>
+      <button class="btn bbig" onclick="startNewGame()">${t('start_mission')}</button>
+      <button class="btn" onclick="sFX('click');sceneTitle(PILOT)">${t('back')}</button>
     </div>
   </div>`);
   setTimeout(()=>{const el=document.getElementById('piname');if(el){el.focus();el.select();}},80);
@@ -591,25 +1239,25 @@ function sceneLoad(){
           <span style="color:var(--ad);margin:0 .5rem">|</span>
           ${d.credits||0} CR
           <span style="color:var(--ad);margin:0 .5rem">|</span>
-          Táh ${d.turn||0}
+          ${t('hud_turn')} ${d.turn||0}
           <span style="color:${dep.col};margin:0 .5rem">[L${d.depth||1}]</span>
           <span style="color:var(--ad);font-size:.88rem">${fmtDate(d.ts)}</span>
         </span>
         <span style="display:flex;gap:.4rem">
-          <button class="btn btn-s" onclick="doLoad(${s})">▶ Načítať</button>
+          <button class="btn btn-s" onclick="doLoad(${s})">${t('load_btn')}</button>
           <button class="btn btn-d" onclick="doDelSlot(${s})">✗</button>
         </span>
       </div>`;
     } else {
-      html+=`<div class="slot empty"><span style="color:var(--ad)">#${s} — prázdny slot</span></div>`;
+      html+=`<div class="slot empty"><span style="color:var(--ad)">#${s} ${t('empty_slot')}</span></div>`;
     }
   }
   setScr(`<div class="panel" style="min-width:700px;">
     ${corners()}
-    <div class="st">📂 NAČÍTAŤ HRU — SAVE SLOTY</div>
+    <div class="st">${t('load_title')}</div>
     ${html}
     <div class="mg g1" style="margin-top:.7rem;">
-      <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">◀  Späť</button>
+      <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">${t('back_big')}</button>
     </div>
   </div>`);
 }
@@ -618,7 +1266,7 @@ function doLoad(slot){
   if(loadGame(slot)){
     sFX('load');flash('rgba(57,255,106,.18)');
     startAmb();
-    showGame([{txt:`📂 Hra načítaná zo slotu #${slot}. Vitaj späť, ${G.username}!`,cls:'linf'}]);
+    showGame([{txt:t('game_loaded',{n:slot,name:G.username}),cls:'linf'}]);
   }
 }
 
@@ -629,10 +1277,10 @@ function doDelSlot(slot){
 function sceneClearSaves(){
   setScr(`<div class="panel" style="text-align:center;min-width:520px;">
     ${corners()}
-    <div style="font-size:1.2rem;color:var(--r);margin-bottom:1rem;">⚠ Vymazať VŠETKY uloženia?<br><small style="color:var(--ad)">Táto akcia je nevratná.</small></div>
+    <div style="font-size:1.2rem;color:var(--r);margin-bottom:1rem;">${t('clear_confirm')}<br><small style="color:var(--ad)">${t('clear_irreversible')}</small></div>
     <div class="mg g2">
-      <button class="btn btn-d" onclick="localStorage.removeItem('${LS_KEY}');sFX('danger');sceneTitle(PILOT)">✓ Áno, vymazať</button>
-      <button class="btn" onclick="sFX('click');sceneTitle(PILOT)">✗ Nie, späť</button>
+      <button class="btn btn-d" onclick="localStorage.removeItem('${LS_KEY}');sFX('danger');sceneTitle(PILOT)">${t('clear_yes')}</button>
+      <button class="btn" onclick="sFX('click');sceneTitle(PILOT)">${t('clear_no')}</button>
     </div>
   </div>`);
 }
@@ -650,20 +1298,20 @@ function sceneSave(){
       <span>
         <strong style="color:var(--a)">#${s}</strong>
         <span style="color:var(--ad);margin:0 .6rem">|</span>
-        ${d?`<strong>${d.username}</strong> · ${d.credits} CR · Táh ${d.turn} <span style="color:${dep.col}">[L${d.depth}]</span> · ${fmtDate(d.ts)}`:'<span style="color:var(--ad)">prázdny slot</span>'}
+        ${d?`<strong>${d.username}</strong> · ${d.credits} CR · ${t('hud_turn')} ${d.turn} <span style="color:${dep.col}">[L${d.depth}]</span> · ${fmtDate(d.ts)}`:`<span style="color:var(--ad)">${t('empty_slot').replace('— ','')}</span>`}
       </span>
-      <button class="btn btn-s" style="font-size:.95rem;padding:.2rem .5rem">💾 Uložiť</button>
+      <button class="btn btn-s" style="font-size:.95rem;padding:.2rem .5rem">${t('save_slot_btn')}</button>
     </div>`;
   }
   setScr(`<div class="panel" style="min-width:700px;">
     ${corners()}
-    <div class="st">💾 ULOŽIŤ HRU — VYBER SLOT</div>
+    <div class="st">${t('save_title')}</div>
     <div style="font-size:.95rem;color:var(--ad);margin-bottom:.5rem;">
-      Klikni na slot pre uloženie. Existujúce uloženie sa prepíše.
+      ${t('save_click_hint')}
     </div>
     ${html}
     <div class="mg g1" style="margin-top:.7rem;">
-      <button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť do bane (neuložiť)</button>
+      <button class="btn bbig" onclick="sFX('click');rG([])">${t('back_no_save')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}}
@@ -671,7 +1319,7 @@ function sceneSave(){
 
 function doSave(slot){
   saveGame(slot);sFX('save');flash('rgba(57,255,106,.18)');
-  rG([{txt:`💾 HRA ULOŽENÁ do slotu #${slot}. Pokračuj kedykoľvek!`,cls:'lok'}]);
+  rG([{txt:t('game_saved',{n:slot}),cls:'lok'}]);
 }
 
 function quickSave(){
@@ -691,9 +1339,9 @@ function quickSave(){
 function _buildLbRows(data){
   const medals=['🥇','🥈','🥉'];
   const me=(G.username||PILOT).toUpperCase();
-  if(!data||!data.length)return '<div style="text-align:center;color:var(--ad);padding:1rem">Žiadni hráči zatiaľ. Dohraj hru!</div>';
+  if(!data||!data.length)return `<div style="text-align:center;color:var(--ad);padding:1rem">${t('lb_no_players')}</div>`;
   let rows=`<div class="lb-row" style="color:var(--ad);font-size:.88rem;border-bottom:1px solid var(--a);">
-    <span>#</span><span>PILOT</span><span>KARIÉRA CR</span><span>RANK</span><span>HRY / VÍŤAZSTVÁ</span></div>`;
+    <span>#</span><span>${t('lb_col_pilot')}</span><span>${t('lb_col_career')}</span><span>${t('lb_col_rank')}</span><span>${t('lb_col_sessions')}</span></div>`;
   data.forEach((e,i)=>{
     const medal=i<3?medals[i]:`${i+1}.`;
     const cls=(e.username.toUpperCase()===me?'lb-row me ':(i===0?'lb-row gold':i===1?'lb-row silver':i===2?'lb-row bronze':'lb-row'));
@@ -702,7 +1350,7 @@ function _buildLbRows(data){
       <span><strong>${e.username}</strong></span>
       <span style="color:var(--a)">${(e.career_cr||0).toLocaleString()} CR</span>
       <span style="color:#ffdd44">${e.rank_name||'Baník'}</span>
-      <span>${e.sessions||0} hier · ${e.wins||0} výhier</span>
+      <span>${t('lb_sessions',{s:e.sessions||0,w:e.wins||0})}</span>
     </div>`;
   });
   return rows;
@@ -713,11 +1361,11 @@ function aLead(){
   const rows=_buildLbRows(data);
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">🏆 GLOBÁLNY LEADERBOARD — VŠETKY ÚČTY</div>
+    <div class="st">${t('lb_title')}</div>
     <div id="lb-rows">${rows}</div>
     <div style="display:flex;gap:.4rem;margin-top:.7rem;">
-      <button class="btn" style="flex:1;text-align:center;" onclick="sFX('click');${G.username?'rG([])':'sceneTitle(PILOT)'}">◀  Späť</button>
-      <button class="btn btn-b" style="flex:0 0 auto;" onclick="sFX('click');_refreshLb()">🔄 Obnoviť</button>
+      <button class="btn" style="flex:1;text-align:center;" onclick="sFX('click');${G.username?'rG([])':'sceneTitle(PILOT)'}">${t('back_big')}</button>
+      <button class="btn btn-b" style="flex:0 0 auto;" onclick="sFX('click');_refreshLb()">${t('lb_refresh')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');G.username?rG([]):sceneTitle(PILOT);}};
@@ -744,7 +1392,7 @@ function invH(){return [...MINERALS,...(G.era===4?MINERALS_4:[])].map(m=>{const 
 function upgB(){
   const parts=G.upgrades.map(u=>`<span style="color:var(--b);font-size:.82rem">${u.name.split(' ')[0]}</span>`);
   if(G.weapon)parts.push(`<span style="color:var(--r);font-size:.82rem">⚔${G.weapon.name.split(' ')[0]}</span>`);
-  return parts.length?parts.join(' '):'<span style="opacity:.32">žiadne</span>';}
+  return parts.length?parts.join(' '):`<span style="opacity:.32">${t('equip_none')}</span>`;}
 
 // ══════════════════════════════════════════════════════════════
 //  SHOW GAME (main render)
@@ -767,36 +1415,38 @@ function rG(logs=[]){
   const canGoUp=G.depth>1;
 
   const btns=[
-    `<button class="btn" onclick="sFX('click');aMine()"><span class="bk">[1]</span>⛏ Ťažiť</button>`,
-    `<button class="btn" onclick="sFX('click');aSell()"><span class="bk">[2]</span>💰 Predať</button>`,
-    `<button class="btn" onclick="sFX('click');aShop()"><span class="bk">[3]</span>🔧 Obchod</button>`,
-    hasPl?`<button class="btn btn-p" onclick="sFX('click');aPol()"><span class="bk">[4]</span>💎 Leštiť</button>`
-         :`<button class="btn" onclick="sFX('click');aMap()"><span class="bk">[4]</span>🗺 Mapa</button>`,
-    hasPl?`<button class="btn" onclick="sFX('click');aMap()"><span class="bk">[5]</span>🗺 Mapa</button>`
-         :`<button class="btn" onclick="sFX('click');aLore()"><span class="bk">[5]</span>📜 Záznamy</button>`,
-    hasPl?`<button class="btn" onclick="sFX('click');aLore()"><span class="bk">[6]</span>📜 Záznamy</button>`
-         :`<button class="btn" onclick="sFX('click');aStat()"><span class="bk">[6]</span>📊 Štatistiky</button>`,
-    hasPl?`<button class="btn" onclick="sFX('click');aStat()"><span class="bk">[7]</span>📊 Štatistiky</button>`:'',
-    canGoDeeper?`<button class="btn" style="color:${DEPTHS[G.depth]?.col||'var(--b)'}" onclick="sFX('click');aDescend()"><span class="bk">[D]</span>▼ Klesať</button>`:'<div></div>',
-    canGoUp?`<button class="btn" onclick="sFX('click');aAscend()"><span class="bk">[U]</span>▲ Stúpať</button>`:'<div></div>',
-    `<button class="btn btn-s" onclick="sFX('click');sceneSave()"><span class="bk">[S]</span>💾 Uložiť</button>`,
-    `<button class="btn btn-b" onclick="sFX('click');aResearch()"><span class="bk">[R]</span>🔬 Výskum</button>`,
-    (G.rocket===1&&G.planet===1)?`<button class="btn" style="color:#ff88ff;border-color:#ff88ff44;grid-column:1/-1;text-align:center" onclick="sFX('click');aConfirmLaunch()"><span class="bk">[L]</span>🚀 Štart Rakety → ZYRAX-10</button>`:'',
-    G.era===4?`<button class="btn btn-b" onclick="sFX('click');aColony()"><span class="bk">[C]</span>🏗 Kolónia</button>`:'',
-    G.era===4?`<button class="btn" style="color:#ff9944;border-color:#ff994444" onclick="sFX('click');aPlanetTravel()"><span class="bk">[P]</span>🪐 Planéty</button>`:'',
-    G.era===4?`<button class="btn" style="color:#aaaaff;border-color:#aaaaff44" onclick="sFX('click');aCorpDashboard()"><span class="bk">[N]</span>🏢 NOVA Corp</button>`:'',
-    `<button class="btn btn-d" onclick="sFX('click');aQuit()">🚀 Odletieť</button>`,
+    `<button class="btn" onclick="sFX('click');aMine()"><span class="bk">[1]</span>${t('btn_mine')}</button>`,
+    `<button class="btn" onclick="sFX('click');aSell()"><span class="bk">[2]</span>${t('btn_sell')}</button>`,
+    `<button class="btn" onclick="sFX('click');aShop()"><span class="bk">[3]</span>${t('btn_shop')}</button>`,
+    hasPl?`<button class="btn btn-p" onclick="sFX('click');aPol()"><span class="bk">[4]</span>${t('btn_polish')}</button>`
+         :`<button class="btn" onclick="sFX('click');aMap()"><span class="bk">[4]</span>${t('btn_map')}</button>`,
+    hasPl?`<button class="btn" onclick="sFX('click');aMap()"><span class="bk">[5]</span>${t('btn_map')}</button>`
+         :`<button class="btn" onclick="sFX('click');aLore()"><span class="bk">[5]</span>${t('btn_lore')}</button>`,
+    hasPl?`<button class="btn" onclick="sFX('click');aLore()"><span class="bk">[6]</span>${t('btn_lore')}</button>`
+         :`<button class="btn" onclick="sFX('click');aStat()"><span class="bk">[6]</span>${t('btn_stats')}</button>`,
+    hasPl?`<button class="btn" onclick="sFX('click');aStat()"><span class="bk">[7]</span>${t('btn_stats')}</button>`:'',
+    canGoDeeper?`<button class="btn" style="color:${DEPTHS[G.depth]?.col||'var(--b)'}" onclick="sFX('click');aDescend()"><span class="bk">[D]</span>${t('btn_descend')}</button>`:'<div></div>',
+    canGoUp?`<button class="btn" onclick="sFX('click');aAscend()"><span class="bk">[U]</span>${t('btn_ascend')}</button>`:'<div></div>',
+    `<button class="btn btn-s" onclick="sFX('click');sceneSave()"><span class="bk">[S]</span>${t('btn_save')}</button>`,
+    `<button class="btn btn-b" onclick="sFX('click');aResearch()"><span class="bk">[R]</span>${t('btn_research')}</button>`,
+    (G.rocket===1&&G.planet===1)?`<button class="btn" style="color:#ff88ff;border-color:#ff88ff44;grid-column:1/-1;text-align:center" onclick="sFX('click');aConfirmLaunch()"><span class="bk">[L]</span>${t('btn_rocket_launch')}</button>`:'',
+    G.era===4?`<button class="btn btn-b" onclick="sFX('click');aColony()"><span class="bk">[C]</span>${t('btn_colony')}</button>`:'',
+    G.era===4?`<button class="btn" style="color:#ff9944;border-color:#ff994444" onclick="sFX('click');aPlanetTravel()"><span class="bk">[P]</span>${t('btn_planets')}</button>`:'',
+    G.era===4?`<button class="btn" style="color:#aaaaff;border-color:#aaaaff44" onclick="sFX('click');aCorpDashboard()"><span class="bk">[N]</span>${t('btn_corp')}</button>`:'',
+    `<button class="btn btn-d" onclick="sFX('click');aQuit()">${t('btn_depart')}</button>`,
   ].filter(Boolean);
 
+  const _plabel=G.era===4?curPlanet4().name:G.planet===3?t('planet_zyrax8_col'):G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
+  const _pturnlabel=G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?t('hud_colony',{w:G.colony?.workers||0,f:G.colony?.food||0,e:G.colony?.energy||0}):`${t('hud_goal')}: ${G.goal} CR`;
   setScr(`<div class="panel" style="min-width:750px;max-width:830px;">
     ${corners()}
-    <div id="plabel">◈  ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 KOLONIZÁCIA':G.planet===2?'ZYRAX-10':'ZYRAX-9'}  ${G.era===4?'v4.8':'v4.8'}  ◈  TÁH: ${G.turn}  ◈  ${G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?`Kolónia: 👷${G.colony?.workers||0} 🍞${G.colony?.food||0} ⚡${G.colony?.energy||0}`:`CIEĽ: ${G.goal} CR`}  ◈</div>
+    <div id="plabel">◈  ${_plabel}  v4.8  ◈  ${t('hud_turn')} ${G.turn}  ◈  ${_pturnlabel}  ◈</div>
     <div id="hud">
-      <div><span class="hl">PILOT:</span> <strong>${G.username.toUpperCase()}</strong></div>
-      <div><span class="hl">KREDITY:</span> <strong style="color:var(--a);text-shadow:0 0 7px var(--a)">${G.credits} CR</strong></div>
-      <div><span class="hl">TÁH:</span> ${G.turn} ${depthLabel()}</div>
+      <div><span class="hl">${t('hud_pilot')}</span> <strong>${G.username.toUpperCase()}</strong></div>
+      <div><span class="hl">${t('hud_credits')}</span> <strong style="color:var(--a);text-shadow:0 0 7px var(--a)">${G.credits} CR</strong></div>
+      <div><span class="hl">${t('hud_turn')}</span> ${G.turn} ${depthLabel()}</div>
       <div class="bw">
-        <span class="hl" style="white-space:nowrap">HP ${hp}/${mh}</span>
+        <span class="hl" style="white-space:nowrap">${t('hud_hp')} ${hp}/${mh}</span>
         <div class="bb"><div class="bf" style="width:${hpP}%;background:${hpC}"></div></div>
       </div>
       ${G.planet===3?`
@@ -811,18 +1461,18 @@ function rG(logs=[]){
         <span style="color:#ff44aa;font-size:.85rem;white-space:nowrap">${G.inv.exoternimium?.qty||0} / 3</span>
       </div>`:`
       <div class="bw" style="grid-column:1/-1">
-        <span class="hl" style="white-space:nowrap">CIEĽ</span>
+        <span class="hl" style="white-space:nowrap">${t('hud_goal')}</span>
         <div class="bb"><div class="bf" style="width:${gpP}%;background:linear-gradient(90deg,var(--b),var(--g))"></div></div>
-        <span style="color:var(--ad);font-size:.85rem;white-space:nowrap">${Math.round(gpP)}%  chýba ${Math.max(0,G.goal-G.credits)} CR</span>
+        <span style="color:var(--ad);font-size:.85rem;white-space:nowrap">${Math.round(gpP)}%  ${t('hud_missing',{n:Math.max(0,G.goal-G.credits)})}</span>
       </div>`}
       <div id="dbar-wrap">
-        <span class="hl" style="white-space:nowrap;color:${dep.col}">HĹBKA L${G.depth}</span>
+        <span class="hl" style="white-space:nowrap;color:${dep.col}">${t('hud_depth',{n:G.depth})}</span>
         <div id="dbar-bg"><div id="dbar-fill" style="width:${Math.max(1,dpP)}%;background:linear-gradient(90deg,#1a1a88,${dep.col})"></div></div>
         <span style="color:${dep.col};font-size:.85rem;white-space:nowrap">${G.depthM}m</span>
       </div>
-      <div style="grid-column:1/-1;font-size:.88rem"><span class="hl">INV:</span> ${invH()}</div>
-      <div style="grid-column:1/-1;font-size:.82rem"><span class="hl">VYBAV:</span> ${upgB()}</div>
-      <div style="grid-column:1/-1;font-size:.82rem"><span class="hl">VÝSKUM:</span> <span style="color:var(--b)">${G.rp} RP</span>${G.rocket===1&&G.planet===1?'  <span style="color:#ff88ff;animation:pglow 1s infinite">🚀 Raketa pripravená!</span>':''}</div>
+      <div style="grid-column:1/-1;font-size:.88rem"><span class="hl">${t('hud_inv')}</span> ${invH()}</div>
+      <div style="grid-column:1/-1;font-size:.82rem"><span class="hl">${t('hud_equip')}</span> ${upgB()}</div>
+      <div style="grid-column:1/-1;font-size:.82rem"><span class="hl">${t('hud_research')}</span> <span style="color:var(--b)">${G.rp} RP</span>${G.rocket===1&&G.planet===1?`  <span style="color:#ff88ff;animation:pglow 1s infinite">${t('hud_rocket_ready')}</span>`:''}</div>
     </div>
     <div id="mpw"><div id="mpf"></div></div>
     <div id="glog">${logs.map(e=>`<div class="${e.cls} mf">${e.txt}</div>`).join('')}<div id="le"></div></div>
@@ -855,31 +1505,31 @@ function aDescend(){
   G.depth++;G.depthM=nextDep.minD+100;
   if(G.depth>G.stats.maxDepth)G.stats.maxDepth=G.depth;
   sFX('depth');flash(`${nextDep.col}22`);
-  rG([{txt:`▼ ZOSTUP NA ${nextDep.name} [L${G.depth}]  — hĺbka ${G.depthM}m`,cls:'linf'},
-      {txt:`  Vzácnejšie minerály, vyššia HP škoda. Buď opatrný.`,cls:'lwarn'}]);}
+  rG([{txt:t('depth_descend',{name:nextDep.name,n:G.depth,m:G.depthM}),cls:'linf'},
+      {txt:t('depth_descend_warn'),cls:'lwarn'}]);}
 
 function aAscend(){
   const prevDep=DEPTHS.find(d=>d.lv===G.depth-1);if(!prevDep)return;
   G.depth--;G.depthM=prevDep.maxD-100;
   sFX('click');
-  rG([{txt:`▲ VÝSTUP NA ${prevDep.name} [L${G.depth}]  — hĺbka ${G.depthM}m`,cls:'linf'}]);}
+  rG([{txt:t('depth_ascend',{name:prevDep.name,n:G.depth,m:G.depthM}),cls:'linf'}]);}
 
 // ══════════════════════════════════════════════════════════════
 //  MINE
 // ══════════════════════════════════════════════════════════════
 function aMine(){
-  if(_miningLock){rG([{txt:'⛏  Vŕtačka ešte pracuje — počkaj!',cls:'lwarn'}]);return;}
+  if(_miningLock){rG([{txt:t('mine_locked'),cls:'lwarn'}]);return;}
   // Era 4 bez zmluvy: ak sú zásoby vyčerpané, ťažba je zablokovaná
   if(G.era===4&&G.colony&&!G.corpContract){
     const c=G.colony;
     if(c.food<=0&&c.energy<=0&&c.workers<=0){
-      rG([{txt:'🚫 KOLÓNIA SKOLABOVALA — ťažba nie je možná!',cls:'ldng'},
-          {txt:'  Bez zmluvy s NOVA Corp musíš sám zásobovať kolóniu.',cls:'lwarn'},
-          {txt:'  Kúp jedlo ⚡ energiu 👷 pracovníkov v [3] Obchode alebo',cls:'linf'},
-          {txt:'  podpíš zmluvu s NOVA Corp cez [N].',cls:'linf'}]);return;}}
+      rG([{txt:t('mine_colony_collapsed'),cls:'ldng'},
+          {txt:t('mine_colony_no_corp'),cls:'lwarn'},
+          {txt:t('mine_colony_buy'),cls:'linf'},
+          {txt:t('mine_colony_sign'),cls:'linf'}]);return;}}
 
   _miningLock=true;
-  rG([{txt:'⛏  Vŕtačka sa zahryza do horniny...',cls:'linf'}]);
+  rG([{txt:t('mine_drilling'),cls:'linf'}]);
   const pw=document.getElementById('mpw'),pf=document.getElementById('mpf');
   if(pw)pw.style.display='block';sFX('mine');
   let p=0;function step(){p=Math.min(100,p+Math.random()*20+9);if(pf)pf.style.width=p+'%';
@@ -896,21 +1546,21 @@ function doMine(){
     // Corp poplatok
     if(G.corpContract&&G.corpFee>0){
       if(G.credits>=G.corpFee){G.credits-=G.corpFee;}
-      else{logs.push({txt:`⚠ NOVA CORP: Nemáš dostatok CR na poplatok! Zmluva pozastavená.`,cls:'ldng'});G.corpContract=false;}}
+      else{logs.push({txt:t('mine_colony_fee_warn'),cls:'ldng'});G.corpContract=false;}}
     // Spotreba jedla
     const foodEat=c.workers;
     if(c.food>=foodEat){c.food-=foodEat;}
     else{c.workers=Math.max(0,c.workers-1);c.food=0;
-      logs.push({txt:`🍞 Jedlo vyčerpané! Pracovník odišiel. (${c.workers} zostalo)`,cls:'ldng'});}
+      logs.push({txt:t('mine_food_depleted',{n:c.workers}),cls:'ldng'});}
     // Spotreba energie
     const engUse=Math.max(1,Math.floor(c.workers*.8));
     if(c.energy>=engUse){c.energy-=engUse;}
-    else{c.energy=0;logs.push({txt:`⚡ Energia vyčerpaná! Efektivita ťažby klesla.`,cls:'lwarn'});}
+    else{c.energy=0;logs.push({txt:t('mine_energy_depleted'),cls:'lwarn'});}
     // Medicína — pasívna HP regen
     if(c.medicine>0){G.hp=Math.min(G.maxHp,G.hp+Math.floor(c.medicine/20));c.medicine=Math.max(0,c.medicine-1);}
     // Varovania pri nízkych zásobách
-    if(c.food<c.workers*2&&c.food>0)logs.push({txt:`⚠ Jedlo dochádzajúce: ${c.food} jednotiek!`,cls:'lwarn'});
-    if(c.energy<10)logs.push({txt:`⚠ Energia kritická: ${c.energy}!`,cls:'lwarn'});
+    if(c.food<c.workers*2&&c.food>0)logs.push({txt:t('mine_food_low',{n:c.food}),cls:'lwarn'});
+    if(c.energy<10)logs.push({txt:t('mine_energy_low',{n:c.energy}),cls:'lwarn'});
   }
 
   const dep=curDepthObj();
@@ -920,10 +1570,8 @@ function doMine(){
   const sTypes=['Normal','Normal','Normal','Hot','Toxic','Rich','Deep','Frozen','Ancient'];
   const secPool=sTypes.filter(s=>s!=='Deep'||G.depth>=3);
   const sec=secPool[Math.floor(Math.random()*secPool.length)];
-  const sMsgs={Normal:'Štandardný sektor.',Hot:'HORÚCA ZÓNA!',Toxic:'JEDOVATÝ SEKTOR',
-    Rich:'★ BOHATÉ LOŽISKO!',Deep:'🔵 HLBOKÝ SEKTOR',Frozen:'❄ ZMRZNUTÝ',Ancient:'⚡ STAROVEKÝ SEKTOR'};
-  if(hS)logs.push({txt:`[SCANNER] Sektor: ${sec} · Hĺbka: ${G.depthM}m`,cls:'linf'});
-  else logs.push({txt:`[ TÁH ${G.turn} · ${sec} · ${G.depthM}m ]`,cls:'linf'});
+  if(hS)logs.push({txt:t('mine_scanner',{sec:t('sec_'+sec),m:G.depthM}),cls:'linf'});
+  else logs.push({txt:t('mine_turn',{n:G.turn,sec:t('sec_'+sec),m:G.depthM}),cls:'linf'});
 
   // Era 4: pool minerálov = MINERALS + MINERALS_4 (podľa planéty)
   const p4=G.era===4?curPlanet4():null;
@@ -959,7 +1607,7 @@ function doMine(){
   for(let i=0;i<cnt;i++){const r=Math.random();const mi=Math.max(0,cW.findIndex(c=>r<=c));
     found[activePool[mi].id]=(found[activePool[mi].id]||0)+1;}
   let chron=false;if(hC&&Math.random()<.2){Object.keys(found).forEach(k=>found[k]*=2);chron=true;}
-  if(chron)logs.push({txt:'  ⏱ CHRONO BEACON: Nález zdvojnásobený!',cls:'lrar'});
+  if(chron)logs.push({txt:t('mine_chrono'),cls:'lrar'});
   let hasR=false;
   for(const[id,q]of Object.entries(found)){
     const m=[...MINERALS,...MINERALS_4].find(x=>x.id===id);if(!m)continue;
@@ -974,7 +1622,7 @@ function doMine(){
     let dmg=Math.round(Math.abs(dep.hpMod)*20*(G.era===4?era4dmg:G.planet===3?2.5:G.planet===2?1.8:1));
     if(G.weapon)dmg=Math.max(0,Math.ceil(dmg*G.weapon.dmgMult));
     if(dmg>0){G.hp=Math.max(0,G.hp-dmg);
-      logs.push({txt:`  [HĹBKA L${dep.lv}] Prostredie spôsobilo HP -${dmg}`,cls:'ldng'});}}
+      logs.push({txt:t('mine_depth_dmg',{n:dep.lv,dmg}),cls:'ldng'});}}
 
   // Events
   if(Math.random()<.40){
@@ -1013,15 +1661,15 @@ function aSell(){
     const ps=s.pl>0?` [${s.pl>1?'★★ ×3':'★ ×2'}]`:'';
     logs.push({txt:`  ${m.sym} ${m.name.padEnd(14)} ×${s.qty}${ps}  = ${val} CR`,cls:s.pl>0?'lpol':'lok'});
     G.stats.sold+=val;G.inv[m.id]={qty:0,pl:0};}
-  if(!any){rG([{txt:'── Inventár je prázdny.',cls:'lwarn'}]);return;}
-  if(colOresSold.length)logs.push({txt:`  ⚠ PREDAL SI KOLONIZAČNÉ RUDY: ${colOresSold.join(', ')} — stratíš pokrok!`,cls:'ldng'});
+  if(!any){rG([{txt:t('sell_empty'),cls:'lwarn'}]);return;}
+  if(colOresSold.length)logs.push({txt:t('sell_col_ores_warn',{ores:colOresSold.join(', ')}),cls:'ldng'});
   G.credits+=total;
   logs.push({txt:'',cls:'lwarn'});
-  logs.push({txt:`  ► CELKOM: +${total} CR  |  ZOSTATOK: ${G.credits} CR`,cls:'lok'});
+  logs.push({txt:t('sell_total',{total,cr:G.credits}),cls:'lok'});
   flash('rgba(57,255,106,.13)');sFX('buy');
   quickSave();
   if(G.era<4&&G.planet===2&&G.credits>=G.goal){setTimeout(sceneCorpOffer,600);return;}
-  rG([{txt:'── VÝKUPNÁ STANICA ──',cls:'linf'},...logs]);}
+  rG([{txt:t('sell_station'),cls:'linf'},...logs]);}
 
 // ══════════════════════════════════════════════════════════════
 //  SHOP
@@ -1039,21 +1687,21 @@ function aShop(){
         <span>${owned?'✓ ':''}<strong style="color:${isPol?'#ffe066':'var(--a)'}">${u.name}</strong>
           <small style="color:var(--ad);margin-left:.4rem">${u.desc}</small></span>
         <span style="font-size:.9rem;color:${owned?'var(--g)':afford?'var(--a)':'var(--r)'}">
-          ${owned?'ZAKÚPENÉ':u.cost+' CR'}</span></div>`;}  }
+          ${owned?t('shop_owned'):u.cost+' CR'}</span></div>`;}  }
   // ── ERA 4: Kolóniové zásoby ────────────────────────────────────
   if(G.era===4&&G.colony){
     const c=G.colony;
     const supplies=[
-      {id:'food50',   label:'🍞 Jedlo ×50',          cost:800,  act:()=>{c.food=Math.min(200,c.food+50);}},
-      {id:'food100',  label:'🍞 Jedlo ×100',          cost:1500, act:()=>{c.food=Math.min(200,c.food+100);}},
-      {id:'energy50', label:'⚡ Energia ×50',          cost:600,  act:()=>{c.energy=Math.min(200,c.energy+50);}},
-      {id:'energy100',label:'⚡ Energia ×100',          cost:1100, act:()=>{c.energy=Math.min(200,c.energy+100);}},
-      {id:'med30',    label:'💊 Medicina ×30',         cost:900,  act:()=>{c.medicine=Math.min(100,c.medicine+30);}},
-      {id:'fuel20',   label:'🚀 Palivo ×20',           cost:1200, act:()=>{c.fuel=Math.min(100,c.fuel+20);}},
-      {id:'recruit1', label:'👷 Rekrut (1 pracovník)', cost:2000, act:()=>{if(c.workers<c.housing)c.workers++;else c.housing++;c.workers=Math.min(c.workers,c.housing);}},
-      {id:'housing5', label:'🏠 Obydlia +5',           cost:3500, act:()=>{c.housing+=5;}},
+      {id:'food50',   label:t('food50'),   cost:800,  act:()=>{c.food=Math.min(200,c.food+50);}},
+      {id:'food100',  label:t('food100'),  cost:1500, act:()=>{c.food=Math.min(200,c.food+100);}},
+      {id:'energy50', label:t('energy50'), cost:600,  act:()=>{c.energy=Math.min(200,c.energy+50);}},
+      {id:'energy100',label:t('energy100'),cost:1100, act:()=>{c.energy=Math.min(200,c.energy+100);}},
+      {id:'med30',    label:t('med30'),    cost:900,  act:()=>{c.medicine=Math.min(100,c.medicine+30);}},
+      {id:'fuel20',   label:t('fuel20'),   cost:1200, act:()=>{c.fuel=Math.min(100,c.fuel+20);}},
+      {id:'recruit1', label:t('recruit'),  cost:2000, act:()=>{if(c.workers<c.housing)c.workers++;else c.housing++;c.workers=Math.min(c.workers,c.housing);}},
+      {id:'housing5', label:t('housing5'), cost:3500, act:()=>{c.housing+=5;}},
     ];
-    html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">[KOLÓNIA — ZÁSOBY]</div>`;
+    html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">${t('shop_colony_supplies')}</div>`;
     for(const s of supplies){
       const afford=G.credits>=s.cost;
       html+=`<div class="si" onclick="${afford?`buySupply('${s.id}')`:''}" style="${!afford?'opacity:.5':''}">
@@ -1064,7 +1712,7 @@ function aShop(){
     if(!G.omegaUnlocked){
       const canOmega=G.rp>=500&&G.credits>=20000;
       html+=`<div class="si" onclick="${canOmega?'buyOmegaUnlock()':''}" style="${!canOmega?'opacity:.5':''}">
-        <span><strong style="color:#dd00ff">🔓 Odomknúť OMEGA-VII</strong> <small style="color:var(--ad)">500 RP + 20 000 CR</small></span>
+        <span><strong style="color:#dd00ff">${t('omega_unlock_btn')}</strong> <small style="color:var(--ad)">500 RP + 20 000 CR</small></span>
         <span style="font-size:.9rem;color:${G.rp>=500?'var(--a)':'var(--r)'}">${G.rp}/500 RP</span></div>`;
     }
   }
@@ -1076,21 +1724,21 @@ function aShop(){
       <span>${owned?'✓ ':''}<strong style="color:var(--r)">${w.name}</strong>
         <small style="color:var(--ad);margin-left:.4rem">${w.desc}</small></span>
       <span style="font-size:.9rem;color:${owned?'var(--g)':afford?'var(--a)':'var(--r)'}">
-        ${owned?'ZAKÚPENÉ':w.cost+' CR'}</span></div>`;}
+        ${owned?t('shop_owned'):w.cost+' CR'}</span></div>`;}
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">🔧 OBCHOD — ${G.upgrades.length}/${UPGRADES.length} upgradov · ${G.weapon?'⚔ '+G.weapon.name:'žiadna zbraň'} · ${G.credits} CR</div>
+    <div class="st">${t('shop_title')} — ${t('shop_upgrades',{n:G.upgrades.length,t:UPGRADES.length})} · ${G.weapon?'⚔ '+G.weapon.name:t('shop_no_weapon')} · ${G.credits} CR</div>
     ${html}
-    <div class="mg g1" style="margin-top:.6rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
+    <div class="mg g1" style="margin-top:.6rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
 function weaponBuy(id){const w=WEAPONS.find(x=>x.id===id);
   if(!w)return;
-  if(G.credits<w.cost){sFX('danger');rG([{txt:`✗ Nedostatok CR! Chýba ${w.cost-G.credits} CR.`,cls:'ldng'}]);return;}
+  if(G.credits<w.cost){sFX('danger');rG([{txt:t('buy_no_cr',{n:w.cost-G.credits}),cls:'ldng'}]);return;}
   G.credits-=w.cost;G.weapon=w;
   sFX('buy');flash('rgba(255,58,58,.17)');
-  rG([{txt:`⚔ ZAKÚPENÁ ZBRAŇ: ${w.name}  (−${w.cost} CR)  |  Zostatok: ${G.credits} CR`,cls:'ldng'},
+  rG([{txt:t('buy_weapon',{name:w.name,cost:w.cost,cr:G.credits}),cls:'ldng'},
       {txt:`  ${w.desc}`,cls:'linf'}]);}
 
 function buySupply(id){
@@ -1098,7 +1746,7 @@ function buySupply(id){
   const c=G.colony;
   const costs={food50:800,food100:1500,energy50:600,energy100:1100,med30:900,fuel20:1200,recruit1:2000,housing5:3500};
   const cost=costs[id];if(!cost)return;
-  if(G.credits<cost){sFX('danger');rG([{txt:`✗ Nedostatok CR! Chýba ${cost-G.credits} CR.`,cls:'ldng'}]);return;}
+  if(G.credits<cost){sFX('danger');rG([{txt:t('buy_no_cr',{n:cost-G.credits}),cls:'ldng'}]);return;}
   G.credits-=cost;
   if(id==='food50')c.food=Math.min(200,c.food+50);
   else if(id==='food100')c.food=Math.min(200,c.food+100);
@@ -1112,20 +1760,20 @@ function buySupply(id){
   aShop();}
 
 function buyOmegaUnlock(){
-  if(G.rp<500){sFX('danger');rG([{txt:`✗ Nedostatok RP! Máš ${G.rp}/500 RP. Pokračuj vo výskume.`,cls:'ldng'}]);return;}
-  if(G.credits<20000){sFX('danger');rG([{txt:`✗ Nedostatok CR! Chýba ${20000-G.credits} CR.`,cls:'ldng'}]);return;}
+  if(G.rp<500){sFX('danger');rG([{txt:t('buy_no_rp',{rp:G.rp}),cls:'ldng'}]);return;}
+  if(G.credits<20000){sFX('danger');rG([{txt:t('buy_no_cr',{n:20000-G.credits}),cls:'ldng'}]);return;}
   G.rp-=500;G.credits-=20000;G.omegaUnlocked=true;
   sFX('win');flash('rgba(221,0,255,.25)');
-  rG([{txt:'🔓 OMEGA-VII ODOMKNUTÝ! Priprav sa na hlboký vesmír.',cls:'lrar'},
-      {txt:'  Spotrebované: 500 RP + 20 000 CR',cls:'linf'}]);}
+  rG([{txt:t('omega_unlocked'),cls:'lrar'},
+      {txt:t('omega_cost'),cls:'linf'}]);}
 
 function shopBuy(id){const u=UPGRADES.find(x=>x.id===id);
   if(!u||G.upgrades.some(x=>x.id===id))return;
-  if(G.credits<u.cost){sFX('danger');rG([{txt:`✗ Nedostatok CR! Chýba ${u.cost-G.credits} CR.`,cls:'ldng'}]);return;}
+  if(G.credits<u.cost){sFX('danger');rG([{txt:t('buy_no_cr',{n:u.cost-G.credits}),cls:'ldng'}]);return;}
   G.credits-=u.cost;G.upgrades.push(u);
   if(u.eff==='maxhp+35'){G.maxHp+=35;G.hp=Math.min(G.hp+35,G.maxHp);}
   sFX('buy');flash('rgba(57,255,106,.17)');
-  rG([{txt:`✓ ZAKÚPENÉ: ${u.name}  (−${u.cost} CR)  |  Zostatok: ${G.credits} CR`,cls:'lok'}]);}
+  rG([{txt:t('buy_upgrade',{name:u.name,cost:u.cost,cr:G.credits}),cls:'lok'}]);}
 
 // ══════════════════════════════════════════════════════════════
 //  POLISH
@@ -1133,7 +1781,7 @@ function shopBuy(id){const u=UPGRADES.find(x=>x.id===id);
 function aPol(){
   const hasN2=hU('polisher2'),maxLv=hasN2?2:1;
   const pCost=(m,lv)=>lv===0?Math.round(m.v*.6):Math.round(m.v*1.8);
-  const lbl=['RAW','★ LEŠTENÉ','★★ NANO'];const lclr=['var(--ad)','#ffe066','#ff88ff'];
+  const lbl=[t('pol_raw'),t('pol_polished'),t('pol_nano_done')];const lclr=['var(--ad)','#ffe066','#ff88ff'];
   let html='';
   for(const m of MINERALS){const s=G.inv[m.id]||{qty:0,pl:0};
     const empty=s.qty<=0,atMax=s.pl>=maxLv,cost=empty?0:pCost(m,s.pl),afford=G.credits>=cost;
@@ -1144,14 +1792,14 @@ function aPol(){
         <span class="pg" style="color:${lclr[s.pl]}">${lbl[s.pl]}</span>
         <span style="color:var(--ad);font-size:.85rem">qty:${s.qty}</span>
       </span>
-      <span style="font-size:.88rem">${atMax?`<span style="color:var(--g)">MAX</span>`:empty?`<span style="opacity:.28">prázdne</span>`:
+      <span style="font-size:.88rem">${atMax?`<span style="color:var(--g)">${t('pol_max')}</span>`:empty?`<span style="opacity:.28">${t('pol_empty')}</span>`:
         `<span style="color:${afford?'var(--a)':'var(--r)'}">${cost} CR → ${nm} CR/ks</span>`}</span></div>`;}
   setScr(`<div class="panel" style="min-width:720px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">💎 LEŠTIACA STANICA${hasN2?' — Nano Leštička ×3':' — Leštička ×2'}  · ${G.credits} CR</div>
-    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">Leštenie zvyšuje predajnú hodnotu. ★=×2  ★★=×3 (vyžaduje Nano Leštičku)</div>
+    <div class="st">${t('pol_title')}${hasN2?t('pol_nano'):t('pol_basic')}  · ${G.credits} CR</div>
+    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">${t('pol_hint')}</div>
     ${html}
-    <div class="mg g1" style="margin-top:.6rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
+    <div class="mg g1" style="margin-top:.6rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
@@ -1161,11 +1809,11 @@ function doPol(id){const m=MINERALS.find(x=>x.id===id);const s=G.inv[id];
   if(G.credits<cost){sFX('danger');return;}
   G.credits-=cost;s.pl++;G.stats.polished++;
   sFX('polish');flash('rgba(255,224,102,.17)');
-  const lb=s.pl>1?'★★ NANO-LEŠTENÉ':'★ LEŠTENÉ',mult=s.pl>1?3:2;
-  rG([{txt:`💎 LEŠTENIE: ${m.sym} ${m.name} → ${lb}`,cls:'lpol'},
-      {txt:`   Nová hodnota: ${m.v*mult} CR/ks (×${mult})  |  −${cost} CR`,cls:'lpol'},
-      {txt:`   Predaj pre ${mult}× zisk!`,cls:'lok'}]);}
-function showPolErr(c){sFX('danger');rG([{txt:`✗ Chýba ${c-G.credits} CR na leštenie.`,cls:'ldng'}]);}
+  const lb=s.pl>1?t('pol_nano_lbl'):t('pol_polished'),mult=s.pl>1?3:2;
+  rG([{txt:t('pol_done',{sym:m.sym,name:m.name,lbl:lb}),cls:'lpol'},
+      {txt:t('pol_value',{val:m.v*mult,mult,cost}),cls:'lpol'},
+      {txt:t('pol_profit',{mult}),cls:'lok'}]);}
+function showPolErr(c){sFX('danger');rG([{txt:t('pol_no_cr',{n:c-G.credits}),cls:'ldng'}]);}
 
 // ══════════════════════════════════════════════════════════════
 //  MAP
@@ -1179,11 +1827,11 @@ function aMap(){
   const TL=['ROCK','SOIL','LAVA','ICE','DARK','CAVE','VOID','DEEP'];
   setScr(`<div class="panel" style="text-align:center;min-width:580px;">
     ${corners()}
-    <div class="st">🗺  MAPA PLANÉTY ZYRAX-9  (13×13)</div>
-    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.3rem">Navštívené: ${G.visited.size}  ·  Hĺbka: ${G.depthM}m  ·  Táh: ${G.turn}</div>
+    <div class="st">${t('map_title')}</div>
+    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.3rem">${t('map_visited',{n:G.visited.size,m:G.depthM,t:G.turn})}</div>
     <canvas id="mc" width="${W}" height="${H}" style="border:1px solid var(--ad);"></canvas>
-    <div style="font-size:.8rem;color:var(--ad);margin-top:.3rem">◉=TY  ✓=navštívené</div>
-    <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
+    <div style="font-size:.8rem;color:var(--ad);margin-top:.3rem">${t('map_you')}</div>
+    <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
   </div>`);
   const mc=document.getElementById('mc'),mctx=mc.getContext('2d');
   for(let y=0;y<GR;y++)for(let x=0;x<GR;x++){
@@ -1206,11 +1854,11 @@ function aMap(){
 function aLore(){const e=LORE[G.loreIdx%LORE.length];G.loreIdx++;
   setScr(`<div class="panel" style="min-width:660px;">
     ${corners()}
-    <div class="st">📜 ARCHÍVNY ZÁZNAM — PREDCHÁDZAJÚCA POSÁDKA</div>
+    <div class="st">${t('lore_title')}</div>
     <div style="font-size:.92rem;color:var(--ad);margin-bottom:.65rem">── [ ${e[0]} ] ──</div>
-    <div id="lt" style="font-size:1.12rem;line-height:1.82;min-height:90px;white-space:pre-wrap;cursor:pointer;" title="Klikni pre preskoč"></div>
+    <div id="lt" style="font-size:1.12rem;line-height:1.82;min-height:90px;white-space:pre-wrap;cursor:pointer;" title="${t('lore_click_hint')}"></div>
     <div style="margin-top:.9rem;" class="mg g1">
-      <button class="btn bbig" onclick="sFX('click');rG([{txt:'📜 Záznamy... znepokojivé.',cls:'linf'}])">◀  Späť</button>
+      <button class="btn bbig" onclick="sFX('click');rG([{txt:t('lore_back_msg'),cls:'linf'}])">${t('btn_back')}</button>
     </div></div>`);
   const lt=document.getElementById('lt');
   lt.addEventListener('click',()=>{lt.textContent=e[1];});
@@ -1222,47 +1870,50 @@ function aLore(){const e=LORE[G.loreIdx%LORE.length];G.loreIdx++;
 // ══════════════════════════════════════════════════════════════
 function aStat(){
   const iv=[...MINERALS,...MINERALS_4].reduce((s,m)=>{const i=G.inv[m.id];return s+(i&&i.qty?m.v*(i.pl>1?3:i.pl===1?2:1)*i.qty:0);},0);
+  const _statPlanet=G.era===4?curPlanet4().name:G.planet===3?t('planet_col_zyrax8'):G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
   setScr(`<div class="panel" style="min-width:620px;">
     ${corners()}
-    <div class="st">📊 ŠTATISTIKY MISIE</div>
+    <div class="st">${t('stat_title')}</div>
     <div style="font-size:1.05rem;line-height:1.95;">
-      <div><span class="hl">Pilot:         </span>${G.username.toUpperCase()}</div>
-      <div><span class="hl">Kredity:       </span>${G.credits} CR</div>
-      <div><span class="hl">Cieľ:          </span>${G.goal} CR  (${Math.round(G.credits/G.goal*100)}%)</div>
-      <div><span class="hl">HP:            </span>${G.hp}/${G.maxHp}</div>
-      <div><span class="hl">Táh:           </span>${G.turn}</div>
-      <div><span class="hl">Hĺbka:         </span>${G.depthM}m  [L${G.depth} ${curDepthObj().name}]</div>
-      <div><span class="hl">Max hĺbka:     </span>L${G.stats.maxDepth}</div>
+      <div><span class="hl">${t('stat_pilot')}</span>${G.username.toUpperCase()}</div>
+      <div><span class="hl">${t('stat_credits')}</span>${G.credits} CR</div>
+      <div><span class="hl">${t('stat_goal')}</span>${G.goal} CR  (${Math.round(G.credits/G.goal*100)}%)</div>
+      <div><span class="hl">${t('stat_hp')}</span>${G.hp}/${G.maxHp}</div>
+      <div><span class="hl">${t('stat_turn')}</span>${G.turn}</div>
+      <div><span class="hl">${t('stat_depth')}</span>${G.depthM}m  [L${G.depth} ${curDepthObj().name}]</div>
+      <div><span class="hl">${t('stat_maxdepth')}</span>L${G.stats.maxDepth}</div>
       <hr style="border-color:var(--border);margin:.4rem 0">
-      <div><span class="hl">Vyťažené:      </span>${G.stats.mined} ks</div>
-      <div><span class="hl">Predané:       </span>${G.stats.sold} CR</div>
-      <div><span class="hl">Udalosti:      </span>${G.stats.events}</div>
-      <div><span class="hl">Leštenia:      </span>${G.stats.polished}</div>
-      <div><span class="hl">Hodnota inv.:  </span>${iv} CR</div>
-      <div><span class="hl">Sektory:       </span>${G.visited.size}</div>
-      <div><span class="hl">Upgrady:       </span>${G.upgrades.length}/${UPGRADES.length}</div>
-      <div><span class="hl">Zbraň:         </span>${G.weapon?`⚔ ${G.weapon.name}`:'žiadna'}</div>
-      <div><span class="hl">Výskum (RP):   </span>${G.rp} RP</div>
-      <div><span class="hl">Raketa:        </span>${G.rocket?'✓ zostrojená':'✗ nezostrojená'}</div>
-      <div><span class="hl">Planéta:       </span>${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8 Kolonizácia':G.planet===2?'ZYRAX-10':'ZYRAX-9'}</div>
+      <div><span class="hl">${t('stat_mined')}</span>${G.stats.mined} ks</div>
+      <div><span class="hl">${t('stat_sold')}</span>${G.stats.sold} CR</div>
+      <div><span class="hl">${t('stat_events')}</span>${G.stats.events}</div>
+      <div><span class="hl">${t('stat_polished')}</span>${G.stats.polished}</div>
+      <div><span class="hl">${t('stat_invval')}</span>${iv} CR</div>
+      <div><span class="hl">${t('stat_sectors')}</span>${G.visited.size}</div>
+      <div><span class="hl">${t('stat_upgrades')}</span>${G.upgrades.length}/${UPGRADES.length}</div>
+      <div><span class="hl">${t('stat_weapon')}</span>${G.weapon?`⚔ ${G.weapon.name}`:t('stat_no_weapon')}</div>
+      <div><span class="hl">${t('stat_research')}</span>${G.rp} RP</div>
+      <div><span class="hl">${t('stat_rocket')}</span>${G.rocket?t('stat_rocket_yes'):t('stat_rocket_no')}</div>
+      <div><span class="hl">${t('stat_planet')}</span>${_statPlanet}</div>
     </div>
-    <div class="mg g1" style="margin-top:.7rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
+    <div class="mg g1" style="margin-top:.7rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
 // ══════════════════════════════════════════════════════════════
 //  QUIT
 // ══════════════════════════════════════════════════════════════
-function aQuit(){setScr(`<div class="panel" style="text-align:center;min-width:560px;">
+function aQuit(){
+  const _qPlanet=G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8':G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
+  setScr(`<div class="panel" style="text-align:center;min-width:560px;">
   ${corners()}
   <div style="font-size:1.12rem;margin-bottom:1rem;color:var(--ad);">
-    Opustiť ${G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8':G.planet===2?'ZYRAX-10':'ZYRAX-9'}?<br>
-    Máš <span style="color:var(--a)">${G.credits} CR</span>${G.era<4?` z <span style="color:var(--a)">${G.goal} CR</span>`:''}
+    ${t('quit_question',{planet:_qPlanet})}<br>
+    ${t('quit_have')} <span style="color:var(--a)">${G.credits} CR</span>${G.era<4?` ${t('quit_of')} <span style="color:var(--a)">${G.goal} CR</span>`:''}
   </div>
   <div class="mg" style="max-width:500px;margin:0 auto;">
-    <button class="btn btn-s" onclick="sFX('click');sceneSave()">💾 Najprv uložiť</button>
-    <button class="btn btn-d" onclick="sFX('click');confQuit()">🚀 Odletieť</button>
-    <button class="btn" onclick="sFX('click');rG([])">✗ Zostať</button>
+    <button class="btn btn-s" onclick="sFX('click');sceneSave()">${t('quit_save_first')}</button>
+    <button class="btn btn-d" onclick="sFX('click');confQuit()">${t('quit_depart')}</button>
+    <button class="btn" onclick="sFX('click');rG([])">${t('quit_stay')}</button>
   </div>
 </div>`);}
 
@@ -1294,26 +1945,26 @@ function aResearch(){
   let rktSection='';
   if(G.rocket===1){
     rktSection=`<div style="font-size:1rem;color:#ff88ff;text-align:center;border:1px solid #ff88ff44;padding:.5rem;margin:.5rem 0;">
-      ✅ RAKETA ZOSTROJENÁ — pripravená na štart!<br>
-      <small style="color:var(--ad)">Vráť sa do hry a stlač [L] alebo klikni tlačidlo Štart Rakety</small></div>`;
+      ${t('research_rocket_ready')}<br>
+      <small style="color:var(--ad)">${t('research_rocket_hint')}</small></div>`;
   } else if(G.planet===2){
     rktSection=`<div style="font-size:1rem;color:var(--b);text-align:center;padding:.5rem">
-      ★ Nachádzaš sa na ZYRAX-10. Výskum pokračuje...</div>`;
+      ${t('research_on_zyrax10')}</div>`;
   } else {
     rktSection=`<div style="font-size:.92rem;margin:.4rem 0;border:1px solid var(--border);padding:.45rem .6rem;">
-      <div style="color:var(--a);margin-bottom:.3rem">🚀 RAKETA NA ZYRAX-10 — Požiadavky:</div>
-      <div>${ck(rpOk)} Výskumné body: ${G.rp} / ${ROCKET_RP} RP</div>
+      <div style="color:var(--a);margin-bottom:.3rem">${t('research_rocket_req')}</div>
+      <div>${ck(rpOk)} ${t('research_rp')} ${G.rp} / ${ROCKET_RP} RP</div>
       <div>${ck(omOk)} Omega Ore: ${G.inv.omegaore?.qty||0} / ${ROCKET_OMEGA} ks</div>
       <div>${ck(voOk)} Voidcrystal: ${G.inv.voidcrystal?.qty||0} / ${ROCKET_VOID} ks</div>
-      <div>${ck(crOk)} Kredity: ${G.credits} / ${ROCKET_CR} CR</div>
+      <div>${ck(crOk)} ${t('hud_credits')} ${G.credits} / ${ROCKET_CR} CR</div>
     </div>
-    ${canBuild?`<button class="btn" style="width:100%;text-align:center;color:#ff88ff;border-color:#ff88ff44;margin:.3rem 0" onclick="buildRocket()">⚙ ZOSTROJIŤ RAKETU</button>`:''}`;
+    ${canBuild?`<button class="btn" style="width:100%;text-align:center;color:#ff88ff;border-color:#ff88ff44;margin:.3rem 0" onclick="buildRocket()">${t('research_build_rocket')}</button>`:''}`;
   }
   setScr(`<div class="panel" style="min-width:660px;">
     ${corners()}
-    <div class="st">🔬 VÝSKUMNÁ STANICA${G.planet===2?' — ZYRAX-10':' — ZYRAX-9'}</div>
+    <div class="st">${t('research_title')}${G.planet===2?' — ZYRAX-10':' — ZYRAX-9'}</div>
     <div style="font-size:.92rem;color:var(--ad);margin-bottom:.3rem">
-      Výskumné body: <span style="color:var(--b);font-size:1.1rem">${G.rp} RP</span>
+      ${t('research_rp')}<span style="color:var(--b);font-size:1.1rem">${G.rp} RP</span>
       <div style="width:100%;height:8px;background:#0d0d1a;border:1px solid #1a1a33;margin:.25rem 0;overflow:hidden;">
         <div style="height:100%;background:linear-gradient(90deg,#1a1a88,#38d1ff);width:${Math.min(100,G.rp/200*100)}%;transition:width .4s;"></div>
       </div>
@@ -1321,21 +1972,21 @@ function aResearch(){
     ${rktSection}
     <div class="mg g2" style="margin-top:.5rem;">
       <button class="btn btn-b" onclick="sFX('click');doResearch()" ${G.credits<50?'disabled style="opacity:.4;cursor:not-allowed"':''}>
-        🔬 Skúmať  <small style="opacity:.7">(-50 CR, +8~20 RP, 1 táh)</small></button>
-      <button class="btn" onclick="sFX('click');rG([])">◀  Späť</button>
+        ${t('research_btn')}  <small style="opacity:.7">${t('research_cost_hint')}</small></button>
+      <button class="btn" onclick="sFX('click');rG([])">${t('btn_back')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
 function doResearch(){
-  if(G.credits<50){sFX('danger');rG([{txt:'✗ Chýba 50 CR na výskum.',cls:'ldng'}]);return;}
+  if(G.credits<50){sFX('danger');rG([{txt:t('research_no_cr'),cls:'ldng'}]);return;}
   G.credits-=50;G.turn++;
   const rp=Math.floor(Math.random()*13)+8;
   const bonus=Math.random()<.10;
   G.rp+=bonus?rp+30:rp;
-  const logs=[{txt:'🔬 VÝSKUM: Analyzujem vzorky...',cls:'linf'}];
-  if(bonus)logs.push({txt:`  ★ PRIELOM! +${rp+30} RP  (celkom: ${G.rp} RP)`,cls:'lrar'});
-  else logs.push({txt:`  +${rp} RP  (celkom: ${G.rp} RP)  |  −50 CR`,cls:'lok'});
+  const logs=[{txt:t('research_log'),cls:'linf'}];
+  if(bonus)logs.push({txt:t('research_breakthrough',{rp:rp+30,total:G.rp}),cls:'lrar'});
+  else logs.push({txt:t('research_normal',{rp,total:G.rp}),cls:'lok'});
   sFX('find');flash('rgba(56,209,255,.11)');
   rG(logs);}
 
@@ -1347,23 +1998,23 @@ function buildRocket(){
   G.inv.voidcrystal.qty-=ROCKET_VOID;G.inv.voidcrystal.pl=0;
   G.credits-=ROCKET_CR;G.rocket=1;
   sFX('win');flash('rgba(255,136,255,.25)');
-  rG([{txt:'⚙ RAKETA ZOSTROJENÁ! Vráť sa do hry a stlač [L] pre štart.',cls:'lrar'},
-      {txt:'  Spotrebované: 200 RP, 2×Omega Ore, 2×Voidcrystal, 8000 CR',cls:'linf'}]);}
+  rG([{txt:t('rocket_built'),cls:'lrar'},
+      {txt:t('rocket_built_cost'),cls:'linf'}]);}
 
 function aConfirmLaunch(){
   setScr(`<div class="panel" style="text-align:center;min-width:560px;">
     ${corners()}
-    <div style="font-size:1.5rem;color:#ff88ff;text-shadow:0 0 18px #ff88ff;animation:pglow 1.5s infinite;margin-bottom:.8rem;">🚀 ŠTART NA ZYRAX-10</div>
+    <div style="font-size:1.5rem;color:#ff88ff;text-shadow:0 0 18px #ff88ff;animation:pglow 1.5s infinite;margin-bottom:.8rem;">${t('launch_title')}</div>
     <div style="font-size:1.05rem;color:var(--ad);line-height:1.8;margin-bottom:1rem;">
-      Raketa je pripravená.<br>
-      Presunieš sa na <strong style="color:#ff88ff">ZYRAX-10</strong> — novú planétu.<br><br>
-      <span style="color:var(--r)">Nebezpečnejšia (+80% škoda z prostredia)</span><br>
-      Nový cieľ: <strong style="color:var(--a)">30 000 CR</strong><br>
-      Zachováš: kredity, upgrady, zbraň, RP
+      ${t('launch_ready')}<br>
+      ${t('launch_to')} <strong style="color:#ff88ff">ZYRAX-10</strong> — novú planétu.<br><br>
+      <span style="color:var(--r)">${t('launch_danger')}</span><br>
+      ${t('launch_new_goal')}: <strong style="color:var(--a)">30 000 CR</strong><br>
+      ${t('launch_keep')}
     </div>
     <div class="mg g2">
-      <button class="btn" style="color:#ff88ff;border-color:#ff88ff44;font-size:1.2rem" onclick="sFX('win');sceneLaunchRocket()">🚀 ŠTART!</button>
-      <button class="btn" onclick="sFX('click');rG([])">✗ Zrušiť</button>
+      <button class="btn" style="color:#ff88ff;border-color:#ff88ff44;font-size:1.2rem" onclick="sFX('win');sceneLaunchRocket()">${t('launch_btn')}</button>
+      <button class="btn" onclick="sFX('click');rG([])">${t('launch_cancel')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
@@ -1406,9 +2057,9 @@ function arriveZyrax10(){
   G.planet=2;G.goal=30000;G.depth=1;G.depthM=0;G.visited=new Set();
   startAmb();
   showGame([
-    {txt:'★ Pristál si na ZYRAX-10 — planéta BETA-1! Cieľ: 30 000 CR!',cls:'lrar'},
-    {txt:'  Varovanie: Prostredie je 1.8× nebezpečnejšie ako Zyrax-9!',cls:'ldng'},
-    {txt:'  Zachované: kredity, upgrady, zbraň, výskumné body.',cls:'linf'},
+    {txt:t('arrive_zyrax10_1'),cls:'lrar'},
+    {txt:t('arrive_zyrax10_2'),cls:'ldng'},
+    {txt:t('arrive_zyrax10_3'),cls:'linf'},
   ]);}
 
 // ══════════════════════════════════════════════════════════════
@@ -1506,10 +2157,10 @@ function arriveZyrax8(){
   document.getElementById('lbbtn').style.display='inline-block';
   startAmb();
   showGame([
-    {txt:'⊕ Pristál si na ZYRAX-8 — KOLONIZAČNÁ MISIA!',cls:'lrar'},
-    {txt:'  Cieľ: nazbieraj 5× Titanium a 3× Exoternimium.',cls:'linf'},
-    {txt:'  Varovanie: Zyrax-8 je 2.5× nebezpečnejšia ako Zyrax-9!',cls:'ldng'},
-    {txt:'  Nové minerály (tier 5) sa objavujú iba tu.',cls:'linf'},
+    {txt:t('arrive_zyrax8_1'),cls:'lrar'},
+    {txt:t('arrive_zyrax8_2'),cls:'linf'},
+    {txt:t('arrive_zyrax8_3'),cls:'ldng'},
+    {txt:t('arrive_zyrax8_4'),cls:'linf'},
   ]);}
 
 function sceneColonizeWin(){
@@ -1531,11 +2182,11 @@ function sceneColonizeWin(){
       <div style="font-size:1rem;color:#ff44aa;text-shadow:0 0 10px #ff44aa;margin-bottom:.7rem;letter-spacing:.1em;">
         ZYRAX-8 · VAŠA VLASTNÁ PLANÉTA</div>
       <div id="cwt" style="font-size:1.08rem;line-height:1.82;white-space:pre-wrap;min-height:120px;cursor:pointer;"></div>
-      <div style="margin-top:.6rem;font-size:1.4rem;color:#99ddff;">SKÓRE:  ${score}  <small style="color:var(--ad);font-size:.7em">+3000 KOLONIZAČNÝ BONUS</small></div>
-      <div style="font-size:.9rem;color:var(--ad);margin-top:.2rem">Skóre uložené do Leaderboardu!</div>
+      <div style="margin-top:.6rem;font-size:1.4rem;color:#99ddff;">${t('score_label')} ${score}  <small style="color:var(--ad);font-size:.7em">+3000 KOLONIZAČNÝ BONUS</small></div>
+      <div style="font-size:.9rem;color:var(--ad);margin-top:.2rem">${t('score_saved')}</div>
       <div style="margin-top:.9rem;" class="mg g2">
         <button class="btn bbig" style="color:#ff88ff;border-color:#ff88ff" onclick="sFX('win');sceneUpdate4Intro()">🚀 UPDATE 4.0 — Pokračovať!</button>
-        <button class="btn btn-b" style="text-align:center" onclick="sFX('click');aLead()">🏆 Leaderboard</button>
+        <button class="btn btn-b" style="text-align:center" onclick="sFX('click');aLead()">${t('leaderboard')}</button>
       </div>
       <div style="font-size:.85rem;color:var(--ad);margin-top:.4rem">alebo: <a href="#" onclick="sFX('click');sceneTitle(PILOT);return false" style="color:var(--ad)">Ukončiť do menu</a></div>
     </div>
@@ -1603,18 +2254,18 @@ function startEra4(withCorp){
   for(const m of MINERALS_4)if(!G.inv[m.id])G.inv[m.id]={qty:0,pl:0};
   sFX('win');flash('rgba(255,136,255,.25)');
   showGame([
-    {txt:`★ VÍTAJ V UPDATE 4.0 — GALAKTICKÁ EXPANZIA ★`,cls:'lrar'},
-    {txt:`  Základňa: Zyrax-8  ·  Kolónia aktívna`,cls:'linf'},
+    {txt:t('era4_start_1'),cls:'lrar'},
+    {txt:t('era4_start_2'),cls:'linf'},
     withCorp
-      ?{txt:`  NOVA CORP partnerstvo: −400 CR/ťah. Logistika zabezpečená.`,cls:'lwarn'}
-      :{txt:`  Samostatná kolónia. Musíš riadiť jedlo, energiu a pracovníkov sám.`,cls:'lwarn'},
-    {txt:`  Nové tlačidlá: [C] Kolónia  [P] Planéty  [N] NOVA Corp`,cls:'linf'},
+      ?{txt:t('era4_corp_yes'),cls:'lwarn'}
+      :{txt:t('era4_corp_no'),cls:'lwarn'},
+    {txt:t('era4_new_btns'),cls:'linf'},
   ]);}
 
 function curPlanet4(){return PLANETS_4.find(p=>p.id===G.currentPlanet4)||PLANETS_4[0];}
 
 function aColony(){
-  if(G.era<4){rG([{txt:'✗ Kolónia sa odomkne v Update 4.0.',cls:'ldng'}]);return;}
+  if(G.era<4){rG([{txt:t('era4_colony_locked'),cls:'ldng'}]);return;}
   const c=G.colony;
   const workerBonus=Math.min(5,Math.floor(c.workers/2));
   const foodPerTurn=c.workers;
@@ -1628,30 +2279,30 @@ function aColony(){
       <span style="color:${col};font-size:.88rem;white-space:nowrap">${v}/${max}</span></div>`;};
   setScr(`<div class="panel" style="min-width:700px;">
     ${corners()}
-    <div class="st">🏗 KOLÓNIA NOVA-${G.username.toUpperCase()}-1 &mdash; ZYRAX-8</div>
+    <div class="st">${t('colony_title',{name:G.username.toUpperCase()})}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 1.2rem;font-size:1rem;margin-bottom:.5rem">
-      <div><span class="hl">👷 Pracovníci:</span> ${c.workers}/${c.housing} <small style="color:var(--ad)">(+${workerBonus} ťažba/ťah)</small></div>
-      <div><span class="hl">🏠 Obydlia:</span> ${c.housing}</div>
-      <div style="color:${foodWarn?'var(--r)':'inherit'}"><span class="hl">🍞 Jedlo:</span> ${c.food} <small style="color:var(--ad)">(−${foodPerTurn}/ťah)</small>
+      <div><span class="hl">${t('colony_workers')}</span> ${c.workers}/${c.housing} <small style="color:var(--ad)">(${t('colony_worker_bonus',{n:workerBonus})})</small></div>
+      <div><span class="hl">${t('colony_housing')}</span> ${c.housing}</div>
+      <div style="color:${foodWarn?'var(--r)':'inherit'}"><span class="hl">${t('colony_food')}</span> ${c.food} <small style="color:var(--ad)">(${t('colony_food_per_turn',{n:foodPerTurn})})</small>
         ${bar(c.food,200,'#aadd44')}</div>
-      <div style="color:${energyWarn?'var(--r)':'inherit'}"><span class="hl">⚡ Energia:</span> ${c.energy} <small style="color:var(--ad)">(−${energyPerTurn}/ťah)</small>
+      <div style="color:${energyWarn?'var(--r)':'inherit'}"><span class="hl">${t('colony_energy')}</span> ${c.energy} <small style="color:var(--ad)">(${t('colony_energy_per_turn',{n:energyPerTurn})})</small>
         ${bar(c.energy,200,'#38d1ff')}</div>
-      <div><span class="hl">💊 Medicina:</span> ${c.medicine} <small style="color:var(--ad)">(−HP mod)</small>
+      <div><span class="hl">${t('colony_medicine')}</span> ${c.medicine} <small style="color:var(--ad)">${t('colony_medicine_hint')}</small>
         ${bar(c.medicine,100,'#ff69ff')}</div>
-      <div><span class="hl">🚀 Palivo:</span> ${c.fuel} <small style="color:var(--ad)">(cestovanie)</small>
+      <div><span class="hl">${t('colony_fuel')}</span> ${c.fuel} <small style="color:var(--ad)">${t('colony_fuel_hint')}</small>
         ${bar(c.fuel,100,'#ff9944')}</div>
     </div>
-    ${foodWarn?'<div style="color:var(--r);font-size:.9rem">⚠ Jedlo dochádzajúce! Kúp v obchode [3].</div>':''}
-    ${energyWarn?'<div style="color:var(--r);font-size:.9rem">⚠ Energia dochádzajúca! Kúp v obchode [3].</div>':''}
-    <div style="font-size:.85rem;color:var(--ad);margin:.4rem 0">Pracovníci spotrebúvajú jedlo a energiu každý ťah. Viac pracovníkov = viac minerálov.</div>
+    ${foodWarn?`<div style="color:var(--r);font-size:.9rem">${t('colony_food_warn')}</div>`:''}
+    ${energyWarn?`<div style="color:var(--r);font-size:.9rem">${t('colony_energy_warn')}</div>`:''}
+    <div style="font-size:.85rem;color:var(--ad);margin:.4rem 0">${t('colony_hint')}</div>
     <div class="mg g1" style="margin-top:.5rem;">
-      <button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button>
+      <button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
 function aPlanetTravel(){
-  if(G.era<4){rG([{txt:'✗ Cestovanie medzi planétami sa odomkne v Update 4.0.',cls:'ldng'}]);return;}
+  if(G.era<4){rG([{txt:t('era4_travel_locked'),cls:'ldng'}]);return;}
   let html='';
   for(const p of PLANETS_4){
     const isCurrent=p.id===G.currentPlanet4;
@@ -1664,10 +2315,10 @@ function aPlanetTravel(){
         <small style="color:var(--ad);margin-left:.5rem">${isLocked?'🔒 UZAMKNUTÉ':p.desc}</small>
       </span>
       <span style="font-size:.9rem;color:${isCurrent?'var(--g)':isLocked?'var(--r)':canAfford?'var(--a)':'var(--r)'}">
-        ${isCurrent?'◉ TU'
-          :isLocked?'Odomkni výskumom'
-          :p.travelCR===0?'ZÁKLADŇA'
-          :`${p.travelCR} CR + ${fuelNeed} palivo`}</span></div>`;
+        ${isCurrent?t('travel_here')
+          :isLocked?t('travel_locked_btn')
+          :p.travelCR===0?t('travel_base')
+          :t('travel_cost',{cr:p.travelCR,fuel:fuelNeed})}</span></div>`;
   }
   // Omega unlock panel
   let omegaHtml='';
@@ -1675,18 +2326,18 @@ function aPlanetTravel(){
     const canOmega=G.rp>=500&&G.credits>=20000;
     omegaHtml=`<div style="margin-top:.6rem;padding:.5rem .7rem;border:1px solid #dd00ff44;background:#1a001a;border-radius:4px;font-size:.88rem;">
       <div style="color:#dd00ff;font-weight:bold;margin-bottom:.3rem">🔓 ODOMKNUTIE OMEGA-VII</div>
-      <div style="color:${G.rp>=500?'var(--g)':'var(--r)'}">  ${G.rp>=500?'✓':'✗'} Výskum: ${G.rp} / 500 RP &nbsp;<span style="color:var(--ad)">(získaj cez [R] Výskum)</span></div>
-      <div style="color:${G.credits>=20000?'var(--g)':'var(--r)'}">  ${G.credits>=20000?'✓':'✗'} Kredity: ${G.credits} / 20 000 CR</div>
-      ${canOmega?`<button class="btn" style="margin-top:.4rem;color:#dd00ff;border-color:#dd00ff44" onclick="sFX('click');buyOmegaUnlock();aPlanetTravel()">🔓 Odomknúť OMEGA-VII</button>`:'<div style="color:var(--ad);margin-top:.3rem;font-size:.82rem">Splň obe podmienky pre odomknutie.</div>'}
+      <div style="color:${G.rp>=500?'var(--g)':'var(--r)'}">  ${G.rp>=500?'✓':'✗'} ${t('omega_req_rp',{rp:G.rp})} &nbsp;<span style="color:var(--ad)">(získaj cez [R] Výskum)</span></div>
+      <div style="color:${G.credits>=20000?'var(--g)':'var(--r)'}">  ${G.credits>=20000?'✓':'✗'} ${t('omega_req_cr',{cr:G.credits})}</div>
+      ${canOmega?`<button class="btn" style="margin-top:.4rem;color:#dd00ff;border-color:#dd00ff44" onclick="sFX('click');buyOmegaUnlock();aPlanetTravel()">${t('omega_unlock_btn')}</button>`:`<div style="color:var(--ad);margin-top:.3rem;font-size:.82rem">${t('omega_meet_conds')}</div>`}
     </div>`;
   }
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">🪐 MAPA GALAXIE &mdash; Aktuálna: <span style="color:${curPlanet4().col}">${curPlanet4().name}</span></div>
-    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">Palivo: 🚀 ${G.colony.fuel}  ·  Kredity: ${G.credits} CR  ·  Výskum: ${G.rp} RP</div>
+    <div class="st">${t('travel_title')}<span style="color:${curPlanet4().col}">${curPlanet4().name}</span></div>
+    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">${t('travel_fuel_cr',{fuel:G.colony.fuel,cr:G.credits,rp:G.rp})}</div>
     ${html}
     ${omegaHtml}
-    <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">◀  Späť</button></div>
+    <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
@@ -1694,36 +2345,34 @@ function doTravel(planetId){
   const p=PLANETS_4.find(x=>x.id===planetId);if(!p)return;
   const fuelNeed=p.travelCR>0?5:0;
   if(G.credits<p.travelCR||G.colony.fuel<fuelNeed){
-    sFX('danger');rG([{txt:`✗ Nedostatok CR alebo paliva na cestu!`,cls:'ldng'}]);return;}
+    sFX('danger');rG([{txt:t('travel_no_cr_fuel'),cls:'ldng'}]);return;}
   G.credits-=p.travelCR;G.colony.fuel-=fuelNeed;
   G.currentPlanet4=planetId;G.depth=1;G.depthM=0;
   sFX('depth');flash(p.col+'22');
-  rG([{txt:`🚀 Letiš na ${p.name}...`,cls:'lrar'},
-      {txt:`  Výdavky: ${p.travelCR} CR + ${fuelNeed} palivo`,cls:'lwarn'},
+  rG([{txt:t('travel_flying',{planet:p.name}),cls:'lrar'},
+      {txt:t('travel_expenses',{cr:p.travelCR,fuel:fuelNeed}),cls:'lwarn'},
       {txt:`  ${p.desc}`,cls:'linf'}]);}
 
 function aCorpDashboard(){
-  if(G.era<4){rG([{txt:'✗ NOVA Corp dashboard v Update 4.0.',cls:'ldng'}]);return;}
+  if(G.era<4){rG([{txt:t('era4_corp_locked'),cls:'ldng'}]);return;}
   const fee=G.corpFee;
   setScr(`<div class="panel" style="min-width:680px;">
     ${corners()}
-    <div class="st">🏢 NOVA MINING CORP. &mdash; DASHBOARD</div>
+    <div class="st">${t('corp_title')}</div>
     <div style="font-size:1rem;line-height:2;">
-      <div><span class="hl">Zmluva:    </span>${G.corpContract?`<span style="color:var(--g)">✓ AKTÍVNA</span>`:`<span style="color:var(--r)">✗ NEAKTÍVNA</span>`}</div>
-      <div><span class="hl">Poplatok:  </span>${fee>0?`<span style="color:var(--r)">${fee} CR/ťah</span>`:'<span style="color:var(--g)">žiadny</span>'}</div>
-      <div><span class="hl">Výhody:    </span>${G.corpContract?'Logistika · Zásoby · +15% minerálov':'—'}</div>
+      <div><span class="hl">${t('corp_contract')}</span>${G.corpContract?`<span style="color:var(--g)">${t('corp_active')}</span>`:`<span style="color:var(--r)">${t('corp_inactive')}</span>`}</div>
+      <div><span class="hl">${t('corp_fee')}</span>${fee>0?`<span style="color:var(--r)">${fee} CR/ťah</span>`:`<span style="color:var(--g)">${t('corp_no_fee')}</span>`}</div>
+      <div><span class="hl">${t('corp_benefits')}</span>${G.corpContract?t('corp_benefits_yes'):t('corp_benefits_no')}</div>
     </div>
     <hr style="border-color:var(--border);margin:.6rem 0">
     <div style="font-size:.9rem;color:var(--ad);margin-bottom:.5rem">
-      ${G.corpContract
-        ?'NOVA Corp riadi logistiku tvojej kolónie. Môžeš zmluvu kedykoľvek ukončiť — potom musíš jedlo, energiu a obydlia kupovať sám.'
-        :'Bez zmluvy si samostatný. Musíš sám manažovať zásoby. Zmluva stojí 400 CR/ťah.'}
+      ${G.corpContract?t('corp_desc_active'):t('corp_desc_inactive')}
     </div>
     <div class="mg g2">
       ${G.corpContract
-        ?`<button class="btn btn-d" onclick="sFX('danger');G.corpContract=false;G.corpFee=0;rG([{txt:'✗ Zmluva s NOVA Corp ukončená. Teraz si na vlastnú päsť.',cls:'ldng'}])">✗ Ukončiť zmluvu</button>`
-        :`<button class="btn btn-s" onclick="sFX('buy');G.corpContract=true;G.corpFee=400;rG([{txt:'✓ Zmluva s NOVA Corp aktivovaná. Poplatok: 400 CR/ťah.',cls:'lok'}])">✓ Aktivovať zmluvu (400 CR/ťah)</button>`}
-      <button class="btn" onclick="sFX('click');rG([])">◀  Späť</button>
+        ?`<button class="btn btn-d" onclick="sFX('danger');G.corpContract=false;G.corpFee=0;rG([{txt:t('corp_terminated'),cls:'ldng'}])">${t('corp_terminate')}</button>`
+        :`<button class="btn btn-s" onclick="sFX('buy');G.corpContract=true;G.corpFee=400;rG([{txt:t('corp_activated'),cls:'lok'}])">${t('corp_activate')}</button>`}
+      <button class="btn" onclick="sFX('click');rG([])">${t('btn_back')}</button>
     </div>
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
@@ -1754,13 +2403,13 @@ function sceneEnd(win,msg,score){
     ${corners()}${sh}
     <div style="position:relative;z-index:2;">
       <div style="font-size:2.6rem;${win?'color:var(--g)':'color:var(--r)'};text-shadow:0 0 18px currentColor;animation:pglow 1.5s infinite;margin-bottom:.6rem;">
-        ${win?'★  VÍŤAZSTVO!  ★':'✗  GAME OVER  ✗'}</div>
+        ${win?t('win_title'):t('lose_title')}</div>
       <div id="et" style="font-size:1.1rem;line-height:1.85;white-space:pre-wrap;min-height:90px;"></div>
-      <div style="margin-top:.6rem;font-size:1.3rem;color:${win?'var(--g)':'var(--a)'};">SKÓRE:  ${score}</div>
-      <div style="font-size:.9rem;color:var(--ad);margin-top:.2rem">Skóre uložené do Leaderboardu!</div>
+      <div style="margin-top:.6rem;font-size:1.3rem;color:${win?'var(--g)':'var(--a)'};">${t('score_label')} ${score}</div>
+      <div style="font-size:.9rem;color:var(--ad);margin-top:.2rem">${t('score_saved')}</div>
       <div id="eb" style="margin-top:.9rem;" class="mg g2">
-        <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">🏠 Hlavné menu</button>
-        <button class="btn btn-b" style="grid-column:auto;text-align:center" onclick="sFX('click');aLead()">🏆 Leaderboard</button>
+        <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">${t('main_menu')}</button>
+        <button class="btn btn-b" style="grid-column:auto;text-align:center" onclick="sFX('click');aLead()">${t('leaderboard')}</button>
       </div>
     </div></div>`);
   const et=document.getElementById('et');
@@ -1781,7 +2430,7 @@ function sceneBoot(pilot){
       <button onclick="sceneTitle('${pilot}')" style="background:#0d0a00;border:2px solid var(--a);color:var(--a);
         font-family:'VT323',monospace;font-size:1.4rem;padding:.5rem 2.5rem;cursor:pointer;
         animation:pglow 1s infinite;letter-spacing:.12em;">
-        ▶  POKRAČOVAŤ
+        ${t('boot_continue')}
       </button>
     </div>
   </div>`);
@@ -1865,15 +2514,15 @@ function sceneTitle(pilot){
     ${corners()}
     <pre style="font-size:.54rem;line-height:1.1;color:var(--a);animation:pglow 2.5s infinite;margin-bottom:.6rem;">${asc}</pre>
     <div style="font-size:.88rem;color:var(--ad);letter-spacing:.12em;margin-bottom:1rem;">
-      (c) 1987  NOVA SOFT  ·  v4.8 ENHANCED  ·  CIEĽ: 15 000 CR  ·  5 ÚROVNÍ HĹBKY
+      ${t('goal_info')}
     </div>
     <div class="mg" style="max-width:500px;margin:0 auto;">
-      <button class="btn bbig" onclick="sFX('click');sceneStory('${pilot}')">▶  NOVÁ MISIA — ZYRAX-9</button>
+      <button class="btn bbig" onclick="sFX('click');sceneStory('${pilot}')">${t('new_mission')}</button>
       ${hasSave
-        ? `<button class="btn btn-s" style="grid-column:1/-1;text-align:center;font-size:1.2rem;padding:.48rem;" onclick="sFX('click');sceneLoad()">📂  POKRAČOVAŤ — NAČÍTAŤ HRU</button>`
+        ? `<button class="btn btn-s" style="grid-column:1/-1;text-align:center;font-size:1.2rem;padding:.48rem;" onclick="sFX('click');sceneLoad()">${t('continue_load')}</button>`
         : ''}
-      <button class="btn btn-b" style="text-align:center;" onclick="sFX('click');aLead()">🏆 Leaderboard</button>
-      <button class="btn" style="text-align:center;" onclick="sFX('click');sceneHowTo()">❓ Ako hrať</button>
+      <button class="btn btn-b" style="text-align:center;" onclick="sFX('click');aLead()">${t('leaderboard')}</button>
+      <button class="btn" style="text-align:center;" onclick="sFX('click');sceneHowTo()">${t('how_to_play')}</button>
     </div>
   </div>`);
   document.onkeydown=null;
@@ -1903,12 +2552,12 @@ Spoločnosť ti verí.
 
   setScr(`<div class="panel" style="min-width:720px;">
     ${corners()}
-    <div style="color:var(--ad);font-size:.88rem;letter-spacing:.17em;margin-bottom:.7rem;">── GALAKTICKÝ DÁTUM: 2387.156  ──  SEKTOR OUTER RIM ──</div>
-    <div id="stxt" style="font-size:1.14rem;line-height:1.82;min-height:240px;white-space:pre-wrap;cursor:pointer;" title="Klikni pre preskoč"></div>
+    <div style="color:var(--ad);font-size:.88rem;letter-spacing:.17em;margin-bottom:.7rem;">${t('story_date')}</div>
+    <div id="stxt" style="font-size:1.14rem;line-height:1.82;min-height:240px;white-space:pre-wrap;cursor:pointer;" title="${t('lore_click_hint')}"></div>
     <div id="sbtn" style="margin-top:.7rem;" class="mg g1">
-      <button class="btn bbig" onclick="sFX('click');sceneLanding('${pilot}')">▶  VSTUP DO ATMOSFÉRY ZYRAX-9</button>
+      <button class="btn bbig" onclick="sFX('click');sceneLanding('${pilot}')">${t('landing_enter')}</button>
       <div style="text-align:center;font-size:.85rem;color:var(--ad);margin-top:.3rem">
-        (klikni na text pre rýchle prečítanie)
+        ${t('landing_click_hint')}
       </div>
     </div>
   </div>`);
@@ -1935,7 +2584,7 @@ function sceneLanding(pilot){
     <div id="shipbox" style="font-size:.9rem;line-height:1.32;white-space:pre;color:var(--a);min-height:190px;text-shadow:0 0 10px var(--a);"></div>
     <div id="landmsg" style="font-size:1.08rem;margin-top:.5rem;min-height:1.7rem;"></div>
     <div id="landbtn" style="margin-top:.85rem;display:none;" class="mg g1">
-      <button class="btn bbig" onclick="sFX('click');startGameFromScene('${pilot}')">⛏  VSTÚPIŤ DO BANE  ALPHA-7</button>
+      <button class="btn bbig" onclick="sFX('click');startGameFromScene('${pilot}')">${t('enter_mine_zyrax9')}</button>
     </div>
   </div>`);
 
@@ -1972,7 +2621,7 @@ function startGameFromScene(pilot){
   PILOT=pilot;
   newGame(pilot);
   startAmb();
-  showGame([{txt:'★ Pristál si na Zyrax-9. Baňa Alpha-7 ťa čaká. Cieľ: 15 000 CR!',cls:'linf'}]);
+  showGame([{txt:t('start_log'),cls:'linf'}]);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1988,19 +2637,19 @@ function applyLayout(mode){
 function _showLayoutSelect(next){
   rG([`<div style="text-align:center;padding:1.2rem 0">
     <div style="font-size:1.5rem;color:var(--a);letter-spacing:.1em;margin-bottom:1.2rem">
-      ⚙ VYBER ZOBRAZENIE
+      ${t('layout_title')}
     </div>
     <div style="font-size:1rem;color:var(--ad);margin-bottom:1.6rem">
-      Aké zariadenie používaš? Môžeš to kedykoľvek zmeniť v nastaveniach.
+      ${t('layout_hint')}
     </div>
     <div class="mg g2" style="max-width:420px;margin:0 auto">
       <button class="btn bbig" style="font-size:1.4rem;padding:.9rem;border-color:var(--b);color:var(--b)"
         onclick="applyLayout('mobile');${next}">
-        📱<br><span style="font-size:1rem;color:var(--ad)">MOBIL</span>
+        📱<br><span style="font-size:1rem;color:var(--ad)">${t('layout_mobile')}</span>
       </button>
       <button class="btn bbig" style="font-size:1.4rem;padding:.9rem;border-color:var(--a);color:var(--a)"
         onclick="applyLayout('pc');${next}">
-        🖥️<br><span style="font-size:1rem;color:var(--ad)">POČÍTAČ</span>
+        🖥️<br><span style="font-size:1rem;color:var(--ad)">${t('layout_pc')}</span>
       </button>
     </div>
   </div>`]);
@@ -2022,7 +2671,7 @@ if (_startSlot) {
       startAmb();
       document.getElementById('qsbtn').style.display = 'inline-block';
       document.getElementById('lbbtn').style.display = 'inline-block';
-      showGame([{txt:`📂 Hra načítaná — Vitaj späť, ${G.username}!`, cls:'linf'}]);
+      showGame([{txt:t('game_loaded_slot',{name:G.username}), cls:'linf'}]);
     } else if (_loadRetries++ < 20) {
       setTimeout(_tryLoadSlot, 250); // čakaj na fetch, max 5s
     } else {
