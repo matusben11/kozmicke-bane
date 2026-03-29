@@ -878,58 +878,77 @@ pre.hang{font-size:1.1em;line-height:1.3;color:#a07000;margin-bottom:12px;}
 </style>
 """
 
-MINI_CISLO_HTML = (
-    MINI_BASE_CSS
-    + """
+def build_cislo_html():
+    title   = L("HÁDANIE ČÍSLA", "NUMBER GUESSING")
+    info    = L("Hádám číslo od 1 do 100. Máš 7 pokusov.", "I'm thinking of a number from 1 to 100. You have 7 tries.")
+    ph      = L("Zadaj číslo 1-100", "Enter number 1-100")
+    btn_g   = L("▶ HÁDAJ", "▶ GUESS")
+    btn_ag  = L("↺ Hrať znova", "↺ Play again")
+    btn_lb  = L("← Lobby", "← Lobby")
+    msg_inv = L("Zadaj číslo 1-100!", "Enter a number 1-100!")
+    msg_ok  = L("🎉 Správne za {a} pokusov! +{sc} bodov", "🎉 Correct in {a} tries! +{sc} points")
+    msg_lo  = L("💀 Číslo bolo {s}. Nahráš znova?", "💀 The number was {s}. Try again?")
+    hint_hi = L("📈 Viac!", "📈 Higher!")
+    hint_lo = L("📉 Menej!", "📉 Lower!")
+    att_lbl = L("Pokus {a}/7 — {h}", "Attempt {a}/7 — {h}")
+    end_ok  = L("+{sc} bodov pridaných!", "+{sc} points added!")
+    end_no  = L("Žiadne body tentokrát.", "No points this time.")
+    return (
+        MINI_BASE_CSS
+        + f"""
 <div class="card">
-  <h2>&#128290; H&#193;DANIE &#268;&#205;SLA</h2>
-  <div class="info" id="info">Had&#225;m &#269;&#237;slo od 1 do 100. M&#225;&#353; 7 pokusov.</div>
+  <h2>&#128290; {title}</h2>
+  <div class="info" id="info">{info}</div>
   <div id="msg"></div>
   <div id="gameArea">
-    <input type="number" id="inp" min="1" max="100" placeholder="Zadaj &#269;&#237;slo 1-100" onkeydown="if(event.key==='Enter')guess()">
-    <button class="btn" onclick="guess()">&#9654; H&#193;DA&#356;</button>
+    <input type="number" id="inp" min="1" max="100" placeholder="{ph}" onkeydown="if(event.key==='Enter')guess()">
+    <button class="btn" onclick="guess()">{btn_g}</button>
   </div>
   <div id="result" style="display:none">
     <div class="score-msg" id="scoreMsg"></div>
-    <a href="/mini/cislo" class="btn" style="margin-top:14px">&#8635; Hr&#225;&#357; znova</a>
-    <a href="/lobby" class="btn btn-back" style="margin-top:6px">&#8592; Lobby</a>
+    <a href="/mini/cislo" class="btn" style="margin-top:14px">{btn_ag}</a>
+    <a href="/lobby" class="btn btn-back" style="margin-top:6px">{btn_lb}</a>
   </div>
 </div>
 <script>
 const secret = Math.floor(Math.random()*100)+1;
 let attempts = 0, done = false;
-function guess() {
+const MSG_INV={_json.dumps(msg_inv)}, MSG_OK={_json.dumps(msg_ok)}, MSG_LO={_json.dumps(msg_lo)};
+const HINT_HI={_json.dumps(hint_hi)}, HINT_LO={_json.dumps(hint_lo)};
+const ATT_LBL={_json.dumps(att_lbl)}, END_OK={_json.dumps(end_ok)}, END_NO={_json.dumps(end_no)};
+function fmt(s,v){{for(const[k,val]of Object.entries(v))s=s.replaceAll('{{'+k+'}}',val);return s;}}
+function guess() {{
   if (done) return;
   const v = parseInt(document.getElementById('inp').value);
-  if (!v || v<1 || v>100) { setMsg('Zadaj &#269;&#237;slo 1-100!','err'); return; }
+  if (!v || v<1 || v>100) {{ setMsg(MSG_INV,'err'); return; }}
   attempts++;
-  if (v === secret) {
+  if (v === secret) {{
     const sc = Math.max(100-(attempts-1)*12, 10);
     done = true;
-    setMsg('&#127881; Spr&#225;vne za '+attempts+' pokusov! +'+sc+' bodov','ok');
+    setMsg(fmt(MSG_OK,{{a:attempts,sc}}),'ok');
     endGame(sc);
-  } else if (attempts >= 7) {
+  }} else if (attempts >= 7) {{
     done = true;
-    setMsg('&#128128; &#268;&#237;slo bolo '+secret+'. Nahr&#225;&#353; znova?','err');
+    setMsg(fmt(MSG_LO,{{s:secret}}),'err');
     endGame(0);
-  } else {
-    const hint = v < secret ? '&#128200; Viac!' : '&#128201; Menej!';
-    setMsg('Pokus '+attempts+'/7 &mdash; '+hint,'hint');
-  }
+  }} else {{
+    const h = v < secret ? HINT_HI : HINT_LO;
+    setMsg(fmt(ATT_LBL,{{a:attempts,h}}),'hint');
+  }}
   document.getElementById('inp').value='';
   document.getElementById('inp').focus();
-}
-function setMsg(t,cls){const m=document.getElementById('msg');m.innerHTML='<div class="msg '+cls+'">'+t+'</div>';}
-function endGame(sc){
+}}
+function setMsg(t,cls){{const m=document.getElementById('msg');m.innerHTML='<div class="msg '+cls+'">'+t+'</div>';}}
+function endGame(sc){{
   document.getElementById('gameArea').style.display='none';
   const r=document.getElementById('result'); r.style.display='block';
-  document.getElementById('scoreMsg').innerHTML=(sc>0?'+'+sc+' bodov pridan&#253;ch!':'&#381;iadne body tentokr&#225;t.');
-  if(sc>0) fetch('/api/update_score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({score:sc,game:'cislo'})});
-}
+  document.getElementById('scoreMsg').innerHTML=(sc>0?fmt(END_OK,{{sc}}):END_NO);
+  if(sc>0) fetch('/api/update_score',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{score:sc,game:'cislo'}})}});
+}}
 document.getElementById('inp').focus();
 </script>
 """
-)
+    )
 
 HANGMAN_STAGES = [
     "   \u250c\u2500\u2500\u2500\u2510\n   \u2502   \u2502\n       \u2502\n       \u2502\n   \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550",
@@ -942,15 +961,18 @@ HANGMAN_STAGES = [
 ]
 
 HANGMAN_WORDS = [
-    ("python", "Programovaci jazyk"),
-    ("astronaut", "Cestovatel vesmírom"),
-    ("planety", "Kozmicke telesa"),
-    ("detektor", "Hladacie zariadenie"),
-    ("robotika", "Veda o robotoch"),
-    ("gravitacia", "Pritazlivost"),
-    ("kristal", "Priehladny mineral"),
-    ("vrtacka", "Tazobne zariadenie"),
-    ("asteroid", "Kozmicka hornina"),
+    ("python",     "Programovaci jazyk",      "Programming language"),
+    ("astronaut",  "Cestovatel vesmírom",      "Space traveler"),
+    ("planety",    "Kozmicke telesa",          "Cosmic bodies"),
+    ("detektor",   "Hladacie zariadenie",      "Scanning device"),
+    ("robotika",   "Veda o robotoch",          "Science of robots"),
+    ("gravitacia", "Pritazlivost",             "Force of attraction"),
+    ("kristal",    "Priehladny mineral",       "Transparent mineral"),
+    ("vrtacka",    "Tazobne zariadenie",       "Mining equipment"),
+    ("asteroid",   "Kozmicka hornina",         "Space rock"),
+    ("laser",      "Svetelna zbran",           "Light weapon"),
+    ("reaktor",    "Zdroj energie",            "Energy source"),
+    ("mineral",    "Hornina z bane",           "Rock from mine"),
 ]
 
 import json as _json
@@ -958,28 +980,44 @@ import json as _json
 
 def build_obesenec_html():
     import random
-    word, hint = random.choice(HANGMAN_WORDS)
+    lang = session.get('lang', 'sk')
+    word, hint_sk, hint_en = random.choice(HANGMAN_WORDS)
+    hint = hint_en if lang == 'en' else hint_sk
     stages_js = _json.dumps(HANGMAN_STAGES)
+    title    = L("OBESENEC", "HANGMAN")
+    hint_lbl = L("Nápoveda", "Hint")
+    err_lbl  = L("Chyby", "Errors")
+    btn_ag   = L("↺ Hrať znova", "↺ Play again")
+    btn_lb   = L("← Lobby", "← Lobby")
+    msg_win  = L("🎉 {w}! +{sc} bodov", "🎉 {w}! +{sc} points")
+    msg_lose = L("💀 Slovo bolo: {w}", "💀 The word was: {w}")
+    end_ok   = L("+{sc} bodov pridaných!", "+{sc} points added!")
+    end_no   = L("Žiadne body tentokrát.", "No points this time.")
+    abc      = 'abcdefghijklmnopqrstuvwxyz' if lang == 'en' else 'aábcčdďeéfghiíjklľmnňoópqrŕsštťuúvwxyýzž'
     return (
         MINI_BASE_CSS
         + f"""
 <div class="card">
-  <h2>&#128279; OBESENEC</h2>
+  <h2>&#128279; {title}</h2>
   <pre class="hang" id="hang"></pre>
   <div class="word" id="word"></div>
-  <div class="info">N&#225;poveda: <span style="color:#a07000">{hint}</span></div>
-  <div class="wrong" id="wrong">Chyby (0/6): &mdash;</div>
+  <div class="info">{hint_lbl}: <span style="color:#a07000">{hint}</span></div>
+  <div class="wrong" id="wrong">{err_lbl} (0/6): &mdash;</div>
   <div id="msg"></div>
   <div class="letters" id="letters"></div>
   <div id="result" style="display:none">
     <div class="score-msg" id="scoreMsg"></div>
-    <a href="/mini/obesenec" class="btn" style="margin-top:14px">&#8635; Hr&#225;&#357; znova</a>
-    <a href="/lobby" class="btn btn-back" style="margin-top:6px">&#8592; Lobby</a>
+    <a href="/mini/obesenec" class="btn" style="margin-top:14px">{btn_ag}</a>
+    <a href="/lobby" class="btn btn-back" style="margin-top:6px">{btn_lb}</a>
   </div>
 </div>
 <script>
 const WORD = {_json.dumps(word)};
 const STAGES = {stages_js};
+const ERR_LBL = {_json.dumps(err_lbl)};
+const MSG_WIN = {_json.dumps(msg_win)}, MSG_LOSE = {_json.dumps(msg_lose)};
+const END_OK = {_json.dumps(end_ok)}, END_NO = {_json.dumps(end_no)};
+function fmt(s,v){{for(const[k,val]of Object.entries(v))s=s.replaceAll('{{'+k+'}}',val);return s;}}
 let guessed = new Set(), wrong = new Set(), done = false;
 
 function render() {{
@@ -987,7 +1025,7 @@ function render() {{
   const disp = WORD.split('').map(c => guessed.has(c) ? c : '_').join(' ');
   document.getElementById('word').textContent = disp;
   document.getElementById('wrong').innerHTML =
-    'Chyby (' + wrong.size + '/6): ' + (wrong.size ? [...wrong].sort().join(' ') : '&mdash;');
+    ERR_LBL + ' (' + wrong.size + '/6): ' + (wrong.size ? [...wrong].sort().join(' ') : '&mdash;');
 }}
 
 function guess(letter) {{
@@ -1000,7 +1038,7 @@ function guess(letter) {{
     if (WORD.split('').every(c => guessed.has(c))) {{
       const sc = Math.max(80 - wrong.size * 10, 10);
       done = true;
-      setMsg('&#127881; ' + WORD.toUpperCase() + '! +' + sc + ' bodov', 'ok');
+      setMsg(fmt(MSG_WIN,{{w:WORD.toUpperCase(),sc}}),'ok');
       endGame(sc);
     }}
   }} else {{
@@ -1008,7 +1046,7 @@ function guess(letter) {{
     render();
     if (wrong.size >= 6) {{
       done = true;
-      setMsg('&#128128; Slovo bolo: ' + WORD.toUpperCase(), 'err');
+      setMsg(fmt(MSG_LOSE,{{w:WORD.toUpperCase()}}),'err');
       endGame(0);
     }}
   }}
@@ -1018,12 +1056,11 @@ function setMsg(t,cls){{const m=document.getElementById('msg');m.innerHTML='<div
 function endGame(sc){{
   document.getElementById('letters').style.display='none';
   const r=document.getElementById('result'); r.style.display='block';
-  document.getElementById('scoreMsg').innerHTML=(sc>0?'+'+sc+' bodov pridan\u00fdch!':'\u017diadne body tentokr\u00e1t.');
+  document.getElementById('scoreMsg').innerHTML=(sc>0?fmt(END_OK,{{sc}}):END_NO);
   if(sc>0) fetch('/api/update_score',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{score:sc,game:'obesenec'}})}});
 }}
 
-// Build letter buttons
-const abc = 'aábcčdďeéfghiíjklľmnňoópqrŕsštťuúvwxyýzž';
+const abc = {_json.dumps(abc)};
 const lb = document.getElementById('letters');
 [...new Set(abc)].forEach(function(l){{
   const b = document.createElement('button');
@@ -1130,7 +1167,7 @@ def set_lang(code):
 def mini_cislo():
     if "username" not in session:
         return redirect("/")
-    return make_response(MINI_CISLO_HTML)
+    return make_response(build_cislo_html())
 
 
 @app.route("/mini/obesenec")

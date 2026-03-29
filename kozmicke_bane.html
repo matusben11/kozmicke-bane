@@ -500,6 +500,47 @@ const T = {
     'era4_colony_locked': '✗ Kolónia sa odomkne v Update 4.0.',
     'era4_travel_locked': '✗ Cestovanie medzi planétami sa odomkne v Update 4.0.',
     'era4_corp_locked': '✗ NOVA Corp dashboard v Update 4.0.',
+    // depth names
+    'depth_1': 'POVRCHOVÁ VRSTVA', 'depth_2': 'HORNÁ LITOSFÉRA',
+    'depth_3': 'HLBOKÁ CHODBA',    'depth_4': 'MAGMATICKÁ ZÓNA', 'depth_5': 'JADRO ZYRAX-9',
+    // weapon names + desc
+    'wpn_laser_name': 'Laserová Pištoľ', 'wpn_laser_desc': '-40% HP škoda z udalostí a hĺbky',
+    'wpn_plasma_name': 'Plazmová Puška',  'wpn_plasma_desc': '-70% HP škoda z udalostí a hĺbky',
+    'wpn_rail_name': 'Rail Kanón',        'wpn_rail_desc': 'Imunita voči všetkej HP škode',
+    // planet desc
+    'pdesc_zyrax9': 'Pôvodná planéta', 'pdesc_zyrax10': 'Nebezpečná planéta',
+    'pdesc_kryon': 'Ľadová planéta · Cryon Ice', 'pdesc_sigma': 'Sopečná planéta · Volcanum',
+    'pdesc_omega7': 'Hlboký vesmír · Neo-Void', 'pdesc_zyrax8base': 'Tvoja kolónia — základňa',
+    // howto content
+    'howto_goal_txt': 'Vyzbieraj <strong>15 000 CR</strong> predajom nerastov a opusti planétu Zyrax-9.',
+    'howto_mining_txt': 'Každý ťah ťažíš nerasty. Sú <strong>11 druhov</strong> v 4 vzácnostných tieroch.\nČím hlbšie, tým vzácnejšie — ale aj nebezpečnejšie.',
+    'howto_depth_txt': 'Hra má <strong>5 úrovní hĺbky</strong> (L1 povrch → L5 jadro).\nPomocou tlačidla <strong>[KLESAŤ]</strong> alebo <strong>[STÚPAŤ]</strong> meniš úroveň.\nHlbšie = vzácnejšie nerasty, viac HP škody.',
+    'howto_polish_txt': 'Kúp <strong>★ Leštičku</strong> (800 CR) a lešti nerasty pred predajom.\n★ Leštenie = <strong>×2 hodnota</strong>.\n★★ Nano Leštenie (3000 CR) = <strong>×3 hodnota</strong>.',
+    'howto_save_txt': 'Kedykoľvek stlač <strong>💾 SAVE</strong> vpravo hore (alebo [S] na klávesnici).\nMáš <strong>4 save sloty</strong>. Hra sa uloží a môžeš pokračovať neskôr.',
+    'howto_lb_txt': 'Po výhre (alebo odlete) sa tvoje skóre uloží do <strong>lokálneho rebríčka</strong>.\nSkóre = kredity ÷ 5 (víťazi dostanú bonus).',
+    'howto_weapons_txt': 'V obchode (<strong>[3]</strong>) nájdeš sekciu <strong>ZBRANE</strong> — znižujú HP škodu z udalostí a hĺbky.\n<strong>Laserová Pištoľ</strong> (600 CR): -40% škoda\n<strong>Plazmová Puška</strong> (1800 CR): -70% škoda\n<strong>Rail Kanón</strong> (4000 CR): imunita voči HP škode',
+    'howto_research_txt': 'Tlačidlo <strong>[R] Výskum</strong>: míňaj 50 CR za 8-20 výskumných bodov (RP) za ťah.\nKeď máš <strong>200 RP + 2× Omega Ore + 2× Voidcrystal + 8000 CR</strong> — zostrojiš raketu.\nStlač <strong>[L] Štart Rakety</strong> → odleť na <strong>ZYRAX-10</strong>.\nZYRAX-10: nový cieľ <strong>30 000 CR</strong>, 1.8× nebezpečnejšie, bonus +1000 skóre pri výhre.\nZachováš: kredity, upgrady, zbraň a RP.',
+    'howto_colony_txt': 'Po splnení cieľa na ZYRAX-10 dostaneš ponuku od <strong>NOVA MINING CORP.</strong>\nMôžeš prijať <strong>KOLONIZAČNÚ MISIU</strong> na Zyrax-8 — vlastná planéta!\nZbieraj <strong>⊕ 5× Titanium</strong> a <strong>⊗ 3× Exoternimium</strong> — výlučne tier-5 minerály.\nZyrax-8 je 2.5× nebezpečnejšia. Skóre bonus: <strong>+3000</strong>.',
+    // end screens
+    'end_quit_win': 'Misia splnená!\nVyzbierané: {cr} CR za {t} ťahov.\nNOVA CORP. je nadšená.',
+    'end_quit_lose': 'Loď odštartovala zo Zyrax-9 so {cr} CR.\nCieľ bol {goal} CR.\nNOVA CORP. nie je spokojná. Ale prežil si.',
+    'end_win_msg': 'Loď odštartovala zo ZYRAX-{p}!\nNOVA MINING CORP. je nadšená!{bonus}\n\nVyzbierané: {cr} CR  ·  Táhy: {t}\nLeštení: {pol}  ·  Max hĺbka: L{dep}\nNavštívených sektorov: {vis}',
+    'end_win_bonus': '\n★ ZYRAX-10 BONUS: +1000 skóre ★',
+    'end_over_msg': 'Tvoj skafander zlyhal.\nAtmosféra Zyrax-9 ťa pohltila...\n\nZomrel si v ťahu {t} s {cr} CR.\nPlanéta si vyžiadala ďalšiu obeť.',
+    'end_decline_msg': 'Odmietol si ponuku NOVA CORP.\nLoď odštartovala zo ZYRAX-10.\n\nVyzbierané: {cr} CR  ·  Táhy: {t}\nLeštení: {pol}  ·  Max hĺbka: L{dep}',
+    // NOVA offer scene
+    'offer_title': '★  NOVA MINING CORP.  ★',
+    'offer_subtitle': '— TAJNÁ TRANSMISIA — PRIORITA ALFA —',
+    'offer_click': 'Klikni pre preskoč',
+    'offer_accept': '✓  PRIJAŤ VÝZVU — ZYRAX-8',
+    'offer_decline': '✗  ODMIETNUŤ — Ukončiť misiu',
+    'offer_msg': 'Pilot {name},\n\nVaše výkony na Zyrax-9 a Zyrax-10 prekonali všetky naše očakávania.\nSte prvý pilot v histórii NOVA MINING CORP., ktorý dobyl obe planéty.\n\nKorporácia vám dáva jedinečnú príležitosť:\n\n  ► KOLONIZÁCIA PLANÉTY ZYRAX-8 ◄\n\nPod patentom NOVA CORP. vám dávame právo na vlastnú kolóniu.\nPlanéta Zyrax-8 je nezmapovaná a extrémne nebezpečná.\n\nNa vybudovanie kolónie budete potrebovať:\n\n  ⊕  5× TITANIUM        — vzácny stavebný materiál\n  ⊗  3× EXOTERNIMIUM    — energia pre generátory kolónie\n\nTieto minerály sa nachádzajú VÝLUČNE na Zyrax-8.\nZachováte všetky kredity, upgrady, zbraň a výskum.\n\nRozhodnutie je na vás, pilot.\nNOVA CORP. verí vo váš úspech.',
+    // warp frames
+    'warp_f0': 'KOLONIZAČNÁ LOĎ ZAPÍNA MOTORY...', 'warp_f1': 'OPÚŠŤAME ORBITU ZYRAX-10...',
+    'warp_f2': 'WARP SKOK — NAVIGÁCIA NA ZYRAX-8!', 'warp_f3': 'VSTUP DO ATMOSFÉRY ZYRAX-8...',
+    'warp_f4': '★ PRISTÁTIE ÚSPEŠNÉ ★  KOLONIZAČNÝ SEKTOR ALFA',
+    'warp_start': '⊕  ZAČAŤ KOLONIZÁCIU  ZYRAX-8',
+    'warp_hdr': '── WARP SKOK ──  ZYRAX-10  →  ZYRAX-8  ──',
   },
   en: {
     // topbar / UI
@@ -807,6 +848,47 @@ const T = {
     'era4_colony_locked': '✗ Colony unlocks in Update 4.0.',
     'era4_travel_locked': '✗ Planet travel unlocks in Update 4.0.',
     'era4_corp_locked': '✗ NOVA Corp dashboard in Update 4.0.',
+    // depth names
+    'depth_1': 'SURFACE LAYER',  'depth_2': 'UPPER LITHOSPHERE',
+    'depth_3': 'DEEP TUNNEL',    'depth_4': 'MAGMA ZONE', 'depth_5': 'ZYRAX-9 CORE',
+    // weapon names + desc
+    'wpn_laser_name': 'Laser Pistol',  'wpn_laser_desc': '-40% HP damage from events and depth',
+    'wpn_plasma_name': 'Plasma Rifle', 'wpn_plasma_desc': '-70% HP damage from events and depth',
+    'wpn_rail_name': 'Rail Cannon',    'wpn_rail_desc': 'Immunity to all HP damage',
+    // planet desc
+    'pdesc_zyrax9': 'Original planet', 'pdesc_zyrax10': 'Dangerous planet',
+    'pdesc_kryon': 'Ice planet · Cryon Ice', 'pdesc_sigma': 'Volcanic planet · Volcanum',
+    'pdesc_omega7': 'Deep space · Neo-Void', 'pdesc_zyrax8base': 'Your colony — base',
+    // howto content
+    'howto_goal_txt': 'Collect <strong>15 000 CR</strong> by selling ores and leave planet Zyrax-9.',
+    'howto_mining_txt': 'Each turn you mine ores. There are <strong>11 types</strong> in 4 rarity tiers.\nDeeper = rarer — but also more dangerous.',
+    'howto_depth_txt': 'The game has <strong>5 depth levels</strong> (L1 surface → L5 core).\nUse <strong>[DESCEND]</strong> or <strong>[ASCEND]</strong> buttons to change level.\nDeeper = rarer ores, more HP damage.',
+    'howto_polish_txt': 'Buy <strong>★ Polisher</strong> (800 CR) and polish ores before selling.\n★ Polishing = <strong>×2 value</strong>.\n★★ Nano Polishing (3000 CR) = <strong>×3 value</strong>.',
+    'howto_save_txt': 'Press <strong>💾 SAVE</strong> top right anytime (or [S] on keyboard).\nYou have <strong>4 save slots</strong>. Game saves and you can continue later.',
+    'howto_lb_txt': 'After winning (or departing) your score saves to the <strong>leaderboard</strong>.\nScore = credits ÷ 5 (winners get a bonus).',
+    'howto_weapons_txt': 'In the shop (<strong>[3]</strong>) find the <strong>WEAPONS</strong> section — reduces HP damage from events and depth.\n<strong>Laser Pistol</strong> (600 CR): -40% damage\n<strong>Plasma Rifle</strong> (1800 CR): -70% damage\n<strong>Rail Cannon</strong> (4000 CR): immunity to HP damage',
+    'howto_research_txt': 'Button <strong>[R] Research</strong>: spend 50 CR for 8-20 research points (RP) per turn.\nWhen you have <strong>200 RP + 2× Omega Ore + 2× Voidcrystal + 8000 CR</strong> — build a rocket.\nPress <strong>[L] Launch Rocket</strong> → depart to <strong>ZYRAX-10</strong>.\nZYRAX-10: new goal <strong>30 000 CR</strong>, 1.8× more dangerous, +1000 score bonus on win.\nKept: credits, upgrades, weapon and RP.',
+    'howto_colony_txt': 'After reaching goal on ZYRAX-10 you get an offer from <strong>NOVA MINING CORP.</strong>\nYou can accept a <strong>COLONIZATION MISSION</strong> on Zyrax-8 — your own planet!\nCollect <strong>⊕ 5× Titanium</strong> and <strong>⊗ 3× Exoternimium</strong> — exclusive tier-5 minerals.\nZyrax-8 is 2.5× more dangerous. Score bonus: <strong>+3000</strong>.',
+    // end screens
+    'end_quit_win': 'Mission complete!\nCollected: {cr} CR in {t} turns.\nNOVA CORP. is thrilled.',
+    'end_quit_lose': 'Ship launched from Zyrax-9 with {cr} CR.\nGoal was {goal} CR.\nNOVA CORP. is unhappy. But you survived.',
+    'end_win_msg': 'Ship launched from ZYRAX-{p}!\nNOVA MINING CORP. is thrilled!{bonus}\n\nCollected: {cr} CR  ·  Turns: {t}\nPolished: {pol}  ·  Max depth: L{dep}\nSectors visited: {vis}',
+    'end_win_bonus': '\n★ ZYRAX-10 BONUS: +1000 score ★',
+    'end_over_msg': 'Your spacesuit failed.\nThe atmosphere of Zyrax-9 consumed you...\n\nYou died on turn {t} with {cr} CR.\nThe planet claimed another victim.',
+    'end_decline_msg': 'You refused the NOVA CORP. offer.\nShip launched from ZYRAX-10.\n\nCollected: {cr} CR  ·  Turns: {t}\nPolished: {pol}  ·  Max depth: L{dep}',
+    // NOVA offer scene
+    'offer_title': '★  NOVA MINING CORP.  ★',
+    'offer_subtitle': '— SECRET TRANSMISSION — PRIORITY ALPHA —',
+    'offer_click': 'Click to skip',
+    'offer_accept': '✓  ACCEPT MISSION — ZYRAX-8',
+    'offer_decline': '✗  REFUSE — End mission',
+    'offer_msg': 'Pilot {name},\n\nYour performance on Zyrax-9 and Zyrax-10 exceeded all our expectations.\nYou are the first pilot in NOVA MINING CORP. history to conquer both planets.\n\nThe corporation offers you a unique opportunity:\n\n  ► COLONIZE PLANET ZYRAX-8 ◄\n\nUnder NOVA CORP. patent we grant you the right to your own colony.\nPlanet Zyrax-8 is unmapped and extremely dangerous.\n\nTo build the colony you will need:\n\n  ⊕  5× TITANIUM        — rare construction material\n  ⊗  3× EXOTERNIMIUM    — energy for colony generators\n\nThese minerals are found EXCLUSIVELY on Zyrax-8.\nYou will keep all credits, upgrades, weapon and research.\n\nThe decision is yours, pilot.\nNOVA CORP. believes in your success.',
+    // warp frames
+    'warp_f0': 'COLONIZATION SHIP IGNITING ENGINES...', 'warp_f1': 'LEAVING ZYRAX-10 ORBIT...',
+    'warp_f2': 'WARP JUMP — NAVIGATING TO ZYRAX-8!', 'warp_f3': 'ENTERING ZYRAX-8 ATMOSPHERE...',
+    'warp_f4': '★ LANDING SUCCESSFUL ★  COLONIZATION SECTOR ALPHA',
+    'warp_start': '⊕  BEGIN COLONIZATION  ZYRAX-8',
+    'warp_hdr': '── WARP JUMP ──  ZYRAX-10  →  ZYRAX-8  ──',
   }
 };
 
@@ -877,27 +959,30 @@ const MINERALS_4=[
 ];
 
 const PLANETS_4=[
-  {id:'zyrax8',  name:'ZYRAX-8 ZÁKLADŇA', col:'#99ddff', travelCR:0,    tierMod:0, dmgMod:0.5, desc:'Tvoja kolónia — bezpečné'},
-  {id:'zyrax9',  name:'ZYRAX-9',          col:'#88aa44', travelCR:800,  tierMod:0, dmgMod:1.0, desc:'Pôvodná planéta'},
-  {id:'zyrax10', name:'ZYRAX-10',         col:'#cc55ff', travelCR:1500, tierMod:1, dmgMod:1.8, desc:'Nebezpečná planéta'},
-  {id:'kryon',   name:'KRYON-PROXIMA',    col:'#aaeeff', travelCR:3000, tierMod:2, dmgMod:2.2, desc:'Ľadová planéta · Cryon Ice'},
-  {id:'sigma',   name:'SIGMA-DELTA',      col:'#ff8844', travelCR:5000, tierMod:2, dmgMod:2.8, desc:'Sopečná planéta · Volcanum'},
-  {id:'omega7',  name:'OMEGA-VII',        col:'#dd00ff', travelCR:9000, tierMod:3, dmgMod:3.5, desc:'Hlboký vesmír · Neo-Void', locked:true},
+  {id:'zyrax8',  name:'ZYRAX-8 ZÁKLADŇA', col:'#99ddff', travelCR:0,    tierMod:0, dmgMod:0.5, descKey:'pdesc_zyrax8base'},
+  {id:'zyrax9',  name:'ZYRAX-9',          col:'#88aa44', travelCR:800,  tierMod:0, dmgMod:1.0, descKey:'pdesc_zyrax9'},
+  {id:'zyrax10', name:'ZYRAX-10',         col:'#cc55ff', travelCR:1500, tierMod:1, dmgMod:1.8, descKey:'pdesc_zyrax10'},
+  {id:'kryon',   name:'KRYON-PROXIMA',    col:'#aaeeff', travelCR:3000, tierMod:2, dmgMod:2.2, descKey:'pdesc_kryon'},
+  {id:'sigma',   name:'SIGMA-DELTA',      col:'#ff8844', travelCR:5000, tierMod:2, dmgMod:2.8, descKey:'pdesc_sigma'},
+  {id:'omega7',  name:'OMEGA-VII',        col:'#dd00ff', travelCR:9000, tierMod:3, dmgMod:3.5, descKey:'pdesc_omega7', locked:true},
 ];
+PLANETS_4.forEach(p=>Object.defineProperty(p,'desc',{get:()=>t(p.descKey)}));
 
 const WEAPONS=[
-  {id:'laser',   name:'Laserová Pištoľ', cost:600,  dmgMult:.60, desc:'-40% HP škoda z udalostí a hĺbky'},
-  {id:'plasma',  name:'Plazmová Puška',  cost:1800, dmgMult:.30, desc:'-70% HP škoda z udalostí a hĺbky'},
-  {id:'railgun', name:'Rail Kanón',      cost:4000, dmgMult:0,   desc:'Imunita voči všetkej HP škode'},
+  {id:'laser',   nameKey:'wpn_laser_name',  cost:600,  dmgMult:.60, descKey:'wpn_laser_desc'},
+  {id:'plasma',  nameKey:'wpn_plasma_name', cost:1800, dmgMult:.30, descKey:'wpn_plasma_desc'},
+  {id:'railgun', nameKey:'wpn_rail_name',   cost:4000, dmgMult:0,   descKey:'wpn_rail_desc'},
 ];
+WEAPONS.forEach(w=>{ Object.defineProperty(w,'name',{get:()=>t(w.nameKey)}); Object.defineProperty(w,'desc',{get:()=>t(w.descKey)}); });
 
 const DEPTHS=[
-  {lv:1, name:'POVRCHOVÁ VRSTVA',  col:'#88aa44', minD:0,   maxD:500,  tierBonus:0, hpMod:0},
-  {lv:2, name:'HORNÁ LITOSFÉRA',   col:'#aa8833', minD:500, maxD:2000, tierBonus:1, hpMod:-.05},
-  {lv:3, name:'HLBOKÁ CHODBA',     col:'#cc6622', minD:2000,maxD:5000, tierBonus:2, hpMod:-.10},
-  {lv:4, name:'MAGMATICKÁ ZÓNA',   col:'#ee3311', minD:5000,maxD:9000, tierBonus:2, hpMod:-.15},
-  {lv:5, name:'JADRO ZYRAX-9',     col:'#ff2244', minD:9000,maxD:99999,tierBonus:3, hpMod:-.20},
+  {lv:1, nameKey:'depth_1', col:'#88aa44', minD:0,   maxD:500,  tierBonus:0, hpMod:0},
+  {lv:2, nameKey:'depth_2', col:'#aa8833', minD:500, maxD:2000, tierBonus:1, hpMod:-.05},
+  {lv:3, nameKey:'depth_3', col:'#cc6622', minD:2000,maxD:5000, tierBonus:2, hpMod:-.10},
+  {lv:4, nameKey:'depth_4', col:'#ee3311', minD:5000,maxD:9000, tierBonus:2, hpMod:-.15},
+  {lv:5, nameKey:'depth_5', col:'#ff2244', minD:9000,maxD:99999,tierBonus:3, hpMod:-.20},
 ];
+DEPTHS.forEach(d=>Object.defineProperty(d,'name',{get:()=>t(d.nameKey)}));
 
 const EVENTS=[
   {n:'CAVE-IN',      m:'Zával! Strop sa zrútil.',                  t:'danger',hp:-14},
@@ -1145,51 +1230,34 @@ function _sceneMainFull(pilot){
 function sceneHowTo(){
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
-    <div class="st">❓ AKO HRAŤ — KOZMICKÉ BANE v4.8</div>
+    <div class="st">${t('howto_title')}</div>
     <div style="font-size:1.05rem;line-height:1.9;">
-<div style="color:var(--b)">── CIEĽ ──</div>
-Vyzbieraj <strong>15 000 CR</strong> predajom nerastov a opusti planétu Zyrax-9.
+<div style="color:var(--b)">${t('howto_goal_hdr')}</div>
+${t('howto_goal_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── ŤAŽBA ──</div>
-Každý ťah ťažíš nerasty. Sú <strong>11 druhov</strong> v 4 vzácnostných tieroch.
-Čím hlbšie, tým vzácnejšie — ale aj nebezpečnejšie.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_mining_hdr')}</div>
+${t('howto_mining_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── HĹBKA ──</div>
-Hra má <strong>5 úrovní hĺbky</strong> (L1 povrch → L5 jadro).
-Pomocou tlačidla <strong>[KLESAŤ]</strong> alebo <strong>[STÚPAŤ]</strong> meniš úroveň.
-Hlbšie = vzácnejšie nerasty, viac HP škody.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_depth_hdr')}</div>
+${t('howto_depth_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── LEŠTENIE ──</div>
-Kúp <strong>★ Leštičku</strong> (800 CR) a lešti nerasty pred predajom.
-★ Leštenie = <strong>×2 hodnota</strong>.
-★★ Nano Leštenie (3000 CR) = <strong>×3 hodnota</strong>.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_polish_hdr')}</div>
+${t('howto_polish_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── UKLADANIE ──</div>
-Kedykoľvek stlač <strong>💾 SAVE</strong> vpravo hore (alebo [S] na klávesnici).
-Máš <strong>4 save sloty</strong>. Hra sa uloží a môžeš pokračovať neskôr.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_save_hdr')}</div>
+${t('howto_save_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── LEADERBOARD ──</div>
-Po výhre (alebo odlete) sa tvoje skóre uloží do <strong>lokálneho rebríčka</strong>.
-Skóre = kredity ÷ 5 (víťazi dostanú bonus).
+<div style="color:var(--b);margin-top:.5rem">${t('howto_lb_hdr')}</div>
+${t('howto_lb_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── ZBRANE ──</div>
-V obchode (<strong>[3]</strong>) nájdeš sekciu <strong>ZBRANE</strong> — znižujú HP škodu z udalostí a hĺbky.
-<strong>Laserová Pištoľ</strong> (600 CR): -40% škoda
-<strong>Plazmová Puška</strong> (1800 CR): -70% škoda
-<strong>Rail Kanón</strong> (4000 CR): imunita voči HP škode
+<div style="color:var(--b);margin-top:.5rem">${t('howto_weapons_hdr')}</div>
+${t('howto_weapons_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── VÝSKUM + RAKETA ──</div>
-Tlačidlo <strong>[R] Výskum</strong>: míňaj 50 CR za 8-20 výskumných bodov (RP) za ťah.
-Keď máš <strong>200 RP + 2× Omega Ore + 2× Voidcrystal + 8000 CR</strong> — zostrojiš raketu.
-Stlač <strong>[L] Štart Rakety</strong> → odleť na <strong>ZYRAX-10</strong>.
-ZYRAX-10: nový cieľ <strong>30 000 CR</strong>, 1.8× nebezpečnejšie, bonus +1000 skóre pri výhre.
-Zachováš: kredity, upgrady, zbraň a RP.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_research_hdr')}</div>
+${t('howto_research_txt')}
 
-<div style="color:var(--b);margin-top:.5rem">── KOLONIZÁCIA ZYRAX-8 ──</div>
-Po splnení cieľa na ZYRAX-10 dostaneš ponuku od <strong>NOVA MINING CORP.</strong>
-Môžeš prijať <strong>KOLONIZAČNÚ MISIU</strong> na Zyrax-8 — vlastná planéta!
-Zbieraj <strong>⊕ 5× Titanium</strong> a <strong>⊗ 3× Exoternimium</strong> — výlučne tier-5 minerály.
-Zyrax-8 je 2.5× nebezpečnejšia. Skóre bonus: <strong>+3000</strong>.
+<div style="color:var(--b);margin-top:.5rem">${t('howto_colony_hdr')}</div>
+${t('howto_colony_txt')}
     </div>
     <div class="mg g1" style="margin-top:.8rem;">
       <button class="btn bbig" onclick="sFX('click');sceneTitle(PILOT)">${t('back_big')}</button>
@@ -1922,8 +1990,8 @@ function confQuit(){
   const win=G.credits>=G.goal;
   addToLeaderboard({username:G.username,credits:G.credits,turns:G.turn,score,maxDepth:G.stats.maxDepth,win,ts:Date.now()});
   reportSessionEnd(G.credits, G.stats.mined, win);
-  if(win)sceneEnd(true,`Misia splnená!\nVyzbierané: ${G.credits} CR za ${G.turn} ťahov.\nNOVA CORP. je nadšená.`,score);
-  else sceneEnd(false,`Loď odštartovala zo Zyrax-9 so ${G.credits} CR.\nCieľ bol ${G.goal} CR.\nNOVA CORP. nie je spokojná. Ale prežil si.`,score);}
+  if(win)sceneEnd(true,t('end_quit_win',{cr:G.credits,t:G.turn}),score);
+  else sceneEnd(false,t('end_quit_lose',{cr:G.credits,goal:G.goal}),score);}
 
 // ══════════════════════════════════════════════════════════════
 //  COLONIZATION HELPERS
@@ -2072,39 +2140,18 @@ function sceneCorpOffer(){
   setScr(`<div class="panel" style="min-width:760px;position:relative;overflow:hidden;">
     ${corners()}
     <div style="text-align:center;font-size:2rem;color:var(--g);text-shadow:0 0 18px var(--g);animation:pglow 1.5s infinite;margin-bottom:.5rem;">
-      ★  NOVA MINING CORP.  ★</div>
+      ${t('offer_title')}</div>
     <div style="text-align:center;font-size:.9rem;color:var(--ad);letter-spacing:.12em;margin-bottom:.8rem;">
-      — TAJNÁ TRANSMISIA — PRIORITA ALFA —</div>
-    <div id="offertxt" style="font-size:1.08rem;line-height:1.82;white-space:pre-wrap;min-height:220px;cursor:pointer;" title="Klikni pre preskoč"></div>
+      ${t('offer_subtitle')}</div>
+    <div id="offertxt" style="font-size:1.08rem;line-height:1.82;white-space:pre-wrap;min-height:220px;cursor:pointer;" title="${t('offer_click')}"></div>
     <div id="offerbtn" style="margin-top:.9rem;" class="mg g2">
       <button class="btn" style="color:#99ddff;border-color:#99ddff44;font-size:1.15rem;padding:.5rem" onclick="acceptZyrax8()">
-        ✓  PRIJAŤ VÝZVU — ZYRAX-8</button>
+        ${t('offer_accept')}</button>
       <button class="btn btn-d" style="font-size:1.15rem;padding:.5rem" onclick="declineZyrax8()">
-        ✗  ODMIETNUŤ — Ukončiť misiu</button>
+        ${t('offer_decline')}</button>
     </div>
   </div>`);
-  const msg=`Pilot ${G.username.toUpperCase()},
-
-Vaše výkony na Zyrax-9 a Zyrax-10 prekonali všetky naše očakávania.
-Ste prvý pilot v histórii NOVA MINING CORP., ktorý dobyl obe planéty.
-
-Korporácia vám dáva jedinečnú príležitosť:
-
-  ► KOLONIZÁCIA PLANÉTY ZYRAX-8 ◄
-
-Pod patentom NOVA CORP. vám dávame právo na vlastnú kolóniu.
-Planéta Zyrax-8 je nezmapovaná a extrémne nebezpečná.
-
-Na vybudovanie kolónie budete potrebovať:
-
-  ⊕  5× TITANIUM        — vzácny stavebný materiál
-  ⊗  3× EXOTERNIMIUM    — energia pre generátory kolónie
-
-Tieto minerály sa nachádzajú VÝLUČNE na Zyrax-8.
-Zachováte všetky kredity, upgrady, zbraň a výskum.
-
-Rozhodnutie je na vás, pilot.
-NOVA CORP. verí vo váš úspech.`;
+  const msg=t('offer_msg',{name:G.username.toUpperCase()});
   const el=document.getElementById('offertxt');
   el.addEventListener('click',()=>{el.textContent=msg;});
   tw(el,msg,16,()=>{});
@@ -2114,27 +2161,27 @@ function declineZyrax8(){
   const score=Math.floor(G.credits/5)+500;
   addToLeaderboard({username:G.username,credits:G.credits,turns:G.turn,score,maxDepth:G.stats.maxDepth,win:true,ts:Date.now()});
   reportSessionEnd(G.credits,G.stats.mined,true);
-  sceneEnd(true,`Odmietol si ponuku NOVA CORP.\nLoď odštartovala zo ZYRAX-10.\n\nVyzbierané: ${G.credits} CR  ·  Táhy: ${G.turn}\nLeštení: ${G.stats.polished}  ·  Max hĺbka: L${G.stats.maxDepth}`,score);}
+  sceneEnd(true,t('end_decline_msg',{cr:G.credits,t:G.turn,pol:G.stats.polished,dep:G.stats.maxDepth}),score);}
 
 function acceptZyrax8(){
   sFX('click');flash('rgba(153,221,255,.22)');
   setScr(`<div class="panel" style="min-width:640px;text-align:center;">
     ${corners()}
-    <div style="color:#99ddff;font-size:.88rem;letter-spacing:.17em;margin-bottom:.7rem">── WARP SKOK ──  ZYRAX-10  →  ZYRAX-8  ──</div>
+    <div style="color:#99ddff;font-size:.88rem;letter-spacing:.17em;margin-bottom:.7rem">${t('warp_hdr')}</div>
     <div id="z8box" style="font-size:.9rem;line-height:1.32;white-space:pre;color:#99ddff;min-height:190px;text-shadow:0 0 10px #99ddff;"></div>
     <div id="z8msg" style="font-size:1.08rem;margin-top:.5rem;min-height:1.7rem;color:#99ddff;"></div>
     <div id="z8btn" style="margin-top:.85rem;display:none;" class="mg g1">
       <button class="btn" style="color:#99ddff;border-color:#99ddff44;font-size:1.28rem;padding:.52rem" onclick="arriveZyrax8()">
-        ⊕  ZAČAŤ KOLONIZÁCIU  ZYRAX-8</button>
+        ${t('warp_start')}</button>
     </div>
   </div>`);
   const ship=['      /\\','     /  \\','    /⊕⊗⊕\\','   / ⊕ ⊗ ⊕ \\','  /________\\','   |  ||  |','      ||'];
   const frames=[
-    {a:'[ ŠTART!  ]', m:'KOLONIZAČNÁ LOĎ ZAPÍNA MOTORY...', c:'#99ddff'},
-    {a:'[  ORBIT  ]', m:'OPÚŠŤAME ORBITU ZYRAX-10...', c:'#66aadd'},
-    {a:'[ WARP!   ]', m:'WARP SKOK — NAVIGÁCIA NA ZYRAX-8!', c:'#ffffff'},
-    {a:'[ ZYRAX-8 ]', m:'VSTUP DO ATMOSFÉRY ZYRAX-8...', c:'#99ddff'},
-    {a:'[  LAND!  ]', m:'★ PRISTÁTIE ÚSPEŠNÉ ★  KOLONIZAČNÝ SEKTOR ALFA', c:'#39ff6a'},
+    {a:'[ START!  ]', m:t('warp_f0'), c:'#99ddff'},
+    {a:'[  ORBIT  ]', m:t('warp_f1'), c:'#66aadd'},
+    {a:'[ WARP!   ]', m:t('warp_f2'), c:'#ffffff'},
+    {a:'[ ZYRAX-8 ]', m:t('warp_f3'), c:'#99ddff'},
+    {a:'[  LAND!  ]', m:t('warp_f4'), c:'#39ff6a'},
   ];
   let fi=0;
   function nf(){
@@ -2385,12 +2432,12 @@ function sceneWin(){sFX('win');flash('rgba(57,255,106,.28)');
   const score=Math.floor(G.credits/5)+bonus;
   addToLeaderboard({username:G.username,credits:G.credits,turns:G.turn,score,maxDepth:G.stats.maxDepth,win:true,ts:Date.now()});
   reportSessionEnd(G.credits, G.stats.mined, true);
-  sceneEnd(true,`Loď odštartovala zo ZYRAX-${G.planet===2?'10':'9'}!\nNOVA MINING CORP. je nadšená!${G.planet===2?'\n★ ZYRAX-10 BONUS: +1000 skóre ★':''}\n\nVyzbierané: ${G.credits} CR  ·  Táhy: ${G.turn}\nLeštení: ${G.stats.polished}  ·  Max hĺbka: L${G.stats.maxDepth}\nNavštívených sektorov: ${G.visited.size}`,score);}
+  sceneEnd(true,t('end_win_msg',{p:G.planet===2?'10':'9',bonus:G.planet===2?t('end_win_bonus'):'',cr:G.credits,t:G.turn,pol:G.stats.polished,dep:G.stats.maxDepth,vis:G.visited.size}),score);}
 function sceneOver(){sFX('lose');flash('rgba(255,58,58,.28)');
   const score=Math.floor(G.credits/8);
   addToLeaderboard({username:G.username,credits:G.credits,turns:G.turn,score,maxDepth:G.stats.maxDepth,win:false,ts:Date.now()});
   reportSessionEnd(G.credits, G.stats.mined, false);
-  sceneEnd(false,`Tvoj skafander zlyhal.\nAtmosféra Zyrax-9 ťa pohltila...\n\nZomrel si v tahu ${G.turn} s ${G.credits} CR.\nPlanéta si vyžiadala ďalšiu obeť.`,score);}
+  sceneEnd(false,t('end_over_msg',{t:G.turn,cr:G.credits}),score);}
 
 function sceneEnd(win,msg,score){
   document.getElementById('qsbtn').style.display='none';
