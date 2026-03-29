@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import pathlib
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, redirect, session, make_response
 
@@ -195,6 +197,17 @@ def get_sp_ranks(user_dict):
     old = user_dict.get("special_rank")
     return [old] if old else []
 
+RANKS = [
+    (1, "Baník",      0),
+    (2, "Prospektér", 100_000),
+    (3, "Veterán",    500_000),
+    (4, "Veliteľ",    2_000_000),
+    (5, "Legenda",    10_000_000),
+]
+
+# Špeciálne tituly, ktoré môže nastaviť IBA owner (nie admin)
+OWNER_ONLY_RANKS = {"Owner", "Creator", "Dev", "God", "Zakladateľ"}
+
 def kb_rank(cr):
     for thr, r, name in [
         (10_000_000, 5, "Legenda"),
@@ -206,6 +219,41 @@ def kb_rank(cr):
         if cr >= thr:
             return r, name
     return 1, "Baník"
+
+
+def send_notification(uname, text, from_role="owner"):
+    """Uloží notifikáciu do users[uname]['notifications']. Ak má email, pošle aj mail."""
+    users = load_users()
+    if uname not in users:
+        return
+    notifs = users[uname].setdefault("notifications", [])
+    notifs.append({"text": text, "from": from_role,
+                   "ts": datetime.now().strftime("%Y-%m-%d %H:%M"), "read": False})
+    save_users(users)
+    email = users[uname].get("email", "").strip()
+    if email:
+        _send_email(email, f"[Kozmické Bane] Správa od {from_role}", text)
+
+
+def _send_email(to, subject, body):
+    host = os.environ.get("SMTP_HOST", "")
+    port = int(os.environ.get("SMTP_PORT", 587))
+    user = os.environ.get("SMTP_USER", "")
+    pw   = os.environ.get("SMTP_PASS", "")
+    frm  = os.environ.get("SMTP_FROM", user)
+    if not host or not user or not pw:
+        return
+    try:
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"]    = frm
+        msg["To"]      = to
+        with smtplib.SMTP(host, port, timeout=8) as s:
+            s.starttls()
+            s.login(user, pw)
+            s.sendmail(frm, [to], msg.as_string())
+    except Exception as ex:
+        print(f"[email] chyba pri odoslaní: {ex}")
 
 
 # ── Login page HTML ────────────────────────────────────────────────────────
@@ -643,6 +691,28 @@ def render_lobby(pilot):
     sp_ranks = get_sp_ranks(u_data)
     sp_stars = " ".join(f'<span style="color:#ffd700;text-shadow:0 0 8px #ffd700">&#9733;&nbsp;{s}</span>' for s in sp_ranks)
 
+    # ── Notifikácie (správy od admina/ownera)
+    notifs_html = ""
+    raw_notifs = [n for n in u_data.get("notifications", []) if not n.get("read")]
+    if raw_notifs:
+        notif_items = "".join(
+            f'<div style="margin-bottom:4px"><span style="color:#888;font-size:.82em">'
+            f'[{n["ts"]} — {n["from"]}]</span><br>{n["text"]}</div>'
+            for n in raw_notifs
+        )
+        notifs_html = (
+            f'<div style="width:100%;max-width:700px;margin-bottom:10px;'
+            f'background:#1a1200;border:1px solid #ffb000;padding:10px 14px;'
+            f'font-family:\'VT323\',monospace;font-size:1em;color:#fff8e0">'
+            f'<strong style="color:#ffb000">&#128276; {L("SPRÁVY","MESSAGES")} ({len(raw_notifs)})</strong>'
+            f'<div style="margin-top:6px">{notif_items}</div>'
+            f'<button onclick="fetch(\'/api/notifications_read\',{{method:\'POST\'}}).then(()=>location.reload())" '
+            f'style="margin-top:8px;background:#3a2800;border:1px solid #ffb000;color:#ffb000;'
+            f'font-family:\'VT323\',monospace;font-size:.95em;padding:2px 10px;cursor:pointer">'
+            f'{L("Označiť ako prečítané","Mark as read")}</button>'
+            f'</div>'
+        )
+
     lang = session.get('lang', 'sk')
     depth_map = DEPTHS_EN if lang == 'en' else DEPTHS
     sk_active = ' class="active"' if lang == 'sk' else ''
@@ -673,6 +743,8 @@ def render_lobby(pilot):
     if sp_stars:
         pilot_line += f' &nbsp;|&nbsp; {sp_stars}'
     html += f'<div class="pilot">{pilot_line}</div>'
+    if notifs_html:
+        html += notifs_html
 
     # ── Career stats
     html += '<div class="card">'
@@ -1108,7 +1180,7 @@ def register():
     users = load_users()
     if not username:
         return render_login(tab="register", err_reg=L("Meno nemôže byť prázdne.", "Username cannot be empty."))
-    if any(k.lower() == username.lower() for k in users):
+    if username in users:
         return render_login(tab="register", err_reg=L(f"Meno '{username}' je obsadené.", f"Username '{username}' is already taken."))
     ok, msg = validate_pw(password)
     if not ok:
@@ -1175,6 +1247,19 @@ def mini_obesenec():
     if "username" not in session:
         return redirect("/")
     return make_response(build_obesenec_html())
+
+
+@app.route("/api/notifications_read", methods=["POST"])
+def api_notifications_read():
+    if "username" not in session:
+        return "", 401
+    users = load_users()
+    uname = session["username"]
+    if uname in users:
+        for n in users[uname].get("notifications", []):
+            n["read"] = True
+        save_users(users)
+    return "", 204
 
 
 @app.route("/api/update_score", methods=["POST"])
@@ -1701,6 +1786,11 @@ def owner_panel():
         else:
             ban_cell = "<span style='color:#444'>—</span>"
         cr_val  = c.get("career_cr", 0)
+        cur_tier, _ = kb_rank(cr_val)
+        rank_opts = "".join(
+            f'<option value="{t}" {"selected" if t==cur_tier else ""}>{name}</option>'
+            for t, name, _ in RANKS
+        )
         spr     = get_sp_ranks(u)
         sp_cell = (" ".join(f"<span style='color:#ffd700'>&#9733;{s}</span>" for s in spr)
                    if spr else "<span style='color:#444'>—</span>")
@@ -1790,6 +1880,40 @@ def owner_panel():
             &nbsp;
             <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
+            &nbsp;
+            <form method="POST" action="/owner/set_rank_tier" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <select name="tier" style="background:#000b1a;border:1px solid #00ccff;
+                color:#00ccff;font-family:inherit;font-size:.8em;padding:2px">
+                {rank_opts}
+              </select>
+              <button type="submit" style="background:#000b1a;border:1px solid #00ccff;
+                color:#00ccff;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
+                Rank
+              </button>
+            </form>
+            &nbsp;
+            <form method="POST" action="/owner/rename" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="text" name="new_name" placeholder="nové meno"
+                style="width:80px;background:#000;border:1px solid #888;color:#fff8e0;
+                font-family:inherit;font-size:.8em;padding:2px 4px">
+              <button type="submit" style="background:#000;border:1px solid #888;
+                color:#aaa;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
+                &#8635;
+              </button>
+            </form>
+            &nbsp;
+            <form method="POST" action="/owner/message" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="text" name="msg_text" placeholder="správa..."
+                style="width:110px;background:#000;border:1px solid #7788cc;color:#aabbff;
+                font-family:inherit;font-size:.8em;padding:2px 4px">
+              <button type="submit" style="background:#000;border:1px solid #7788cc;
+                color:#aabbff;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
+                &#9993;
+              </button>
+            </form>
           </td>
         </tr>"""
 
@@ -1951,6 +2075,75 @@ def owner_delete_user(uname):
     return redirect("/owner/panel")
 
 
+@app.route("/owner/set_rank_tier", methods=["POST"])
+def owner_set_rank_tier():
+    if not _owner_check():
+        return redirect("/owner")
+    uname = request.form.get("uname", "").strip()
+    try:
+        tier = int(request.form.get("tier", 1))
+    except ValueError:
+        return redirect("/owner/panel")
+    cr_map = {r: cr for r, _, cr in [(t[0], t[1], t[2]) for t in RANKS]}
+    cr = cr_map.get(tier, 0)
+    career = load_jf(KB_CAREER, {})
+    key = uname.upper()
+    e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
+                         "best_session": 0, "last_seen": "–"})
+    e["career_cr"] = cr
+    rv, rname = kb_rank(cr)
+    e["rank"] = rv
+    e["rank_name"] = rname
+    career[key] = e
+    save_jf(KB_CAREER, career)
+    return redirect("/owner/panel")
+
+
+@app.route("/owner/rename", methods=["POST"])
+def owner_rename():
+    if not _owner_check():
+        return redirect("/owner")
+    old_name = request.form.get("uname", "").strip()
+    new_name = request.form.get("new_name", "").strip()
+    if not old_name or not new_name or old_name == new_name:
+        return redirect("/owner/panel")
+    users = load_users()
+    if old_name not in users or new_name in users:
+        return redirect("/owner/panel")
+    # Premenuj v users
+    users[new_name] = users.pop(old_name)
+    save_users(users)
+    # Premenuj v career
+    career = load_jf(KB_CAREER, {})
+    old_key, new_key = old_name.upper(), new_name.upper()
+    if old_key in career:
+        career[new_key] = career.pop(old_key)
+        save_jf(KB_CAREER, career)
+    # Premenuj v saves
+    saves = load_jf(KB_SAVES, {})
+    if old_key in saves:
+        saves[new_key] = saves.pop(old_key)
+        save_jf(KB_SAVES, saves)
+    # Premenuj v leaderboard
+    lb = load_jf(KB_LB, [])
+    for entry in lb:
+        if entry.get("username", "").upper() == old_key:
+            entry["username"] = new_name
+    save_jf(KB_LB, lb)
+    return redirect("/owner/panel")
+
+
+@app.route("/owner/message", methods=["POST"])
+def owner_message():
+    if not _owner_check():
+        return redirect("/owner")
+    uname = request.form.get("uname", "").strip()
+    text  = request.form.get("msg_text", "").strip()
+    if uname and text:
+        send_notification(uname, text, from_role="Owner")
+    return redirect("/owner/panel")
+
+
 # ── Admin Panel (pre hráčov s is_admin=True) ────────────────────────────────
 
 @app.route("/adminpanel")
@@ -1966,6 +2159,12 @@ def adminpanel():
         spr_html = ("  ".join(f'<span style="color:#ffd700">&#9733;{s}</span>' for s in spr)
                     or '<span style="color:#444">—</span>')
         rank_name = career.get(uname_orig.upper(), {}).get('rank_name', 'Banik')
+        cr_val_a = career.get(uname_orig.upper(), {}).get('career_cr', 0)
+        cur_tier_a, _ = kb_rank(cr_val_a)
+        rank_opts_a = "".join(
+            f'<option value="{t}" {"selected" if t==cur_tier_a else ""}>{name}</option>'
+            for t, name, _ in RANKS
+        )
         spr0 = spr[0] if len(spr) > 0 else ''
         spr1 = spr[1] if len(spr) > 1 else ''
         rows += f"""<tr>
@@ -1986,6 +2185,29 @@ def adminpanel():
                 &#9733; Uloz
               </button>
             </form>
+            &nbsp;
+            <form method="POST" action="/adminpanel/set_rank_tier" style="display:inline">
+              <input type="hidden" name="uname" value="{uname_orig}">
+              <select name="tier" style="background:#000b1a;border:1px solid #00ccff;
+                color:#00ccff;font-family:inherit;font-size:.85em;padding:2px">
+                {rank_opts_a}
+              </select>
+              <button type="submit" style="background:#000b1a;border:1px solid #00ccff;
+                color:#00ccff;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:.85em">
+                Rank
+              </button>
+            </form>
+            &nbsp;
+            <form method="POST" action="/adminpanel/message" style="display:inline">
+              <input type="hidden" name="uname" value="{uname_orig}">
+              <input type="text" name="msg_text" placeholder="správa..."
+                style="width:110px;background:#000;border:1px solid #7788cc;color:#aabbff;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <button type="submit" style="background:#000;border:1px solid #7788cc;
+                color:#aabbff;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:.85em">
+                &#9993;
+              </button>
+            </form>
           </td>
         </tr>"""
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
@@ -1997,7 +2219,9 @@ input[type=text]{{outline:none}}</style>
   Prihlasen&#253; ako: <strong style="color:#ffb000">{session['username']}</strong> &nbsp;|&nbsp;
   <a href="/lobby" class="btn">Lobby</a>
 </p>
-<p style="color:#aaa;font-size:.85rem">Nastav&#237; maxim&#225;lne 2 &#353;peci&#225;lne ranky pre hr&#225;&#269;a.</p>
+<p style="color:#aaa;font-size:.85rem">Nastav&#237; maxim&#225;lne 2 &#353;peci&#225;lne ranky pre hr&#225;&#269;a.
+  <span style="color:#ff9900"> Tituly vyhradené len pre ownera: {", ".join(sorted(OWNER_ONLY_RANKS))}</span>
+</p>
 <h2>&#128101; HR&#193;&#268;I</h2>
 <table>
   <tr><th>Hrac</th><th>Rang</th><th>Spec. ranky</th><th>Nastav</th></tr>
@@ -2016,10 +2240,47 @@ def adminpanel_set_rank():
     users = load_users()
     if uname not in users:
         return redirect("/adminpanel")
-    new_ranks = [t for t in [t1, t2] if t][:2]
+    # Admin nemôže nastaviť owner-only tituly
+    forbidden = {r.lower() for r in OWNER_ONLY_RANKS}
+    new_ranks = [t for t in [t1, t2] if t and t.lower() not in forbidden][:2]
     users[uname]["special_ranks"] = new_ranks
     users[uname].pop("special_rank", None)
     save_users(users)
+    return redirect("/adminpanel")
+
+
+@app.route("/adminpanel/set_rank_tier", methods=["POST"])
+def adminpanel_set_rank_tier():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    uname = request.form.get("uname", "").strip()
+    try:
+        tier = int(request.form.get("tier", 1))
+    except ValueError:
+        return redirect("/adminpanel")
+    cr_map = {t: cr for t, _, cr in RANKS}
+    cr = cr_map.get(tier, 0)
+    career = load_jf(KB_CAREER, {})
+    key = uname.upper()
+    e = career.get(key, {"sessions": 0, "wins": 0, "total_mined": 0,
+                         "best_session": 0, "last_seen": "–"})
+    e["career_cr"] = cr
+    rv, rname = kb_rank(cr)
+    e["rank"] = rv
+    e["rank_name"] = rname
+    career[key] = e
+    save_jf(KB_CAREER, career)
+    return redirect("/adminpanel")
+
+
+@app.route("/adminpanel/message", methods=["POST"])
+def adminpanel_message():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    uname = request.form.get("uname", "").strip()
+    text  = request.form.get("msg_text", "").strip()
+    if uname and text:
+        send_notification(uname, text, from_role="Admin")
     return redirect("/adminpanel")
 
 
