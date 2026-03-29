@@ -759,6 +759,37 @@ def render_lobby(pilot):
     if notifs_html:
         html += notifs_html
 
+    # ── Rank milestone bar
+    _rank_thresholds = [(t, name, min_cr) for t, name, min_cr in [
+        (1,"Baník",0),(2,"Prospektér",100_000),(3,"Veterán",500_000),
+        (4,"Veliteľ",2_000_000),(5,"Legenda",10_000_000),(6,"Elita",25_000_000),
+        (7,"Majster",75_000_000),(8,"Hrdina",200_000_000),(9,"Šampión",500_000_000),
+        (10,"Vesmírny Boh",1_000_000_000),
+    ]]
+    _next = next(((name, min_cr) for _, name, min_cr in _rank_thresholds if min_cr > cr), None)
+    _cur_thresh = next((min_cr for _, name, min_cr in reversed(_rank_thresholds) if min_cr <= cr), 0)
+    if _next:
+        _next_name, _next_cr = _next
+        _needed = _next_cr - cr
+        _span = _next_cr - _cur_thresh
+        _pct = min(100, round((_span - _needed) / _span * 100)) if _span > 0 else 100
+        _milestone_lbl = L(f"Ďalší rank: {_next_name} za {_needed:,} CR", f"Next rank: {_next_name} in {_needed:,} CR")
+    else:
+        _pct = 100
+        _milestone_lbl = L("MAX RANK — Vesmírny Boh", "MAX RANK — Vesmírny Boh")
+    html += (
+        f'<div style="width:100%;max-width:700px;margin-bottom:8px;'
+        f'font-family:\'VT323\',monospace;font-size:.9em">'
+        f'<div style="display:flex;justify-content:space-between;color:#888;margin-bottom:3px">'
+        f'<span style="color:#ffb000">{display_rank}{"&nbsp;&#9733;" if rank_title else ""}</span>'
+        f'<span style="color:#666">{_milestone_lbl}</span>'
+        f'</div>'
+        f'<div style="width:100%;height:6px;background:#0d0d00;border:1px solid #3a2800;overflow:hidden">'
+        f'<div style="width:{_pct}%;height:100%;background:linear-gradient(90deg,#7a4800,#ffb000);'
+        f'box-shadow:0 0 6px #ffb000aa;transition:width .4s"></div>'
+        f'</div></div>'
+    )
+
     # ── Career stats
     html += '<div class="card">'
     html += f'<div class="card-title">&#128202; {L("KARIÉRA","CAREER")}</div>'
