@@ -915,7 +915,7 @@ def render_lobby(pilot):
         html += '</div>'
 
     # ── TESTER — Beta features card
-    if any(r.lower() == "tester" for r in sp_ranks):
+    if u_data.get("is_tester") is True:
         beta_features = [
             L("🪐 Planéta OMEGA-VII — hlboký vesmír (odomknutá od štartu)",
               "🪐 OMEGA-VII planet — deep space (unlocked from start)"),
@@ -1426,7 +1426,7 @@ def game():
     _spr = get_sp_ranks(_u)
     if _spr:
         my_career = dict(my_career, special_ranks=_spr)
-    _is_tester = any(r.lower() == "tester" for r in _spr)
+    _is_tester = _u.get("is_tester") is True
     lb_rows = []
     for u, d in all_career.items():
         if d.get("career_cr", 0) > 0:
@@ -1907,6 +1907,9 @@ def owner_panel():
         is_adm  = u.get("is_admin") is True
         adm_cell = ("<span style='color:#00ccff'>&#9679; Admin</span>" if is_adm
                     else "<span style='color:#444'>—</span>")
+        is_tst  = u.get("is_tester") is True
+        tst_cell = ("<span style='color:#39ff6a'>&#946; Tester</span>" if is_tst
+                    else "<span style='color:#444'>—</span>")
         # Správy tohto hráča
         notifs_all = u.get("notifications", [])
         notif_hist = "".join(
@@ -1940,6 +1943,7 @@ def owner_panel():
           <td>{sp_cell}</td>
           <td>{ban_cell}</td>
           <td>{adm_cell}</td>
+          <td>{tst_cell}</td>
           <td>{len(sv)}</td>
           <td>{msg_cell}</td>
           <td style="white-space:nowrap">
@@ -2012,6 +2016,10 @@ def owner_panel():
                style="color:{'#ff9900' if is_adm else '#00ccff'};font-size:.8em;margin-left:3px">
                {'Revoke Admin' if is_adm else 'Make Admin'}</a>
             &nbsp;
+            <a href="/owner/toggle_tester/{display}"
+               style="color:{'#ff9900' if is_tst else '#39ff6a'};font-size:.8em;margin-left:3px">
+               {'Revoke Tester' if is_tst else 'Make Tester'}</a>
+            &nbsp;
             <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
             &nbsp;
@@ -2066,7 +2074,7 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <table>
   <tr>
     <th>Pouzivatel</th><th>Heslo</th><th>Reg.</th><th>Posl. login</th>
-    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Admin</th><th>Sloty</th><th>&#9993; Správy</th><th>Akcie</th>
+    <th>Rank</th><th>Kariera</th><th>Spec. rank</th><th>Ban</th><th>Admin</th><th>&#946; Tester</th><th>Sloty</th><th>&#9993; Správy</th><th>Akcie</th>
   </tr>
   {rows}
 </table>
@@ -2178,6 +2186,17 @@ def owner_toggle_admin(uname):
     users = load_users()
     if uname in users:
         users[uname]["is_admin"] = not users[uname].get("is_admin", False)
+        save_users(users)
+    return redirect("/owner/panel")
+
+
+@app.route("/owner/toggle_tester/<uname>")
+def owner_toggle_tester(uname):
+    if not _owner_check():
+        return redirect("/owner")
+    users = load_users()
+    if uname in users:
+        users[uname]["is_tester"] = not users[uname].get("is_tester", False)
         save_users(users)
     return redirect("/owner/panel")
 
