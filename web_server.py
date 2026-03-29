@@ -198,11 +198,16 @@ def get_sp_ranks(user_dict):
     return [old] if old else []
 
 RANKS = [
-    (1, "Baník",      0),
-    (2, "Prospektér", 100_000),
-    (3, "Veterán",    500_000),
-    (4, "Veliteľ",    2_000_000),
-    (5, "Legenda",    10_000_000),
+    (1,  "Baník",        0),
+    (2,  "Prospektér",   100_000),
+    (3,  "Veterán",      500_000),
+    (4,  "Veliteľ",      2_000_000),
+    (5,  "Legenda",      10_000_000),
+    (6,  "Elita",        25_000_000),
+    (7,  "Majster",      75_000_000),
+    (8,  "Hrdina",       200_000_000),
+    (9,  "Šampión",      500_000_000),
+    (10, "Vesmírny Boh", 1_000_000_000),
 ]
 
 # Špeciálne tituly, ktoré môže nastaviť IBA owner (nie admin)
@@ -226,13 +231,17 @@ def kb_rank(cr):
 def send_notification(uname, text, from_role="owner"):
     """Uloží notifikáciu do users[uname]['notifications']. Ak má email, pošle aj mail."""
     users = load_users()
-    if uname not in users:
+    # Presná zhoda, potom case-insensitive fallback
+    key = uname if uname in users else next(
+        (k for k in users if k.lower() == uname.lower()), None)
+    if key is None:
+        print(f"[notify] uname '{uname}' not found in users")
         return
-    notifs = users[uname].setdefault("notifications", [])
+    notifs = users[key].setdefault("notifications", [])
     notifs.append({"text": text, "from": from_role,
                    "ts": datetime.now().strftime("%Y-%m-%d %H:%M"), "read": False})
     save_users(users)
-    email = users[uname].get("email", "").strip()
+    email = users[key].get("email", "").strip()
     if email:
         _send_email(email, f"[Kozmické Bane] Správa od {from_role}", text)
 
@@ -1817,8 +1826,15 @@ def owner_panel():
         rtitle  = c.get("rank_title", "")
         earned_rname = kb_rank(cr_val)[1]
         cur_tier = next((t for t, name, _ in RANKS if name == rtitle), kb_rank(cr_val)[0])
-        rank_opts = "".join(
-            f'<option value="{t}" {"selected" if t==cur_tier else ""}>{name}</option>'
+        rank_btns = "".join(
+            f'<form method="POST" action="/owner/set_rank_tier" style="display:inline;margin:0 1px 2px 0">'
+            f'<input type="hidden" name="uname" value="{display}">'
+            f'<input type="hidden" name="tier" value="{t}">'
+            f'<button type="submit" style="background:{"#001800" if t==cur_tier else "#000"};'
+            f'border:1px solid {"#39ff6a" if t==cur_tier else "#2a3a2a"};'
+            f'color:{"#39ff6a" if t==cur_tier else "#556655"};'
+            f'padding:1px 5px;cursor:pointer;font-family:inherit;font-size:.75em;white-space:nowrap">'
+            f'{name}</button></form>'
             for t, name, _ in RANKS
         )
         spr     = get_sp_ranks(u)
@@ -1911,17 +1927,7 @@ def owner_panel():
             <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
             &nbsp;
-            <form method="POST" action="/owner/set_rank_tier" style="display:inline">
-              <input type="hidden" name="uname" value="{display}">
-              <select name="tier" style="background:#000b1a;border:1px solid #00ccff;
-                color:#00ccff;font-family:inherit;font-size:.8em;padding:2px">
-                {rank_opts}
-              </select>
-              <button type="submit" style="background:#000b1a;border:1px solid #00ccff;
-                color:#00ccff;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.8em">
-                Rank
-              </button>
-            </form>
+            <div style="display:inline-flex;flex-wrap:wrap;gap:1px;vertical-align:middle">{rank_btns}</div>
             &nbsp;
             <form method="POST" action="/owner/rename" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
@@ -2193,8 +2199,15 @@ def adminpanel():
         rtitle_a = c_a.get('rank_title', '')
         rank_name = rtitle_a if rtitle_a else c_a.get('rank_name', 'Baník')
         cur_tier_a = next((t for t, name, _ in RANKS if name == rtitle_a), kb_rank(cr_val_a)[0])
-        rank_opts_a = "".join(
-            f'<option value="{t}" {"selected" if t==cur_tier_a else ""}>{name}</option>'
+        rank_btns_a = "".join(
+            f'<form method="POST" action="/adminpanel/set_rank_tier" style="display:inline;margin:0 1px 2px 0">'
+            f'<input type="hidden" name="uname" value="{uname_orig}">'
+            f'<input type="hidden" name="tier" value="{t}">'
+            f'<button type="submit" style="background:{"#001800" if t==cur_tier_a else "#000"};'
+            f'border:1px solid {"#39ff6a" if t==cur_tier_a else "#2a3a2a"};'
+            f'color:{"#39ff6a" if t==cur_tier_a else "#556655"};'
+            f'padding:1px 5px;cursor:pointer;font-family:inherit;font-size:.75em;white-space:nowrap">'
+            f'{name}</button></form>'
             for t, name, _ in RANKS
         )
         spr0 = spr[0] if len(spr) > 0 else ''
@@ -2217,18 +2230,7 @@ def adminpanel():
                 &#9733; Uloz
               </button>
             </form>
-            &nbsp;
-            <form method="POST" action="/adminpanel/set_rank_tier" style="display:inline">
-              <input type="hidden" name="uname" value="{uname_orig}">
-              <select name="tier" style="background:#000b1a;border:1px solid #00ccff;
-                color:#00ccff;font-family:inherit;font-size:.85em;padding:2px">
-                {rank_opts_a}
-              </select>
-              <button type="submit" style="background:#000b1a;border:1px solid #00ccff;
-                color:#00ccff;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:.85em">
-                Rank
-              </button>
-            </form>
+            <div style="display:inline-flex;flex-wrap:wrap;gap:1px;vertical-align:middle">{rank_btns_a}</div>
             &nbsp;
             <form method="POST" action="/adminpanel/message" style="display:inline">
               <input type="hidden" name="uname" value="{uname_orig}">
