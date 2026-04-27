@@ -41,6 +41,19 @@ print(f"[startup] DATA_DIR={DATA_DIR} | RENDER={bool(os.environ.get('RENDER'))} 
 PORT       = int(os.environ.get("PORT", 5000))
 OWNER_CODE = os.environ.get("OWNER_CODE", os.environ.get("ADMIN_CODE", ""))  # nastav OWNER_CODE v env premenných na Render
 
+# Zoznam beta funkcií viditeľných len pre testerov.
+# Každá fáza pridá nové záznamy — nič iné sa nemení.
+BETA_FEATURES = [
+    {
+        "id": "omega7",
+        "name_sk": "Planéta Omega-VII",
+        "desc_sk": "Prístup k planéte Omega-VII od štartu novej hry",
+        "name_en": "Planet Omega-VII",
+        "desc_en": "Access to planet Omega-VII from the start of a new game",
+    },
+    # Fáza 2 pridá: energetická minihra
+]
+
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
 
@@ -916,32 +929,19 @@ def render_lobby(pilot):
 
     # ── TESTER — Beta features card
     if u_data.get("is_tester") is True:
-        beta_features = [
-            L("⚙ Klikni na [β TEST] tlačidlo v hre — otvorí sa tester panel",
-              "⚙ Click the [β TEST] button in game — opens tester panel"),
-            L("☑ God Mode — nesmrteľnosť, žiadna HP škoda (toggle v paneli)",
-              "☑ God Mode — immortality, no HP damage (toggle in panel)"),
-            L("💰 +10 000 CR okamžite (tlačidlo v tester paneli)",
-              "💰 +10 000 CR instantly (button in tester panel)"),
-            L("🔬 +200 RP okamžite (tlačidlo v tester paneli)",
-              "🔬 +200 RP instantly (button in tester panel)"),
-            L("⬇ Teleport na Jadro L5 (tlačidlo v tester paneli)",
-              "⬇ Teleport to Core L5 (button in tester panel)"),
-            L("🔓 Omega-VII odomknutá od štartu novej hry",
-              "🔓 Omega-VII unlocked from start of new game"),
-            L("⚡ Okamžité splnenie cieľa misie (tlačidlo v tester paneli)",
-              "⚡ Instant mission completion (button in tester panel)"),
-        ]
         beta_items = "".join(
-            f'<div style="padding:3px 0;border-bottom:1px solid #0d1a0d;font-size:.9em;color:#aaffaa">'
-            f'<span style="color:#39ff6a;margin-right:6px">▶</span>{f}</div>'
-            for f in beta_features
+            f'<div style="padding:4px 0;border-bottom:1px solid #0d1a0d;font-size:.9em">'
+            f'<span style="color:#39ff6a;margin-right:6px">▶</span>'
+            f'<span style="color:#cfffcf">{L(f["name_sk"], f["name_en"])}</span>'
+            f'<span style="color:#556655;margin-left:8px;font-size:.88em">— {L(f["desc_sk"], f["desc_en"])}</span>'
+            f'</div>'
+            for f in BETA_FEATURES
         )
         html += (
             f'<div class="card" style="border-color:#39ff6a44;background:#010d01">'
-            f'<div class="card-title" style="color:#39ff6a">&#9881; TESTER BUILD &mdash; {L("BETA FUNKCIE","BETA FEATURES")}</div>'
-            f'<div style="color:#556655;font-size:.82em;margin-bottom:6px">'
-            f'{L("Máš prístup k funkciám ktoré ešte nie sú verejné. Hláš chyby adminovi.","You have access to features not yet public. Report bugs to an admin.")}'
+            f'<div class="card-title" style="color:#39ff6a">&#946; {L("BETA PRÍSTUP","BETA ACCESS")}</div>'
+            f'<div style="color:#556655;font-size:.82em;margin-bottom:8px">'
+            f'{L("Máš prístup k funkciám ktoré ešte nie sú verejné. Hláš chyby adminovi.", "You have access to features not yet public. Report bugs to an admin.")}'
             f'</div>'
             f'{beta_items}'
             f'</div>'

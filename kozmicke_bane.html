@@ -138,20 +138,7 @@ body.kb-mobile .tbtn{font-size:1.1rem;padding:3px 10px;}
   <button class="tbtn" onclick="quickSave()" id="qsbtn" style="display:none">💾 SAVE</button>
   <button class="tbtn" onclick="aLead()" id="lbbtn" style="display:none">🏆</button>
   <button class="tbtn" onclick="toggleLang()" id="lang-btn">SK</button>
-  <button id="tester-badge" onclick="openTesterPanel()" style="display:none;cursor:pointer;color:#39ff6a;background:#010d01;font-size:.78em;border:1px solid #39ff6a;padding:1px 8px;letter-spacing:.08em;font-family:inherit">β TEST</button>
-</div>
-<div id="tester-panel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#010d01;border:2px solid #39ff6a;padding:18px 24px;min-width:280px;font-family:'VT323',monospace;color:#39ff6a;box-shadow:0 0 30px #39ff6a44">
-  <div style="font-size:1.2em;border-bottom:1px solid #39ff6a44;padding-bottom:6px;margin-bottom:12px;letter-spacing:.1em">⚙ TESTER PANEL</div>
-  <div id="tp-godmode-row" style="margin-bottom:8px">
-    <button onclick="toggleGodMode()" id="tp-god-btn" style="width:100%;background:#000;border:1px solid #39ff6a;color:#39ff6a;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em">☐ God Mode (nesmrteľnosť)</button>
-  </div>
-  <button onclick="G.credits+=10000;rG([{txt:'[TESTER] +10 000 CR',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #ffb000;color:#ffb000;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:6px">+ 10 000 CR</button>
-  <button onclick="G.rp=(G.rp||0)+200;rG([{txt:'[TESTER] +200 RP',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #88aaff;color:#88aaff;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:6px">+ 200 RP</button>
-  <button onclick="G.hp=G.maxHp;rG([{txt:'[TESTER] HP obnovené',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #ff4444;color:#ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:6px">⚕ Obnov HP na max</button>
-  <button onclick="G.depth=5;G.depthM=8000;rG([{txt:'[TESTER] Teleport: Jadro L5',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #ff8844;color:#ff8844;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:6px">⬇ Teleport → Jadro L5</button>
-  <button onclick="G.omegaUnlocked=true;rG([{txt:'[TESTER] Omega-VII odomknutá',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #dd00ff;color:#dd00ff;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:6px">🔓 Odomknúť Omega-VII</button>
-  <button onclick="G.credits=G.goal+1;rG([{txt:'[TESTER] Cieľ splnený!',cls:'lrar'}]);closeTesterPanel()" style="width:100%;background:#000;border:1px solid #ffdd00;color:#ffdd00;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em;margin-bottom:12px">⚡ Splniť cieľ (okamžite)</button>
-  <button onclick="closeTesterPanel()" style="width:100%;background:#001800;border:1px solid #39ff6a44;color:#39ff6a;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:.95em">✕ Zavrieť</button>
+  <span id="tester-badge" style="display:none;color:#39ff6a;font-size:.75em;border:1px solid #39ff6a55;padding:1px 7px;letter-spacing:.1em;opacity:.8">β</span>
 </div>
 <div id="scr"></div>
 
@@ -205,22 +192,7 @@ function corners(){return'<div class="c tl"></div><div class="c tr"></div><div c
 // ══════════════════════════════════════════════════════════════
 let LANG = localStorage.getItem('lang') || 'sk';
 (function(){ const b=document.getElementById('lang-btn'); if(b) b.textContent=LANG.toUpperCase(); })();
-(function(){ if(window.__IS_TESTER__){ const el=document.getElementById('tester-badge'); if(el)el.style.display='inline-block'; } })();
-
-function openTesterPanel(){
-  if(!window.__IS_TESTER__)return;
-  const btn=document.getElementById('tp-god-btn');
-  if(btn)btn.textContent=(G._godMode?'☑':'☐')+' God Mode (nesmrteľnosť)';
-  document.getElementById('tester-panel').style.display='block';
-}
-function closeTesterPanel(){document.getElementById('tester-panel').style.display='none';}
-function toggleGodMode(){
-  G._godMode=!G._godMode;
-  const btn=document.getElementById('tp-god-btn');
-  if(btn)btn.textContent=(G._godMode?'☑':'☐')+' God Mode (nesmrteľnosť)';
-  rG([{txt:'[TESTER] God Mode: '+(G._godMode?'ZAP':'VYP'),cls:'lrar'}]);
-  closeTesterPanel();
-}
+(function(){ if(window.__IS_TESTER__){ const el=document.getElementById('tester-badge'); if(el)el.style.display='inline'; } })();
 
 const T = {
   sk: {
@@ -1193,7 +1165,6 @@ function newGame(username){
     era:1, colony:null, currentPlanet4:'zyrax8', corpContract:false, corpFee:0,
     omegaUnlocked: window.__IS_TESTER__ === true,
   };
-  if(window.__IS_TESTER__)G._tester=true;
 }
 function hU(id){return G.upgrades.some(u=>u.id===id);}
 function mBonus(){let b=0;if(hU('drill2'))b++;if(hU('drill3'))b+=2;if(hU('diamondtip'))b+=3;if(hU('drill4'))b+=4;return b;}
@@ -1720,8 +1691,8 @@ function doMine(){
   if(dep.hpMod<0&&Math.random()<.35){
     let dmg=Math.round(Math.abs(dep.hpMod)*20*(G.era===4?era4dmg:G.planet===3?2.5:G.planet===2?1.8:1));
     if(G.weapon)dmg=Math.max(0,Math.ceil(dmg*G.weapon.dmgMult));
-    if(dmg>0){if(!G._godMode)G.hp=Math.max(0,G.hp-dmg);
-      logs.push({txt:t('mine_depth_dmg',{n:dep.lv,dmg:G._godMode?0:dmg}),cls:'ldng'});}}
+    if(dmg>0){G.hp=Math.max(0,G.hp-dmg);
+      logs.push({txt:t('mine_depth_dmg',{n:dep.lv,dmg:dmg}),cls:'ldng'});}}
 
   // Events
   if(Math.random()<.40){
@@ -1732,7 +1703,7 @@ function doMine(){
     if(hU('biosuit')&&hp<0)hp=Math.ceil(hp*.4);
     if(G.weapon&&hp<0)hp=Math.ceil(hp*G.weapon.dmgMult);
     if(hU('automed')&&hp<0)hp+=8;
-    if(ev.hp)G.hp=G._godMode&&hp<0?G.hp:Math.max(0,Math.min(G.maxHp,G.hp+hp));
+    if(ev.hp)G.hp=Math.max(0,Math.min(G.maxHp,G.hp+hp));
     if(ev.cr)G.credits=Math.max(0,G.credits+cr);
     if(ev.mine){const bm=MINERALS.filter(m=>m.tier<=dep.lv+1)[Math.floor(Math.random()*4)];
       G.inv[bm.id].qty+=ev.mine;logs.push({txt:`  ★ BONUS: +${ev.mine}×${bm.name}`,cls:'lrar'});}
