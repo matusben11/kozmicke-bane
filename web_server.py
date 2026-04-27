@@ -41,11 +41,14 @@ print(f"[startup] DATA_DIR={DATA_DIR} | RENDER={bool(os.environ.get('RENDER'))} 
 PORT       = int(os.environ.get("PORT", 5000))
 OWNER_CODE = os.environ.get("OWNER_CODE", os.environ.get("ADMIN_CODE", ""))  # nastav OWNER_CODE v env premenných na Render
 
-# Zoznam beta funkcií viditeľných len pre testerov.
-# Každá fáza pridá nové záznamy — nič iné sa nemení.
+# Zoznam beta funkcií.
+# public=False  → viditeľné len testerom
+# public=True   → dostupné všetkým (release bez zmeny iného kódu)
+# Každá fáza pridá nové záznamy.
 BETA_FEATURES = [
     {
         "id": "omega7",
+        "public": False,
         "name_sk": "Planéta Omega-VII",
         "desc_sk": "Prístup k planéte Omega-VII od štartu novej hry",
         "name_en": "Planet Omega-VII",
@@ -927,25 +930,27 @@ def render_lobby(pilot):
         )
         html += '</div>'
 
-    # ── TESTER — Beta features card
+    # ── TESTER — Beta features card (len nepublic funkcie)
     if u_data.get("is_tester") is True:
-        beta_items = "".join(
-            f'<div style="padding:4px 0;border-bottom:1px solid #0d1a0d;font-size:.9em">'
-            f'<span style="color:#39ff6a;margin-right:6px">▶</span>'
-            f'<span style="color:#cfffcf">{L(f["name_sk"], f["name_en"])}</span>'
-            f'<span style="color:#556655;margin-left:8px;font-size:.88em">— {L(f["desc_sk"], f["desc_en"])}</span>'
-            f'</div>'
-            for f in BETA_FEATURES
-        )
-        html += (
-            f'<div class="card" style="border-color:#39ff6a44;background:#010d01">'
-            f'<div class="card-title" style="color:#39ff6a">&#946; {L("BETA PRÍSTUP","BETA ACCESS")}</div>'
-            f'<div style="color:#556655;font-size:.82em;margin-bottom:8px">'
-            f'{L("Máš prístup k funkciám ktoré ešte nie sú verejné. Hláš chyby adminovi.", "You have access to features not yet public. Report bugs to an admin.")}'
-            f'</div>'
-            f'{beta_items}'
-            f'</div>'
-        )
+        tester_only = [f for f in BETA_FEATURES if not f.get("public", False)]
+        if tester_only:
+            beta_items = "".join(
+                f'<div style="padding:4px 0;border-bottom:1px solid #0d1a0d;font-size:.9em">'
+                f'<span style="color:#39ff6a;margin-right:6px">▶</span>'
+                f'<span style="color:#cfffcf">{L(f["name_sk"], f["name_en"])}</span>'
+                f'<span style="color:#556655;margin-left:8px;font-size:.88em">— {L(f["desc_sk"], f["desc_en"])}</span>'
+                f'</div>'
+                for f in tester_only
+            )
+            html += (
+                f'<div class="card" style="border-color:#39ff6a44;background:#010d01">'
+                f'<div class="card-title" style="color:#39ff6a">&#946; {L("BETA PRÍSTUP","BETA ACCESS")}</div>'
+                f'<div style="color:#556655;font-size:.82em;margin-bottom:8px">'
+                f'{L("Máš prístup k funkciám ktoré ešte nie sú verejné. Hláš chyby adminovi.", "You have access to features not yet public. Report bugs to an admin.")}'
+                f'</div>'
+                f'{beta_items}'
+                f'</div>'
+            )
 
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
@@ -1429,6 +1434,11 @@ def game():
     if _spr:
         my_career = dict(my_career, special_ranks=_spr)
     _is_tester = _u.get("is_tester") is True
+    # Pre každý feature: True ak je tester ALEBO feature je public
+    _beta_flags = {
+        f["id"]: (_is_tester or f.get("public", False))
+        for f in BETA_FEATURES
+    }
     lb_rows = []
     for u, d in all_career.items():
         if d.get("career_cr", 0) > 0:
@@ -1443,6 +1453,7 @@ def game():
         f"window.__MY_CAREER__={json.dumps(my_career)};"
         f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
         f"window.__IS_TESTER__={'true' if _is_tester else 'false'};"
+        f"window.__BETA_FLAGS__={json.dumps(_beta_flags)};"
         f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)

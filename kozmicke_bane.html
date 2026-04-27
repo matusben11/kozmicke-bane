@@ -1163,7 +1163,7 @@ function newGame(username){
     stats:{mined:0,sold:0,events:0,polished:0,maxDepth:1},
     rp:0, weapon:null, rocket:0, planet:1,
     era:1, colony:null, currentPlanet4:'zyrax8', corpContract:false, corpFee:0,
-    omegaUnlocked: window.__IS_TESTER__ === true,
+    omegaUnlocked: !!(window.__BETA_FLAGS__ && window.__BETA_FLAGS__.omega7),
   };
 }
 function hU(id){return G.upgrades.some(u=>u.id===id);}
