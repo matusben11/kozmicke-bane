@@ -25,6 +25,7 @@ DATA_FILE = DATA_DIR / "game_users.json"
 KB_CAREER = DATA_DIR / "kb_career.json"
 KB_SAVES  = DATA_DIR / "kb_saves.json"
 KB_LB     = DATA_DIR / "kb_leaderboard.json"
+KB_ENERGY = DATA_DIR / "kb_energy.json"
 
 # Migrácia zo starého disk path (pred zmenou mountPath)
 _OLD_SRC = pathlib.Path("/opt/render/project/src")
@@ -44,7 +45,6 @@ OWNER_CODE = os.environ.get("OWNER_CODE", os.environ.get("ADMIN_CODE", ""))  # n
 # Zoznam beta funkcií.
 # public=False  → viditeľné len testerom
 # public=True   → dostupné všetkým (release bez zmeny iného kódu)
-# Každá fáza pridá nové záznamy.
 BETA_FEATURES = [
     {
         "id": "omega7",
@@ -54,8 +54,64 @@ BETA_FEATURES = [
         "name_en": "Planet Omega-VII",
         "desc_en": "Access to planet Omega-VII from the start of a new game",
     },
-    # Fáza 2 pridá: energetická minihra
+    {
+        "id": "energy_minigame",
+        "public": False,
+        "name_sk": "Energetická minihra",
+        "desc_sk": "Stav elektrárne, vyrábaj energiu — základ pre budúci trh",
+        "name_en": "Energy minigame",
+        "desc_en": "Build power plants, produce energy — foundation for the future market",
+    },
 ]
+
+# ── Energetická minihra — konštanty ─────────────────────────────────────────
+
+PLANT_TYPES = {
+    "solar": {
+        "id": "solar", "icon": "☀",
+        "name_sk": "Solárna elektráreň", "name_en": "Solar power plant",
+        "desc_sk": "Bez paliva. Produkuje 8 energie/hod.",
+        "desc_en": "No fuel needed. Produces 8 energy/hr.",
+        "build_cost": 3000,
+        "fuel_type": None, "fuel_per_hr": 0,
+        "energy_per_hr": 8, "max_count": 5,
+    },
+    "coal": {
+        "id": "coal", "icon": "🏭",
+        "name_sk": "Uhoľná elektráreň", "name_en": "Coal power plant",
+        "desc_sk": "Spotrebuje 1 tonu uhlia/hod. Produkuje 40 energie/hod.",
+        "desc_en": "Consumes 1 coal ton/hr. Produces 40 energy/hr.",
+        "build_cost": 8000,
+        "fuel_type": "coal", "fuel_per_hr": 1,
+        "energy_per_hr": 40, "max_count": 3,
+    },
+    "nuclear": {
+        "id": "nuclear", "icon": "⚛",
+        "name_sk": "Jadrová elektráreň", "name_en": "Nuclear power plant",
+        "desc_sk": "Spotrebuje 1 palivový článok/hod. Produkuje 200 energie/hod.",
+        "desc_en": "Consumes 1 fuel rod/hr. Produces 200 energy/hr.",
+        "build_cost": 50000,
+        "fuel_type": "uranium", "fuel_per_hr": 1,
+        "energy_per_hr": 200, "max_count": 1,
+    },
+}
+
+FUEL_SHOP = [
+    {
+        "id": "coal", "icon": "⛏",
+        "name_sk": "Uhlie", "name_en": "Coal",
+        "pack_qty": 20, "pack_cost": 800,
+        "unit_sk": "ton", "unit_en": "tons",
+    },
+    {
+        "id": "uranium", "icon": "☢",
+        "name_sk": "Urán (palivové články)", "name_en": "Uranium (fuel rods)",
+        "pack_qty": 5, "pack_cost": 6000,
+        "unit_sk": "ks", "unit_en": "rods",
+    },
+]
+
+MAX_ENERGY = 1000  # maximálna kapacita zásobníka energie
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -165,6 +221,58 @@ def load_jf(path, default=None):
 
 def save_jf(path, data):
     _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ── Energetická minihra — helpers ───────────────────────────────────────────
+
+def _get_energy_profile(uname_upper):
+    data = load_jf(KB_ENERGY, {})
+    if uname_upper not in data:
+        data[uname_upper] = {
+            "plants": [],
+            "energy": 0.0,
+            "fuel": {"coal": 0, "uranium": 0},
+            "last_tick": datetime.now().timestamp(),
+        }
+        save_jf(KB_ENERGY, data)
+    return data[uname_upper]
+
+def _energy_tick(uname_upper):
+    """Vypočítaj offline produkciu a ulož. Vráti aktualizovaný profil."""
+    data = load_jf(KB_ENERGY, {})
+    profile = data.get(uname_upper, {
+        "plants": [], "energy": 0.0,
+        "fuel": {"coal": 0, "uranium": 0},
+        "last_tick": datetime.now().timestamp(),
+    })
+    now = datetime.now().timestamp()
+    elapsed_hrs = min((now - profile.get("last_tick", now)) / 3600.0, 72.0)
+
+    fuel  = {k: float(v) for k, v in profile.get("fuel", {}).items()}
+    fuel.setdefault("coal", 0.0)
+    fuel.setdefault("uranium", 0.0)
+    energy = float(profile.get("energy", 0.0))
+
+    for plant_id in profile.get("plants", []):
+        pt = PLANT_TYPES.get(plant_id)
+        if not pt:
+            continue
+        if pt["fuel_type"] is None:
+            energy += pt["energy_per_hr"] * elapsed_hrs
+        else:
+            avail = fuel.get(pt["fuel_type"], 0.0)
+            if avail <= 0:
+                continue
+            hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
+            energy += pt["energy_per_hr"] * hrs
+            fuel[pt["fuel_type"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
+
+    profile["energy"]    = round(min(energy, MAX_ENERGY), 1)
+    profile["fuel"]      = {k: round(v, 2) for k, v in fuel.items()}
+    profile["last_tick"] = now
+    data[uname_upper]    = profile
+    save_jf(KB_ENERGY, data)
+    return profile
 
 def _migrate_saves():
     saves = load_jf(KB_SAVES, {})
@@ -951,6 +1059,17 @@ def render_lobby(pilot):
                 f'{beta_items}'
                 f'</div>'
             )
+
+    # ── Energetická minihra (tester alebo public)
+    _energy_public = next((f for f in BETA_FEATURES if f["id"] == "energy_minigame"), {}).get("public", False)
+    if u_data.get("is_tester") is True or _energy_public:
+        html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
+        _beta_tag = ' &nbsp;<span style="font-size:.75em;opacity:.6">[BETA]</span>' if not _energy_public else ""
+        html += (f'<a href="/energy" style="display:block;background:#010d01;border:1px solid #39ff6a;'
+                 f'color:#39ff6a;font-family:\'VT323\',monospace;font-size:1.15em;padding:9px 14px;'
+                 f'text-align:center;text-decoration:none;letter-spacing:.06em">'
+                 f'&#9889; {L("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}{_beta_tag}'
+                 f'</a></div>')
 
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
@@ -2449,6 +2568,291 @@ def adminpanel_message():
     if uname and text:
         send_notification(uname, text, from_role="Admin")
     return redirect("/adminpanel")
+
+
+# ── Energetická minihra ─────────────────────────────────────────────────────
+
+def _energy_allowed():
+    """True ak má user prístup k energetickej minihre (tester alebo feature je public)."""
+    if "username" not in session:
+        return False
+    energy_public = next((f for f in BETA_FEATURES if f["id"] == "energy_minigame"), {}).get("public", False)
+    if energy_public:
+        return True
+    users = load_users()
+    u = users.get(session["username"], {})
+    return u.get("is_tester") is True
+
+
+@app.route("/energy")
+def energy_page():
+    if not _require_session():
+        return redirect("/")
+    if not _energy_allowed():
+        return redirect("/lobby")
+
+    uname = _uname()
+    profile = _energy_tick(uname)
+
+    career  = load_jf(KB_CAREER, {})
+    cr      = career.get(uname, {}).get("career_cr", 0)
+
+    # Počty elektrární podľa typu
+    from collections import Counter
+    plant_counts = Counter(profile.get("plants", []))
+    fuel  = profile.get("fuel", {"coal": 0, "uranium": 0})
+    energy = profile.get("energy", 0.0)
+
+    # Celková produkcia za hodinu
+    total_rate = 0.0
+    for pid, cnt in plant_counts.items():
+        pt = PLANT_TYPES.get(pid)
+        if not pt:
+            continue
+        if pt["fuel_type"] is None:
+            total_rate += pt["energy_per_hr"] * cnt
+        else:
+            if fuel.get(pt["fuel_type"], 0) > 0:
+                total_rate += pt["energy_per_hr"] * cnt
+
+    lang = session.get("lang", "sk")
+
+    def Lp(sk, en):
+        return en if lang == "en" else sk
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px 16px 40px;}
+h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-align:center;
+  text-shadow:0 0 18px #39ff6a88;}
+.sub{color:#2a7a45;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#010d01;border:1px solid #39ff6a44;width:100%;max-width:680px;
+  padding:16px 20px 18px;margin-bottom:12px;}
+.card-title{color:#39ff6a;font-size:1.05em;border-bottom:1px solid #0d2a0d;
+  padding-bottom:5px;margin-bottom:12px;letter-spacing:.08em;}
+.row{display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid #0a1a0a;font-size:.95em;}
+.row:last-child{border-bottom:none;}
+.lbl{color:#2a7a45;}
+.val{color:#cfffcf;}
+.plant-row{display:flex;justify-content:space-between;align-items:center;
+  padding:7px 0;border-bottom:1px solid #0a1a0a;}
+.plant-row:last-child{border-bottom:none;}
+.active{color:#39ff6a;}
+.idle{color:#555;}
+.btn-buy{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+  font-family:'VT323',monospace;font-size:.95em;padding:4px 14px;cursor:pointer;
+  letter-spacing:.05em;}
+.btn-buy:hover{background:#003a10;}
+.btn-buy:disabled{border-color:#1a3a1a;color:#1a3a1a;cursor:default;}
+.btn-back{display:inline-block;background:#000;border:1px solid #2a7a45;color:#2a7a45;
+  font-family:'VT323',monospace;font-size:1em;padding:6px 16px;text-decoration:none;
+  letter-spacing:.06em;margin-bottom:14px;}
+.btn-back:hover{background:#0a1a0a;color:#39ff6a;}
+.warn{color:#ff9900;font-size:.85em;}
+.energy-bar-wrap{background:#0a1a0a;border:1px solid #1a4a1a;height:18px;
+  width:100%;margin:6px 0 2px;position:relative;}
+.energy-bar-fill{height:100%;background:#39ff6a;transition:width .3s;}
+.energy-bar-label{position:absolute;top:0;left:50%;transform:translateX(-50%);
+  font-size:.85em;line-height:18px;color:#000;mix-blend-mode:difference;}
+</style>"""
+
+    # ── Energy bar
+    bar_pct = min(100, round(energy / MAX_ENERGY * 100))
+    bar_html = (
+        f'<div class="energy-bar-wrap">'
+        f'<div class="energy-bar-fill" style="width:{bar_pct}%"></div>'
+        f'<div class="energy-bar-label">{energy:.1f} / {MAX_ENERGY}</div>'
+        f'</div>'
+        f'<div style="color:#2a7a45;font-size:.82em">'
+        f'+{total_rate:.0f} {Lp("energie/hod","energy/hr")} &nbsp;|&nbsp; '
+        f'{Lp("kariéra CR","career CR")}: <span style="color:#cfffcf">{cr:,}</span>'
+        f'</div>'
+    )
+
+    # ── Plantas zoznam
+    plants_html = ""
+    if not plant_counts:
+        plants_html = f'<div class="idle" style="padding:6px 0">{Lp("Žiadne elektrárne. Postav svoju prvú elektráreň nižšie.", "No power plants. Build your first one below.")}</div>'
+    else:
+        for pid, cnt in sorted(plant_counts.items()):
+            pt = PLANT_TYPES[pid]
+            name  = Lp(pt["name_sk"], pt["name_en"])
+            if pt["fuel_type"] is None:
+                status = f'<span class="active">▶ {Lp("AKTÍVNA","ACTIVE")}</span>'
+                rate_str = f'+{pt["energy_per_hr"] * cnt} E/hod'
+                fuel_str = ""
+            else:
+                fstock = fuel.get(pt["fuel_type"], 0)
+                if fstock > 0:
+                    status   = f'<span class="active">▶ {Lp("AKTÍVNA","ACTIVE")}</span>'
+                    rate_str = f'+{pt["energy_per_hr"] * cnt} E/hod'
+                else:
+                    status   = f'<span class="idle">⏸ {Lp("NEČINNÁ — bez paliva","IDLE — no fuel")}</span>'
+                    rate_str = "+0 E/hod"
+                fuel_name = Lp(next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["name_sk"],
+                               next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["name_en"])
+                unit      = Lp(next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["unit_sk"],
+                               next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["unit_en"])
+                fuel_str  = f'<span style="color:#2a7a45;font-size:.85em"> — {fuel_name}: {fstock:.1f} {unit}</span>'
+            plants_html += (
+                f'<div class="plant-row">'
+                f'<span>{pt["icon"]} {name} ×{cnt}{fuel_str}</span>'
+                f'<span>{status} &nbsp; <span class="val">{rate_str}</span></span>'
+                f'</div>'
+            )
+
+    # ── Elektrárne na kúpu
+    buy_plants_html = ""
+    for pid, pt in PLANT_TYPES.items():
+        name = Lp(pt["name_sk"], pt["name_en"])
+        desc = Lp(pt["desc_sk"], pt["desc_en"])
+        cnt  = plant_counts.get(pid, 0)
+        can_afford = cr >= pt["build_cost"]
+        at_max     = cnt >= pt["max_count"]
+        disabled   = "disabled" if (not can_afford or at_max) else ""
+        note       = f'({Lp("max","max")} {pt["max_count"]})' if at_max else ""
+        warn       = f'<span class="warn"> — {Lp("nedostatok CR","not enough CR")}</span>' if (not can_afford and not at_max) else ""
+        buy_plants_html += (
+            f'<div class="plant-row">'
+            f'<div><span style="color:#cfffcf">{pt["icon"]} {name}</span>'
+            f' &nbsp;<span style="color:#2a7a45;font-size:.85em">{desc}</span>'
+            f'{warn}</div>'
+            f'<form method="POST" action="/energy/build" style="display:inline">'
+            f'<input type="hidden" name="type" value="{pid}">'
+            f'<button class="btn-buy" {disabled}>'
+            f'{pt["build_cost"]:,} CR {note}'
+            f'</button></form>'
+            f'</div>'
+        )
+
+    # ── Palivo na kúpu
+    buy_fuel_html = ""
+    for fs in FUEL_SHOP:
+        fname = Lp(fs["name_sk"], fs["name_en"])
+        unit  = Lp(fs["unit_sk"], fs["unit_en"])
+        stock = fuel.get(fs["id"], 0)
+        can_afford = cr >= fs["pack_cost"]
+        disabled   = "" if can_afford else "disabled"
+        warn       = f'<span class="warn"> {Lp("nedostatok CR","not enough CR")}</span>' if not can_afford else ""
+        buy_fuel_html += (
+            f'<div class="plant-row">'
+            f'<div><span style="color:#cfffcf">{fs["icon"]} {fname}</span>'
+            f' &nbsp;<span style="color:#2a7a45;font-size:.85em">{Lp("Zostatok","Stock")}: {stock:.1f} {unit}</span>'
+            f'{warn}</div>'
+            f'<form method="POST" action="/energy/buy_fuel" style="display:inline">'
+            f'<input type="hidden" name="fuel_id" value="{fs["id"]}">'
+            f'<button class="btn-buy" {disabled}>'
+            f'+{fs["pack_qty"]} {unit} — {fs["pack_cost"]:,} CR'
+            f'</button></form>'
+            f'</div>'
+        )
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp("Energetická minihra","Energy Minigame")} — KB</title>
+{css}</head><body>
+<a href="/lobby" class="btn-back">&#8592; {Lp("Späť do lobby","Back to lobby")}</a>
+<h1>&#9889; {Lp("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}</h1>
+<div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.1 &nbsp;|&nbsp; &#946;</div>
+
+<div class="card">
+  <div class="card-title">&#9889; {Lp("ENERGIA — ZÁSOBNÍK","ENERGY STORAGE")}</div>
+  {bar_html}
+</div>
+
+<div class="card">
+  <div class="card-title">&#9108; {Lp("VAŠE ELEKTRÁRNE","YOUR POWER PLANTS")}</div>
+  {plants_html}
+</div>
+
+<div class="card">
+  <div class="card-title">&#43; {Lp("POSTAVIŤ ELEKTRÁREŇ","BUILD POWER PLANT")}</div>
+  <div style="color:#2a7a45;font-size:.82em;margin-bottom:8px">
+    {Lp("Cena sa odpočíta z tvojich kariérnych CR.","Cost is deducted from your career CR.")}
+  </div>
+  {buy_plants_html}
+</div>
+
+<div class="card">
+  <div class="card-title">&#9981; {Lp("PALIVO — ZÁSOBY","FUEL SUPPLIES")}</div>
+  <div style="color:#2a7a45;font-size:.82em;margin-bottom:8px">
+    {Lp("Cena sa odpočíta z tvojich kariérnych CR.","Cost is deducted from your career CR.")}
+  </div>
+  {buy_fuel_html}
+</div>
+
+</body></html>"""
+
+    return html
+
+
+@app.route("/energy/build", methods=["POST"])
+def energy_build():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    plant_id = request.form.get("type", "").strip()
+    if plant_id not in PLANT_TYPES:
+        return redirect("/energy")
+
+    uname  = _uname()
+    pt     = PLANT_TYPES[plant_id]
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr     = entry.get("career_cr", 0)
+
+    profile = _energy_tick(uname)
+    from collections import Counter
+    cnt = Counter(profile.get("plants", [])).get(plant_id, 0)
+
+    if cr < pt["build_cost"] or cnt >= pt["max_count"]:
+        return redirect("/energy")
+
+    entry["career_cr"] = cr - pt["build_cost"]
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname]["plants"].append(plant_id)
+    save_jf(KB_ENERGY, data)
+
+    return redirect("/energy")
+
+
+@app.route("/energy/buy_fuel", methods=["POST"])
+def energy_buy_fuel():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    fuel_id = request.form.get("fuel_id", "").strip()
+    fs = next((f for f in FUEL_SHOP if f["id"] == fuel_id), None)
+    if not fs:
+        return redirect("/energy")
+
+    uname  = _uname()
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr     = entry.get("career_cr", 0)
+
+    if cr < fs["pack_cost"]:
+        return redirect("/energy")
+
+    entry["career_cr"] = cr - fs["pack_cost"]
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    _energy_tick(uname)
+    data = load_jf(KB_ENERGY, {})
+    profile = data.get(uname, {})
+    fuel = profile.get("fuel", {"coal": 0, "uranium": 0})
+    fuel[fuel_id] = round(fuel.get(fuel_id, 0) + fs["pack_qty"], 2)
+    profile["fuel"] = fuel
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+
+    return redirect("/energy")
 
 
 @app.route("/api/message_admin", methods=["POST"])
