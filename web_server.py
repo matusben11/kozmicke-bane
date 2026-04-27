@@ -6,9 +6,11 @@ Spustenie: python web_server.py
 
 import hashlib
 import json
+import math
 import os
 import pathlib
 import smtplib
+import time
 from collections import Counter
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -27,6 +29,7 @@ KB_CAREER = DATA_DIR / "kb_career.json"
 KB_SAVES  = DATA_DIR / "kb_saves.json"
 KB_LB     = DATA_DIR / "kb_leaderboard.json"
 KB_ENERGY = DATA_DIR / "kb_energy.json"
+KB_MARKET = DATA_DIR / "kb_market.json"
 
 # Migrácia zo starého disk path (pred zmenou mountPath)
 _OLD_SRC = pathlib.Path("/opt/render/project/src")
@@ -168,6 +171,19 @@ NPC_MARKET = [
         "note_en": "Store of value. Price stable (for now).",
     },
 ]
+
+# ── Fáza 4 — dynamický trh ──────────────────────────────────────────────────
+# liq     = likvidita (vyššia = menší dopad obchodu na cenu)
+# rev     = rýchlosť reverzie k základnej cene (exp. útlm za hodinu)
+# min_b/max_b = hranice nákupnej ceny (NPC kúpi od hráča)
+# min_s/max_s = hranice predajnej ceny (NPC predá hráčovi)
+MARKET_DYN = {
+    "energy":  {"liq": 300, "rev": 0.25, "min_b": 2,   "max_b": 30},
+    "coal":    {"liq": 150, "rev": 0.20,                "min_s": 15,  "max_s": 180},
+    "uranium": {"liq": 20,  "rev": 0.15,                "min_s": 600, "max_s": 4000},
+    "oil":     {"liq": 100, "rev": 0.20, "min_b": 15,  "max_b": 250, "min_s": 20,  "max_s": 300},
+    "gold":    {"liq": 25,  "rev": 0.10, "min_b": 150, "max_b": 3000,"min_s": 160, "max_s": 3200},
+}
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -356,6 +372,88 @@ def _set_commodity_stock(profile, source, value):
     elif source.startswith("commodity_"):
         profile.setdefault("commodities", {})[source[10:]] = value
     return profile
+
+def _get_market_prices():
+    """
+    Načítaj kb_market.json, aplikuj exponenciálnu reverziu k základnej cene
+    a ulož aktualizované ceny. Vráti dict {item_id: {b, s, base_b, base_s}}.
+    """
+    now = time.time()
+    raw = load_jf(KB_MARKET, {})
+    prices = {}
+    new_raw = {}
+    for item in NPC_MARKET:
+        cid = item["id"]
+        dyn = MARKET_DYN.get(cid, {})
+        entry = raw.get(cid, {})
+        ts = entry.get("ts", now)
+        elapsed_hrs = max(0.0, (now - ts) / 3600.0)
+        decay = math.exp(-dyn.get("rev", 0.1) * elapsed_hrs)
+        base_b = item["npc_buys"]
+        base_s = item["npc_sells"]
+
+        if base_b is not None:
+            cur_b = float(entry.get("b") or base_b)
+            new_b = round(
+                max(dyn.get("min_b", 1),
+                    min(dyn.get("max_b", base_b * 5),
+                        base_b + (cur_b - base_b) * decay)), 1)
+        else:
+            new_b = None
+
+        if base_s is not None:
+            cur_s = float(entry.get("s") or base_s)
+            new_s = round(
+                max(dyn.get("min_s", 1),
+                    min(dyn.get("max_s", base_s * 5),
+                        base_s + (cur_s - base_s) * decay)), 1)
+        else:
+            new_s = None
+
+        new_raw[cid] = {"b": new_b, "s": new_s, "ts": now}
+        prices[cid] = {"b": new_b, "s": new_s, "base_b": base_b, "base_s": base_s}
+
+    save_jf(KB_MARKET, new_raw)
+    return prices
+
+
+def _apply_price_impact(item_id, qty, direction):
+    """
+    Zaznamenaj cenový dopad obchodu do kb_market.json.
+    direction='sell' → hráč predáva (prebytok ponuky → cena klesá)
+    direction='buy'  → hráč kupuje (dopyt → cena stúpa)
+    """
+    now = time.time()
+    dyn = MARKET_DYN.get(item_id, {})
+    liq = max(1, dyn.get("liq", 100))
+    raw = load_jf(KB_MARKET, {})
+    entry = dict(raw.get(item_id, {}))
+    item = next((i for i in NPC_MARKET if i["id"] == item_id), {})
+    base_b = item.get("npc_buys")
+    base_s = item.get("npc_sells")
+    impact = qty / liq  # bezrozmerný tlak
+
+    if direction == "sell":
+        # predaj → ponuka rastie → kúpna cena klesá, predajná mierne klesá
+        if base_b is not None:
+            cur = float(entry.get("b") or base_b)
+            entry["b"] = round(max(dyn.get("min_b", 1), cur * (1.0 - impact * 0.30)), 1)
+        if base_s is not None:
+            cur = float(entry.get("s") or base_s)
+            entry["s"] = round(max(dyn.get("min_s", 1), cur * (1.0 - impact * 0.10)), 1)
+    else:
+        # nákup → dopyt rastie → predajná cena stúpa, kúpna mierne stúpa
+        if base_s is not None:
+            cur = float(entry.get("s") or base_s)
+            entry["s"] = round(min(dyn.get("max_s", base_s * 5), cur * (1.0 + impact * 0.30)), 1)
+        if base_b is not None:
+            cur = float(entry.get("b") or base_b)
+            entry["b"] = round(min(dyn.get("max_b", base_b * 5), cur * (1.0 + impact * 0.10)), 1)
+
+    entry["ts"] = now
+    raw[item_id] = entry
+    save_jf(KB_MARKET, raw)
+
 
 def _migrate_saves():
     saves = load_jf(KB_SAVES, {})
@@ -2963,6 +3061,7 @@ def market_page():
         return en if lang == "en" else sk
 
     msg = request.args.get("msg", "")
+    prices = _get_market_prices()
 
     css = """
 <style>
@@ -2986,6 +3085,9 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
 .stock{color:#cfffcf;white-space:nowrap;}
 .price-buy{color:#ff9900;}
 .price-sell{color:#39ff6a;}
+.trend-up{color:#ff4444;}
+.trend-dn{color:#39ff6a;}
+.trend-eq{color:#2a7a45;}
 .btn-trade{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
   font-family:'VT323',monospace;font-size:.95em;padding:3px 10px;
   cursor:pointer;white-space:nowrap;}
@@ -3009,6 +3111,16 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
 
     flash_html = f'<div class="flash">{msg}</div>' if msg else ""
 
+    def _trend(cur, base):
+        if cur is None or base is None:
+            return '<span class="trend-eq">→</span>'
+        diff = (cur - base) / max(1, abs(base))
+        if diff > 0.02:
+            return '<span class="trend-up">↑</span>'
+        if diff < -0.02:
+            return '<span class="trend-dn">↓</span>'
+        return '<span class="trend-eq">→</span>'
+
     rows_html = ""
     for item in NPC_MARKET:
         name = Lp(item["name_sk"], item["name_en"])
@@ -3017,12 +3129,16 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
         stock = _get_commodity_stock(profile, item["source"])
         step = item["step"]
         min_q = item["min_qty"]
+        p = prices.get(item["id"], {})
+        dyn_b = p.get("b")
+        dyn_s = p.get("s")
 
         sell_html = ""
         buy_html = ""
 
-        if item["npc_buys"] is not None:
+        if dyn_b is not None:
             can_sell = stock >= min_q
+            tr = _trend(dyn_b, item["npc_buys"])
             sell_html = (
                 f'<form method="POST" action="/market/sell"'
                 f' style="display:inline-flex;gap:4px;align-items:center">'
@@ -3031,12 +3147,13 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
                 f' value="{min_q}" min="{min_q}" step="{step}">'
                 f'<button class="btn-trade sell"'
                 f' {"" if can_sell else "disabled"}>'
-                f'{Lp("Predaj","Sell")} @ {item["npc_buys"]} CR/{unit}'
+                f'{Lp("Predaj","Sell")} {tr} {dyn_b:.1f} CR/{unit}'
                 f'</button></form>'
             )
 
-        if item["npc_sells"] is not None:
-            can_buy = cr >= item["npc_sells"] * min_q
+        if dyn_s is not None:
+            can_buy = cr >= dyn_s * min_q
+            tr = _trend(dyn_s, item["npc_sells"])
             buy_html = (
                 f'<form method="POST" action="/market/buy"'
                 f' style="display:inline-flex;gap:4px;align-items:center">'
@@ -3045,7 +3162,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
                 f' value="{min_q}" min="{min_q}" step="{step}">'
                 f'<button class="btn-trade"'
                 f' {"" if can_buy else "disabled"}>'
-                f'{Lp("Kúp","Buy")} @ {item["npc_sells"]} CR/{unit}'
+                f'{Lp("Kúp","Buy")} {tr} {dyn_s:.1f} CR/{unit}'
                 f'</button></form>'
             )
 
@@ -3070,18 +3187,24 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
   PILOT: {session['username'].upper()} &nbsp;|&nbsp;
   {Lp("Kariéra CR","Career CR")}:
   <span style="color:#cfffcf">{cr:,} CR</span>
-  &nbsp;|&nbsp; BETA v0.1 &nbsp;|&nbsp; &#946;
+  &nbsp;|&nbsp; BETA v0.4 &nbsp;|&nbsp; &#946;
 </div>
 {flash_html}
 <div class="card">
   <div class="card-title">
-    &#128202; {Lp("KOMODITY — FIXNÉ NPC CENY","COMMODITIES — FIXED NPC PRICES")}
+    &#128202; {Lp("KOMODITY — DYNAMICKÉ CENY","COMMODITIES — DYNAMIC PRICES")}
   </div>
   <div style="color:#2a7a45;font-size:.82em;margin-bottom:10px">
     {Lp(
-      "Ceny sú fixné (Fáza 3). Dynamické ceny prídu vo Fáze 4.",
-      "Prices are fixed (Phase 3). Dynamic prices coming in Phase 4."
+      "Ceny reagujú na obchodovanie. Reverzia k základu prebieha časom.",
+      "Prices react to trading activity. Revert to baseline over time."
     )}
+    &nbsp;|&nbsp;
+    <span class="trend-up">↑</span> {Lp("nad základom","above base")}
+    &nbsp;
+    <span class="trend-dn">↓</span> {Lp("pod základom","below base")}
+    &nbsp;
+    <span class="trend-eq">→</span> {Lp("pri základe","at base")}
     &nbsp;|&nbsp;
     <span class="price-sell">&#9650; {Lp("NPC kúpi od teba","NPC buys from you")}</span>
     &nbsp;
@@ -3118,7 +3241,9 @@ def market_sell():
     if qty <= 0:
         return redirect("/market?msg=Nedostatok+zasoby")
 
-    earnings = qty * item["npc_buys"]
+    prices = _get_market_prices()
+    price_b = (prices.get(item_id) or {}).get("b") or item["npc_buys"]
+    earnings = round(qty * price_b)
     _set_commodity_stock(profile, item["source"], stock - qty)
 
     data = load_jf(KB_ENERGY, {})
@@ -3131,9 +3256,11 @@ def market_sell():
     career[uname] = entry
     save_jf(KB_CAREER, career)
 
+    _apply_price_impact(item_id, qty, "sell")
+
     lang = session.get("lang", "sk")
     unit = item["unit_sk"] if lang != "en" else item["unit_en"]
-    msg = f"+{earnings:,} CR ({qty} {unit} @ {item['npc_buys']} CR)"
+    msg = f"+{earnings:,} CR ({qty} {unit} @ {price_b:.1f} CR)"
     return redirect(f"/market?msg={msg}")
 
 
@@ -3153,7 +3280,9 @@ def market_buy():
         return redirect("/market")
 
     uname = _uname()
-    cost = qty * item["npc_sells"]
+    prices = _get_market_prices()
+    price_s = (prices.get(item_id) or {}).get("s") or item["npc_sells"]
+    cost = round(qty * price_s)
 
     career = load_jf(KB_CAREER, {})
     entry = career.get(uname, {})
@@ -3173,9 +3302,11 @@ def market_buy():
     data[uname] = profile
     save_jf(KB_ENERGY, data)
 
+    _apply_price_impact(item_id, qty, "buy")
+
     lang = session.get("lang", "sk")
     unit = item["unit_sk"] if lang != "en" else item["unit_en"]
-    msg = f"-{cost:,} CR ({qty} {unit} @ {item['npc_sells']} CR)"
+    msg = f"-{cost:,} CR ({qty} {unit} @ {price_s:.1f} CR)"
     return redirect(f"/market?msg={msg}")
 
 
