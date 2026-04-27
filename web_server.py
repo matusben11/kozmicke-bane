@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import smtplib
+from collections import Counter
 from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, redirect, session, make_response
@@ -112,6 +113,61 @@ FUEL_SHOP = [
 ]
 
 MAX_ENERGY = 1000  # maximálna kapacita zásobníka energie
+
+# ── Fáza 3 — statický NPC trh ───────────────────────────────────────────────
+# npc_buys  = CR ktoré NPC zaplatí hráčovi za 1 jednotku (hráč predáva)
+# npc_sells = CR ktoré NPC pýta za 1 jednotku (hráč kupuje)
+# None      = NPC tento smer neobchoduje
+NPC_MARKET = [
+    {
+        "id": "energy", "icon": "⚡",
+        "name_sk": "Energia", "name_en": "Energy",
+        "unit_sk": "jednotiek", "unit_en": "units",
+        "npc_buys": 8, "npc_sells": None,
+        "min_qty": 10, "step": 10,
+        "source": "energy",
+        "note_sk": "Predaj energiu ktorú vyrobíš elektrárňami.",
+        "note_en": "Sell energy produced by your power plants.",
+    },
+    {
+        "id": "coal", "icon": "⛏",
+        "name_sk": "Uhlie", "name_en": "Coal",
+        "unit_sk": "ton", "unit_en": "tons",
+        "npc_buys": None, "npc_sells": 45,
+        "min_qty": 5, "step": 5,
+        "source": "fuel_coal",
+        "note_sk": "Palivo pre uhoľné elektrárne.", "note_en": "Fuel for coal plants.",
+    },
+    {
+        "id": "uranium", "icon": "☢",
+        "name_sk": "Urán (palivové články)", "name_en": "Uranium (fuel rods)",
+        "unit_sk": "ks", "unit_en": "rods",
+        "npc_buys": None, "npc_sells": 1300,
+        "min_qty": 1, "step": 1,
+        "source": "fuel_uranium",
+        "note_sk": "Palivo pre jadrové elektrárne.", "note_en": "Fuel for nuclear plants.",
+    },
+    {
+        "id": "oil", "icon": "🛢",
+        "name_sk": "Ropa", "name_en": "Oil",
+        "unit_sk": "barelov", "unit_en": "barrels",
+        "npc_buys": 50, "npc_sells": 65,
+        "min_qty": 10, "step": 10,
+        "source": "commodity_oil",
+        "note_sk": "Komodita. Plynové elektrárne v budúcnosti.",
+        "note_en": "Commodity. Gas plants in the future.",
+    },
+    {
+        "id": "gold", "icon": "🥇",
+        "name_sk": "Zlato", "name_en": "Gold",
+        "unit_sk": "oz", "unit_en": "oz",
+        "npc_buys": 480, "npc_sells": 520,
+        "min_qty": 1, "step": 1,
+        "source": "commodity_gold",
+        "note_sk": "Uchovávateľ hodnoty. Cena stabilná (zatiaľ).",
+        "note_en": "Store of value. Price stable (for now).",
+    },
+]
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -225,35 +281,39 @@ def save_jf(path, data):
 
 # ── Energetická minihra — helpers ───────────────────────────────────────────
 
-def _get_energy_profile(uname_upper):
-    data = load_jf(KB_ENERGY, {})
-    if uname_upper not in data:
-        data[uname_upper] = {
-            "plants": [],
-            "energy": 0.0,
-            "fuel": {"coal": 0, "uranium": 0},
-            "last_tick": datetime.now().timestamp(),
-        }
-        save_jf(KB_ENERGY, data)
-    return data[uname_upper]
+_DEFAULT_PROFILE = {
+    "plants": [], "energy": 0.0,
+    "fuel": {"coal": 0.0, "uranium": 0.0},
+    "commodities": {"oil": 0.0, "gold": 0.0},
+    "last_tick": 0.0,
+}
+
+
+def _ensure_profile_fields(profile):
+    profile.setdefault("plants", [])
+    profile.setdefault("energy", 0.0)
+    profile.setdefault("fuel", {})
+    profile["fuel"].setdefault("coal", 0.0)
+    profile["fuel"].setdefault("uranium", 0.0)
+    profile.setdefault("commodities", {})
+    profile["commodities"].setdefault("oil", 0.0)
+    profile["commodities"].setdefault("gold", 0.0)
+    return profile
+
 
 def _energy_tick(uname_upper):
     """Vypočítaj offline produkciu a ulož. Vráti aktualizovaný profil."""
     data = load_jf(KB_ENERGY, {})
-    profile = data.get(uname_upper, {
-        "plants": [], "energy": 0.0,
-        "fuel": {"coal": 0, "uranium": 0},
-        "last_tick": datetime.now().timestamp(),
-    })
+    profile = _ensure_profile_fields(
+        data.get(uname_upper, {"last_tick": datetime.now().timestamp()})
+    )
     now = datetime.now().timestamp()
     elapsed_hrs = min((now - profile.get("last_tick", now)) / 3600.0, 72.0)
 
-    fuel  = {k: float(v) for k, v in profile.get("fuel", {}).items()}
-    fuel.setdefault("coal", 0.0)
-    fuel.setdefault("uranium", 0.0)
-    energy = float(profile.get("energy", 0.0))
+    fuel = {k: float(v) for k, v in profile["fuel"].items()}
+    energy = float(profile["energy"])
 
-    for plant_id in profile.get("plants", []):
+    for plant_id in profile["plants"]:
         pt = PLANT_TYPES.get(plant_id)
         if not pt:
             continue
@@ -267,11 +327,34 @@ def _energy_tick(uname_upper):
             energy += pt["energy_per_hr"] * hrs
             fuel[pt["fuel_type"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
 
-    profile["energy"]    = round(min(energy, MAX_ENERGY), 1)
-    profile["fuel"]      = {k: round(v, 2) for k, v in fuel.items()}
+    profile["energy"] = round(min(energy, MAX_ENERGY), 1)
+    profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
     profile["last_tick"] = now
-    data[uname_upper]    = profile
+    data[uname_upper] = profile
     save_jf(KB_ENERGY, data)
+    return profile
+
+
+def _get_commodity_stock(profile, source):
+    """Vráti zásobu komodity podľa source kľúča."""
+    if source == "energy":
+        return float(profile.get("energy", 0.0))
+    if source.startswith("fuel_"):
+        return float(profile.get("fuel", {}).get(source[5:], 0.0))
+    if source.startswith("commodity_"):
+        return float(profile.get("commodities", {}).get(source[10:], 0.0))
+    return 0.0
+
+
+def _set_commodity_stock(profile, source, value):
+    """Nastav zásobu komodity podľa source kľúča."""
+    value = max(0.0, round(float(value), 2))
+    if source == "energy":
+        profile["energy"] = min(value, MAX_ENERGY)
+    elif source.startswith("fuel_"):
+        profile.setdefault("fuel", {})[source[5:]] = value
+    elif source.startswith("commodity_"):
+        profile.setdefault("commodities", {})[source[10:]] = value
     return profile
 
 def _migrate_saves():
@@ -2598,7 +2681,7 @@ def energy_page():
     cr      = career.get(uname, {}).get("career_cr", 0)
 
     # Počty elektrární podľa typu
-    from collections import Counter
+
     plant_counts = Counter(profile.get("plants", []))
     fuel  = profile.get("fuel", {"coal": 0, "uranium": 0})
     energy = profile.get("energy", 0.0)
@@ -2785,6 +2868,14 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
   {buy_fuel_html}
 </div>
 
+<a href="/market"
+  style="display:block;width:100%;max-width:680px;margin-bottom:12px;
+    background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+    font-family:'VT323',monospace;font-size:1.1em;padding:10px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  &#128202; {Lp("NPC TRH — predaj energiu, kúp komodity","NPC MARKET — sell energy, buy commodities")}
+</a>
+
 </body></html>"""
 
     return html
@@ -2805,7 +2896,7 @@ def energy_build():
     cr     = entry.get("career_cr", 0)
 
     profile = _energy_tick(uname)
-    from collections import Counter
+
     cnt = Counter(profile.get("plants", [])).get(plant_id, 0)
 
     if cr < pt["build_cost"] or cnt >= pt["max_count"]:
@@ -2853,6 +2944,239 @@ def energy_buy_fuel():
     save_jf(KB_ENERGY, data)
 
     return redirect("/energy")
+
+
+# ── Fáza 3 — NPC trh ────────────────────────────────────────────────────────
+
+@app.route("/market")
+def market_page():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+
+    uname = _uname()
+    profile = _energy_tick(uname)
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    lang = session.get("lang", "sk")
+
+    def Lp(sk, en):
+        return en if lang == "en" else sk
+
+    msg = request.args.get("msg", "")
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:16px 16px 40px;}
+h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
+  text-align:center;text-shadow:0 0 18px #39ff6a88;}
+.sub{color:#2a7a45;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#010d01;border:1px solid #39ff6a44;width:100%;
+  max-width:700px;padding:16px 20px 18px;margin-bottom:12px;}
+.card-title{color:#39ff6a;font-size:1.05em;border-bottom:1px solid #0d2a0d;
+  padding-bottom:5px;margin-bottom:12px;letter-spacing:.08em;}
+.row{display:flex;justify-content:space-between;align-items:center;
+  padding:6px 0;border-bottom:1px solid #0a1a0a;gap:8px;flex-wrap:wrap;}
+.row:last-child{border-bottom:none;}
+.lbl{color:#2a7a45;font-size:.9em;flex:1;min-width:160px;}
+.note{color:#2a7a45;font-size:.8em;margin-top:1px;}
+.stock{color:#cfffcf;white-space:nowrap;}
+.price-buy{color:#ff9900;}
+.price-sell{color:#39ff6a;}
+.btn-trade{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+  font-family:'VT323',monospace;font-size:.95em;padding:3px 10px;
+  cursor:pointer;white-space:nowrap;}
+.btn-trade:hover{background:#003a10;}
+.btn-trade.sell{border-color:#ff9900;color:#ff9900;}
+.btn-trade.sell:hover{background:#1a0d00;}
+.btn-trade:disabled{border-color:#1a3a1a;color:#1a3a1a;cursor:default;}
+.qty{background:#000;border:1px solid #1a3a1a;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:.95em;padding:2px 6px;
+  width:60px;text-align:right;}
+.btn-back{display:inline-block;background:#000;border:1px solid #2a7a45;
+  color:#2a7a45;font-family:'VT323',monospace;font-size:1em;
+  padding:6px 16px;text-decoration:none;letter-spacing:.06em;
+  margin-bottom:14px;}
+.btn-back:hover{background:#0a1a0a;color:#39ff6a;}
+.flash{color:#39ff6a;background:#001a00;border:1px solid #39ff6a33;
+  padding:6px 14px;font-size:.95em;margin-bottom:10px;max-width:700px;
+  width:100%;}
+.warn{color:#ff3a3a;}
+</style>"""
+
+    flash_html = f'<div class="flash">{msg}</div>' if msg else ""
+
+    rows_html = ""
+    for item in NPC_MARKET:
+        name = Lp(item["name_sk"], item["name_en"])
+        note = Lp(item["note_sk"], item["note_en"])
+        unit = Lp(item["unit_sk"], item["unit_en"])
+        stock = _get_commodity_stock(profile, item["source"])
+        step = item["step"]
+        min_q = item["min_qty"]
+
+        sell_html = ""
+        buy_html = ""
+
+        if item["npc_buys"] is not None:
+            can_sell = stock >= min_q
+            sell_html = (
+                f'<form method="POST" action="/market/sell"'
+                f' style="display:inline-flex;gap:4px;align-items:center">'
+                f'<input type="hidden" name="item_id" value="{item["id"]}">'
+                f'<input class="qty" type="number" name="qty"'
+                f' value="{min_q}" min="{min_q}" step="{step}">'
+                f'<button class="btn-trade sell"'
+                f' {"" if can_sell else "disabled"}>'
+                f'{Lp("Predaj","Sell")} @ {item["npc_buys"]} CR/{unit}'
+                f'</button></form>'
+            )
+
+        if item["npc_sells"] is not None:
+            can_buy = cr >= item["npc_sells"] * min_q
+            buy_html = (
+                f'<form method="POST" action="/market/buy"'
+                f' style="display:inline-flex;gap:4px;align-items:center">'
+                f'<input type="hidden" name="item_id" value="{item["id"]}">'
+                f'<input class="qty" type="number" name="qty"'
+                f' value="{min_q}" min="{min_q}" step="{step}">'
+                f'<button class="btn-trade"'
+                f' {"" if can_buy else "disabled"}>'
+                f'{Lp("Kúp","Buy")} @ {item["npc_sells"]} CR/{unit}'
+                f'</button></form>'
+            )
+
+        rows_html += (
+            f'<div class="row">'
+            f'<div class="lbl">{item["icon"]} {name}'
+            f'<div class="note">{note}</div></div>'
+            f'<span class="stock">'
+            f'{Lp("Zásoba","Stock")}: {stock:.1f} {unit}</span>'
+            f'{sell_html}{buy_html}'
+            f'</div>'
+        )
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp("NPC Trh","NPC Market")} — KB</title>
+{css}</head><body>
+<a href="/energy" class="btn-back">&#8592; {Lp("Späť","Back")}</a>
+<h1>&#128202; {Lp("NPC TRH","NPC MARKET")}</h1>
+<div class="sub">
+  PILOT: {session['username'].upper()} &nbsp;|&nbsp;
+  {Lp("Kariéra CR","Career CR")}:
+  <span style="color:#cfffcf">{cr:,} CR</span>
+  &nbsp;|&nbsp; BETA v0.1 &nbsp;|&nbsp; &#946;
+</div>
+{flash_html}
+<div class="card">
+  <div class="card-title">
+    &#128202; {Lp("KOMODITY — FIXNÉ NPC CENY","COMMODITIES — FIXED NPC PRICES")}
+  </div>
+  <div style="color:#2a7a45;font-size:.82em;margin-bottom:10px">
+    {Lp(
+      "Ceny sú fixné (Fáza 3). Dynamické ceny prídu vo Fáze 4.",
+      "Prices are fixed (Phase 3). Dynamic prices coming in Phase 4."
+    )}
+    &nbsp;|&nbsp;
+    <span class="price-sell">&#9650; {Lp("NPC kúpi od teba","NPC buys from you")}</span>
+    &nbsp;
+    <span class="price-buy">&#9660; {Lp("NPC predá tebe","NPC sells to you")}</span>
+  </div>
+  {rows_html}
+</div>
+</body></html>"""
+
+    return html
+
+
+@app.route("/market/sell", methods=["POST"])
+def market_sell():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    item_id = request.form.get("item_id", "").strip()
+    item = next((i for i in NPC_MARKET if i["id"] == item_id), None)
+    if not item or item["npc_buys"] is None:
+        return redirect("/market")
+
+    try:
+        qty = max(item["min_qty"], int(request.form.get("qty", item["min_qty"])))
+    except ValueError:
+        return redirect("/market")
+
+    uname = _uname()
+    profile = _energy_tick(uname)
+    stock = _get_commodity_stock(profile, item["source"])
+
+    if stock < qty:
+        qty = int(stock)
+    if qty <= 0:
+        return redirect("/market?msg=Nedostatok+zasoby")
+
+    earnings = qty * item["npc_buys"]
+    _set_commodity_stock(profile, item["source"], stock - qty)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+
+    career = load_jf(KB_CAREER, {})
+    entry = career.get(uname, {})
+    entry["career_cr"] = entry.get("career_cr", 0) + earnings
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    lang = session.get("lang", "sk")
+    unit = item["unit_sk"] if lang != "en" else item["unit_en"]
+    msg = f"+{earnings:,} CR ({qty} {unit} @ {item['npc_buys']} CR)"
+    return redirect(f"/market?msg={msg}")
+
+
+@app.route("/market/buy", methods=["POST"])
+def market_buy():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    item_id = request.form.get("item_id", "").strip()
+    item = next((i for i in NPC_MARKET if i["id"] == item_id), None)
+    if not item or item["npc_sells"] is None:
+        return redirect("/market")
+
+    try:
+        qty = max(item["min_qty"], int(request.form.get("qty", item["min_qty"])))
+    except ValueError:
+        return redirect("/market")
+
+    uname = _uname()
+    cost = qty * item["npc_sells"]
+
+    career = load_jf(KB_CAREER, {})
+    entry = career.get(uname, {})
+    cr = entry.get("career_cr", 0)
+    if cr < cost:
+        return redirect("/market?msg=Nedostatok+CR")
+
+    entry["career_cr"] = cr - cost
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    profile = _energy_tick(uname)
+    stock = _get_commodity_stock(profile, item["source"])
+    _set_commodity_stock(profile, item["source"], stock + qty)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+
+    lang = session.get("lang", "sk")
+    unit = item["unit_sk"] if lang != "en" else item["unit_en"]
+    msg = f"-{cost:,} CR ({qty} {unit} @ {item['npc_sells']} CR)"
+    return redirect(f"/market?msg={msg}")
 
 
 @app.route("/api/message_admin", methods=["POST"])
