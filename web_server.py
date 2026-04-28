@@ -12,6 +12,8 @@ import pathlib
 import random
 import smtplib
 import time
+import urllib.request
+import urllib.error
 from collections import Counter
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -32,6 +34,53 @@ KB_LB     = DATA_DIR / "kb_leaderboard.json"
 KB_ENERGY   = DATA_DIR / "kb_energy.json"
 KB_MARKET   = DATA_DIR / "kb_market.json"
 KB_AUCTIONS = DATA_DIR / "kb_auctions.json"
+
+# ── Upstash Redis — voliteľné perzistentné KV úložisko ─────────────────────
+# Nastav UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN v Render env vars.
+# Ak nie sú nastavené, používajú sa lokálne súbory (pre vývoj).
+_KV_URL   = os.environ.get("UPSTASH_REDIS_REST_URL", "").rstrip("/")
+_KV_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+
+# Mapovanie cesty súboru → Redis kľúč
+_KV_KEYS = {
+    DATA_FILE:   "game_users",
+    KB_CAREER:   "kb_career",
+    KB_SAVES:    "kb_saves",
+    KB_LB:       "kb_leaderboard",
+    KB_ENERGY:   "kb_energy",
+    KB_MARKET:   "kb_market",
+    KB_AUCTIONS: "kb_auctions",
+}
+
+
+def _kv_get(key):
+    """Načítaj JSON z Upstash REST API. Vráti None ak kľúč neexistuje alebo chyba."""
+    try:
+        req = urllib.request.Request(
+            f"{_KV_URL}/get/{key}",
+            headers={"Authorization": f"Bearer {_KV_TOKEN}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            result = json.loads(r.read()).get("result")
+        return json.loads(result) if result else None
+    except Exception as e:
+        print(f"[KV] get '{key}' error: {e}")
+        return None
+
+
+def _kv_set(key, value):
+    """Ulož JSON do Upstash REST API."""
+    try:
+        body = json.dumps(["SET", key, json.dumps(value, ensure_ascii=False)]).encode()
+        req = urllib.request.Request(
+            _KV_URL,
+            data=body,
+            headers={"Authorization": f"Bearer {_KV_TOKEN}",
+                     "Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        print(f"[KV] set '{key}' error: {e}")
 
 # Migrácia zo starého disk path (pred zmenou mountPath)
 _OLD_SRC = pathlib.Path("/opt/render/project/src")
@@ -304,6 +353,9 @@ def _atomic_write(path, text):
     tmp.replace(path)
 
 def load_users():
+    if _KV_URL:
+        data = _kv_get("game_users")
+        return data if data is not None else {}
     try:
         if DATA_FILE.exists():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -313,6 +365,9 @@ def load_users():
     return {}
 
 def save_users(u):
+    if _KV_URL:
+        _kv_set("game_users", u)
+        return
     _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
 
 def hash_pw(pw):
@@ -351,6 +406,10 @@ def validate_pw(pw):
     return True, "OK"
 
 def load_jf(path, default=None):
+    if _KV_URL:
+        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
+        data = _kv_get(key)
+        return data if data is not None else (default if default is not None else {})
     try:
         p = pathlib.Path(path)
         if p.exists():
@@ -361,6 +420,10 @@ def load_jf(path, default=None):
     return default if default is not None else {}
 
 def save_jf(path, data):
+    if _KV_URL:
+        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
+        _kv_set(key, data)
+        return
     _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 
