@@ -912,6 +912,90 @@ def _seed_tester_users():
 _seed_tester_users()
 
 
+def _seed_special_ranks():
+    """
+    Env premenná SPECIAL_RANKS = username:Rank1,Rank2;username2:Rank3
+    Napr.: SPECIAL_RANKS=matus:Owner,Pro;beta:Tester
+    Vždy nastaví presne tieto ranky — prepisuje existujúce.
+    """
+    raw = os.environ.get("SPECIAL_RANKS", "").strip()
+    if not raw:
+        return
+    users = load_users()
+    changed = False
+    for entry in raw.split(";"):
+        entry = entry.strip()
+        if ":" not in entry:
+            continue
+        uname_raw, ranks_raw = entry.split(":", 1)
+        uname_raw = uname_raw.strip()
+        ranks = [r.strip() for r in ranks_raw.split(",") if r.strip()][:2]
+        match = next((k for k in users if k.lower() == uname_raw.lower()), None)
+        if match and users[match].get("special_ranks") != ranks:
+            users[match]["special_ranks"] = ranks
+            users[match].pop("special_rank", None)
+            changed = True
+            print(f"[seed] special_ranks={ranks} pre '{match}' (z SPECIAL_RANKS env var).")
+    if changed:
+        save_users(users)
+
+
+def _seed_energy_profile():
+    """
+    Env premenná ENERGY_STARTER = username:plant1,plant2;fuel_coal:N;fuel_uranium:N
+    Napr.: ENERGY_STARTER=matus:solar,solar,coal;fuel_coal:80;fuel_uranium:5
+    Seed sa aplikuje IBA ak má hráč prázdny profil (žiadne elektrárne).
+    """
+    raw = os.environ.get("ENERGY_STARTER", "").strip()
+    if not raw:
+        return
+    parts = [p.strip() for p in raw.split(";")]
+    if not parts or ":" not in parts[0]:
+        return
+
+    uname_raw, plants_raw = parts[0].split(":", 1)
+    uname_raw = uname_raw.strip()
+    users = load_users()
+    match = next((k for k in users if k.lower() == uname_raw.lower()), None)
+    if not match:
+        return
+
+    uname_upper = match.upper()
+    energy_data = load_jf(KB_ENERGY, {})
+    profile = energy_data.get(uname_upper, {})
+
+    if profile.get("plants"):
+        return  # Profil existuje, nič nemeníme
+
+    plants = [p.strip() for p in plants_raw.split(",") if p.strip() in PLANT_TYPES]
+    fuel = {"coal": 0.0, "uranium": 0.0}
+    for part in parts[1:]:
+        if ":" not in part:
+            continue
+        k, v = part.split(":", 1)
+        k = k.strip()
+        if k == "fuel_coal":
+            fuel["coal"] = float(v.strip())
+        elif k == "fuel_uranium":
+            fuel["uranium"] = float(v.strip())
+
+    profile["plants"] = plants
+    profile["fuel"] = fuel
+    profile.setdefault("energy", 0.0)
+    profile.setdefault("commodities", {"oil": 0.0, "gold": 0.0})
+    profile.setdefault("last_tick", time.time())
+    profile.setdefault("active_events", [])
+    profile.setdefault("last_event", None)
+    profile.setdefault("last_event_at", 0.0)
+    energy_data[uname_upper] = profile
+    save_jf(KB_ENERGY, energy_data)
+    print(f"[seed] energy profil pre '{match}': plants={plants}, fuel={fuel}")
+
+
+_seed_special_ranks()
+_seed_energy_profile()
+
+
 def get_sp_ranks(user_dict):
     """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
     sr = user_dict.get("special_ranks")
