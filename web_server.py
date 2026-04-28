@@ -28,8 +28,9 @@ DATA_FILE = DATA_DIR / "game_users.json"
 KB_CAREER = DATA_DIR / "kb_career.json"
 KB_SAVES  = DATA_DIR / "kb_saves.json"
 KB_LB     = DATA_DIR / "kb_leaderboard.json"
-KB_ENERGY = DATA_DIR / "kb_energy.json"
-KB_MARKET = DATA_DIR / "kb_market.json"
+KB_ENERGY   = DATA_DIR / "kb_energy.json"
+KB_MARKET   = DATA_DIR / "kb_market.json"
+KB_AUCTIONS = DATA_DIR / "kb_auctions.json"
 
 # Migrácia zo starého disk path (pred zmenou mountPath)
 _OLD_SRC = pathlib.Path("/opt/render/project/src")
@@ -184,6 +185,25 @@ MARKET_DYN = {
     "oil":     {"liq": 100, "rev": 0.20, "min_b": 15,  "max_b": 250, "min_s": 20,  "max_s": 300},
     "gold":    {"liq": 25,  "rev": 0.10, "min_b": 150, "max_b": 3000,"min_s": 160, "max_s": 3200},
 }
+
+# ── Fáza 5a — Komoditné aukcie ──────────────────────────────────────────────
+# Každý lot je dražba fixného balíka komodity. Víťaz platí pri zbere.
+# duration_min = ako dlho lot trvá; MAX_ACTIVE_LOTS = koľko lotov súčasne
+AUCTION_LOTS_CFG = [
+    {"commodity": "coal",    "icon": "⛏", "name_sk": "Uhlie",
+     "name_en": "Coal",    "unit_sk": "ton",    "unit_en": "tons",
+     "qty": 150, "start_bid": 4500,  "source": "fuel_coal",      "duration_min": 30},
+    {"commodity": "uranium", "icon": "☢", "name_sk": "Urán",
+     "name_en": "Uranium", "unit_sk": "ks",     "unit_en": "rods",
+     "qty": 20,  "start_bid": 18000, "source": "fuel_uranium",   "duration_min": 45},
+    {"commodity": "oil",     "icon": "🛢", "name_sk": "Ropa",
+     "name_en": "Oil",     "unit_sk": "barelov","unit_en": "barrels",
+     "qty": 200, "start_bid": 7500,  "source": "commodity_oil",  "duration_min": 30},
+    {"commodity": "gold",    "icon": "🥇", "name_sk": "Zlato",
+     "name_en": "Gold",    "unit_sk": "oz",     "unit_en": "oz",
+     "qty": 5,   "start_bid": 1800,  "source": "commodity_gold", "duration_min": 60},
+]
+MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
@@ -453,6 +473,73 @@ def _apply_price_impact(item_id, qty, direction):
     entry["ts"] = now
     raw[item_id] = entry
     save_jf(KB_MARKET, raw)
+
+
+def _auction_tick():
+    """
+    Expirácia ukončených lotov → pending výhry, generovanie nových lotov.
+    Vráti {'lots': [...], 'pending': {UNAME: [...]}}.
+    """
+    now = time.time()
+    data = load_jf(KB_AUCTIONS, {"lots": [], "pending": {}})
+    lots = data.get("lots", [])
+    pending = data.get("pending", {})
+    changed = False
+
+    # 1. Spracuj expirované loty
+    active = []
+    for lot in lots:
+        if now < lot["ends_at"]:
+            active.append(lot)
+            continue
+        # lot skončil
+        bidder = lot.get("bidder")
+        if bidder:
+            pending.setdefault(bidder, []).append({
+                "lot_id":    lot["id"],
+                "commodity": lot["commodity"],
+                "icon":      lot["icon"],
+                "name_sk":   lot["name_sk"],
+                "name_en":   lot["name_en"],
+                "unit_sk":   lot["unit_sk"],
+                "unit_en":   lot["unit_en"],
+                "qty":       lot["qty"],
+                "source":    lot["source"],
+                "paid":      lot["current_bid"],
+            })
+        changed = True  # lot zmiznul z active → potrebujeme uložiť
+
+    # 2. Doplň loty do MAX_ACTIVE_LOTS
+    active_commodities = {l["commodity"] for l in active}
+    for cfg in AUCTION_LOTS_CFG:
+        if len(active) >= MAX_ACTIVE_LOTS:
+            break
+        if cfg["commodity"] in active_commodities:
+            continue
+        uid = f"{cfg['commodity']}_{int(now*1000) % 10**9}"
+        active.append({
+            "id":        uid,
+            "commodity": cfg["commodity"],
+            "icon":      cfg["icon"],
+            "name_sk":   cfg["name_sk"],
+            "name_en":   cfg["name_en"],
+            "unit_sk":   cfg["unit_sk"],
+            "unit_en":   cfg["unit_en"],
+            "qty":       cfg["qty"],
+            "source":    cfg["source"],
+            "start_bid": cfg["start_bid"],
+            "current_bid": cfg["start_bid"],
+            "bidder":    None,
+            "ends_at":   now + cfg["duration_min"] * 60,
+        })
+        active_commodities.add(cfg["commodity"])
+        changed = True
+
+    data["lots"] = active
+    data["pending"] = pending
+    if changed:
+        save_jf(KB_AUCTIONS, data)
+    return data
 
 
 def _migrate_saves():
@@ -2967,11 +3054,18 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 </div>
 
 <a href="/market"
-  style="display:block;width:100%;max-width:680px;margin-bottom:12px;
+  style="display:block;width:100%;max-width:680px;margin-bottom:8px;
     background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
     font-family:'VT323',monospace;font-size:1.1em;padding:10px;
     text-align:center;text-decoration:none;letter-spacing:.06em">
   &#128202; {Lp("NPC TRH — predaj energiu, kúp komodity","NPC MARKET — sell energy, buy commodities")}
+</a>
+<a href="/auctions"
+  style="display:block;width:100%;max-width:680px;margin-bottom:12px;
+    background:#010d01;border:1px solid #ff9900;color:#ff9900;
+    font-family:'VT323',monospace;font-size:1.1em;padding:10px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  &#127917; {Lp("AUKCIE — dražby komoditných lotov","AUCTIONS — commodity lot bidding")}
 </a>
 
 </body></html>"""
@@ -3182,6 +3276,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
 <title>{Lp("NPC Trh","NPC Market")} — KB</title>
 {css}</head><body>
 <a href="/energy" class="btn-back">&#8592; {Lp("Späť","Back")}</a>
+<a href="/auctions" class="btn-back" style="margin-left:8px">&#127917; {Lp("Aukcie","Auctions")}</a>
 <h1>&#128202; {Lp("NPC TRH","NPC MARKET")}</h1>
 <div class="sub">
   PILOT: {session['username'].upper()} &nbsp;|&nbsp;
@@ -3308,6 +3403,281 @@ def market_buy():
     unit = item["unit_sk"] if lang != "en" else item["unit_en"]
     msg = f"-{cost:,} CR ({qty} {unit} @ {price_s:.1f} CR)"
     return redirect(f"/market?msg={msg}")
+
+
+# ── Fáza 5a — Aukcie ────────────────────────────────────────────────────────
+
+@app.route("/auctions")
+def auctions_page():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+
+    uname = _uname()
+    auc = _auction_tick()
+    lots = auc.get("lots", [])
+    my_pending = auc.get("pending", {}).get(uname, [])
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    lang = session.get("lang", "sk")
+    now = time.time()
+
+    def Lp(sk, en):
+        return en if lang == "en" else sk
+
+    msg = request.args.get("msg", "")
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:16px 16px 40px;}
+h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
+  text-align:center;text-shadow:0 0 18px #39ff6a88;}
+h2{color:#39ff6a;font-size:1.1em;letter-spacing:.08em;margin:14px 0 6px;}
+.sub{color:#2a7a45;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#010d01;border:1px solid #39ff6a44;width:100%;
+  max-width:700px;padding:16px 20px 18px;margin-bottom:12px;}
+.lot-header{display:flex;justify-content:space-between;align-items:baseline;
+  border-bottom:1px solid #0d2a0d;padding-bottom:6px;margin-bottom:10px;}
+.lot-title{color:#39ff6a;font-size:1.1em;letter-spacing:.07em;}
+.timer{color:#ff9900;font-size:.95em;font-family:'VT323',monospace;}
+.timer.urgent{color:#ff3a3a;animation:blink .8s step-end infinite;}
+@keyframes blink{50%{opacity:0;}}
+.lot-detail{color:#cfffcf;font-size:.95em;margin-bottom:8px;}
+.lot-detail span{color:#2a7a45;}
+.bid-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+.bid-current{color:#39ff6a;font-size:1.05em;}
+.bidder-tag{color:#2a7a45;font-size:.82em;}
+.inp{background:#000;border:1px solid #2a7a45;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:1em;padding:3px 8px;width:100px;}
+.btn{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+  font-family:'VT323',monospace;font-size:.95em;padding:4px 12px;cursor:pointer;}
+.btn:hover{background:#003a10;}
+.btn.warn{border-color:#ff3a3a;color:#ff3a3a;}
+.btn.warn:hover{background:#1a0000;}
+.btn.gold{border-color:#ff9900;color:#ff9900;}
+.btn.gold:hover{background:#1a0d00;}
+.btn:disabled{border-color:#1a3a1a;color:#1a3a1a;cursor:default;}
+.pending-item{padding:6px 0;border-bottom:1px solid #0a1a0a;color:#cfffcf;}
+.pending-item:last-child{border-bottom:none;}
+.flash{color:#39ff6a;background:#001a00;border:1px solid #39ff6a33;
+  padding:6px 14px;font-size:.95em;margin-bottom:10px;max-width:700px;width:100%;}
+.flash.err{color:#ff3a3a;border-color:#ff3a3a33;background:#1a0000;}
+.btn-back{display:inline-block;background:#000;border:1px solid #2a7a45;
+  color:#2a7a45;font-family:'VT323',monospace;font-size:1em;
+  padding:6px 16px;text-decoration:none;letter-spacing:.06em;margin-bottom:14px;}
+.btn-back:hover{background:#0a1a0a;color:#39ff6a;}
+.no-lots{color:#2a7a45;font-size:.9em;padding:10px 0;}
+</style>"""
+
+    flash_cls = "flash err" if msg.startswith("!") else "flash"
+    flash_html = f'<div class="{flash_cls}">{msg.lstrip("!")}</div>' if msg else ""
+
+    def _fmt_timer(ends_at):
+        secs = max(0, int(ends_at - now))
+        mins, s = divmod(secs, 60)
+        hrs, m = divmod(mins, 60)
+        urgent = secs < 120
+        label = f"{hrs}h {m:02d}m {s:02d}s" if hrs else f"{m:02d}:{s:02d}"
+        cls = "timer urgent" if urgent else "timer"
+        return f'<span class="{cls}" data-ends="{int(ends_at)}">{label}</span>'
+
+    lots_html = ""
+    if not lots:
+        lots_html = f'<p class="no-lots">{Lp("Žiadne aktívne loty.","No active lots.")}</p>'
+    for lot in lots:
+        unit = Lp(lot["unit_sk"], lot["unit_en"])
+        name = Lp(lot["name_sk"], lot["name_en"])
+        bidder_tag = ""
+        if lot["bidder"]:
+            bidder_label = Lp("Najvyššia ponuka od","Top bid by")
+            you = Lp("(ty)","(you)") if lot["bidder"] == uname else ""
+            bidder_tag = f'<span class="bidder-tag"> — {bidder_label}: {lot["bidder"]} {you}</span>'
+        min_next = lot["current_bid"] + 1
+        can_bid = cr >= min_next and lot["bidder"] != uname
+        lots_html += f"""
+<div class="card">
+  <div class="lot-header">
+    <span class="lot-title">{lot['icon']} {name}</span>
+    {_fmt_timer(lot['ends_at'])}
+  </div>
+  <div class="lot-detail">
+    <span>{Lp('Množstvo','Qty')}:</span> {lot['qty']} {unit} &nbsp;|&nbsp;
+    <span>{Lp('Štartovacia cena','Start bid')}:</span> {lot['start_bid']:,} CR
+  </div>
+  <div class="bid-row">
+    <span class="bid-current">{Lp('Aktuálna ponuka','Current bid')}: {lot['current_bid']:,} CR</span>
+    {bidder_tag}
+  </div>
+  <form method="POST" action="/auctions/bid" class="bid-row">
+    <input type="hidden" name="lot_id" value="{lot['id']}">
+    <input class="inp" type="number" name="amount"
+      value="{min_next}" min="{min_next}" step="1">
+    <button class="btn" {"" if can_bid else "disabled"}>
+      &#128200; {Lp('Ponúknuť','Place bid')}
+    </button>
+  </form>
+</div>"""
+
+    pending_html = ""
+    if my_pending:
+        items_html = ""
+        for p in my_pending:
+            unit = Lp(p["unit_sk"], p["unit_en"])
+            name = Lp(p["name_sk"], p["name_en"])
+            items_html += (
+                f'<div class="pending-item">'
+                f'{p["icon"]} {name}: {p["qty"]} {unit} &nbsp;—&nbsp;'
+                f'{Lp("zaplatíš","you pay")}: <strong>{p["paid"]:,} CR</strong>'
+                f'</div>'
+            )
+        collect_label = Lp("VYBRAŤ VÝHRY", "COLLECT WINNINGS")
+        pending_html = f"""
+<div class="card" style="border-color:#ff9900aa">
+  <h2 style="color:#ff9900">&#127881; {Lp('VÝHRY NA VYZDVIHNUTIE','WINNINGS TO COLLECT')}</h2>
+  {items_html}
+  <form method="POST" action="/auctions/collect" style="margin-top:10px">
+    <button class="btn gold">&#128179; {collect_label}</button>
+  </form>
+</div>"""
+
+    # JS countdown
+    js = """
+<script>
+(function(){
+  function tick(){
+    document.querySelectorAll('[data-ends]').forEach(function(el){
+      var secs=Math.max(0,parseInt(el.dataset.ends)-Math.floor(Date.now()/1000));
+      var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
+      el.textContent=h?(h+'h '+('0'+m).slice(-2)+'m '+('0'+s).slice(-2)+'s')
+                      :('0'+m).slice(-2)+':'+('0'+s).slice(-2);
+      el.className=secs<120?'timer urgent':'timer';
+      if(secs===0)setTimeout(function(){location.reload();},1500);
+    });
+  }
+  tick();setInterval(tick,1000);
+})();
+</script>"""
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp('Aukcie','Auctions')} — KB</title>
+{css}</head><body>
+<a href="/market" class="btn-back">&#8592; {Lp('Späť na trh','Back to market')}</a>
+<h1>&#127917; {Lp('KOMODITNÉ AUKCIE','COMMODITY AUCTIONS')}</h1>
+<div class="sub">
+  PILOT: {session['username'].upper()} &nbsp;|&nbsp;
+  {Lp('Kariéra CR','Career CR')}:
+  <span style="color:#cfffcf">{cr:,} CR</span>
+  &nbsp;|&nbsp; BETA v0.5a &nbsp;|&nbsp; &#946;
+</div>
+{flash_html}
+{pending_html}
+<h2>&#128203; {Lp('AKTÍVNE LOTY','ACTIVE LOTS')} ({len(lots)})</h2>
+{lots_html}
+{js}
+</body></html>"""
+    return html
+
+
+@app.route("/auctions/bid", methods=["POST"])
+def auctions_bid():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    lot_id = request.form.get("lot_id", "").strip()
+    try:
+        amount = int(request.form.get("amount", 0))
+    except ValueError:
+        return redirect("/auctions")
+
+    uname = _uname()
+    auc = _auction_tick()
+    lots = auc.get("lots", [])
+    now = time.time()
+
+    lot = next((l for l in lots if l["id"] == lot_id), None)
+    if not lot or now >= lot["ends_at"]:
+        return redirect("/auctions?msg=!Lot+neexistuje+alebo+expiroval.")
+
+    if amount <= lot["current_bid"]:
+        return redirect(f"/auctions?msg=!Ponuka+musí+byť+vyššia+ako+{lot['current_bid']:,}+CR.")
+
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    if cr < amount:
+        return redirect(f"/auctions?msg=!Nedostatok+CR+(máš+{cr:,},+ponúkaš+{amount:,}).")
+
+    if lot["bidder"] == uname:
+        return redirect("/auctions?msg=!Už+máš+najvyššiu+ponuku.")
+
+    lot["current_bid"] = amount
+    lot["bidder"] = uname
+    save_jf(KB_AUCTIONS, auc)
+
+    lang = session.get("lang", "sk")
+    name = lot["name_sk"] if lang != "en" else lot["name_en"]
+    msg = f"Ponuka {amount:,} CR za {name} prijatá."
+    return redirect(f"/auctions?msg={msg}")
+
+
+@app.route("/auctions/collect", methods=["POST"])
+def auctions_collect():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    uname = _uname()
+    auc = _auction_tick()
+    pending = auc.get("pending", {})
+    my_lots = pending.get(uname, [])
+    if not my_lots:
+        return redirect("/auctions?msg=Nič+na+vyzdvihnutie.")
+
+    career = load_jf(KB_CAREER, {})
+    entry = career.get(uname, {})
+    cr = entry.get("career_cr", 0)
+
+    energy_data = load_jf(KB_ENERGY, {})
+    profile = energy_data.get(uname, {})
+
+    collected = []
+    skipped = []
+    lang = session.get("lang", "sk")
+
+    for p in my_lots:
+        cost = p["paid"]
+        if cr < cost:
+            name = p["name_sk"] if lang != "en" else p["name_en"]
+            skipped.append(name)
+            continue
+        cr -= cost
+        stock = _get_commodity_stock(profile, p["source"])
+        _set_commodity_stock(profile, p["source"], stock + p["qty"])
+        unit = p["unit_sk"] if lang != "en" else p["unit_en"]
+        name = p["name_sk"] if lang != "en" else p["name_en"]
+        collected.append(f'{p["qty"]} {unit} {name}')
+
+    entry["career_cr"] = cr
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    energy_data[uname] = profile
+    save_jf(KB_ENERGY, energy_data)
+
+    pending[uname] = []  # vymazať vyzdvihnuté
+    auc["pending"] = pending
+    save_jf(KB_AUCTIONS, auc)
+
+    parts = []
+    if collected:
+        parts.append("Vyzdvihnuté: " + ", ".join(collected))
+    if skipped:
+        parts.append("!Nedostatok CR pre: " + ", ".join(skipped))
+    msg = " | ".join(parts) if parts else "Hotovo."
+    return redirect(f"/auctions?msg={msg}")
 
 
 @app.route("/api/message_admin", methods=["POST"])
