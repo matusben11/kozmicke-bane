@@ -2705,6 +2705,25 @@ function _showLayoutSelect(next){
   </div>`);
 }
 
+//  SAVE SYNC — zlúči localStorage saves so serverovými (newer wins)
+// ══════════════════════════════════════════════════════════════
+function _syncSaves(){
+  if(!window.__SERVER_SAVES__) return;
+  const api=py(); if(!api) return;
+  let ls={};
+  try{ls=JSON.parse(localStorage.getItem(LS_KEY)||'{}');}catch(e){}
+  const sv=window.__SERVER_SAVES__;
+  const merged=Object.assign({},sv);
+  for(const slot in ls){
+    const local=ls[slot], server=sv[slot];
+    if(!server||(local.ts||0)>(server.ts||0)){
+      merged[slot]=local;
+      api.save_game(parseInt(slot),JSON.stringify(local)); // upload starší/chýbajúci slot
+    }
+  }
+  localStorage.setItem(LS_KEY,JSON.stringify(merged));
+}
+
 //  ENTRY POINT
 // ══════════════════════════════════════════════════════════════
 const _params = new URLSearchParams(window.location.search);
@@ -2712,6 +2731,7 @@ let PILOT = _params.get('pilot') || 'PILOT';
 const _startSlot = _params.get('slot');   // napr. ?slot=2 = načítaj slot 2
 
 initDesktopData();
+_syncSaves();
 
 if (_startSlot) {
   const _slotNum = parseInt(_startSlot);

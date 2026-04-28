@@ -587,6 +587,29 @@ def _migrate_career_keys():
         print("[migrate] kb_career kľúče normalizované na uppercase")
 
 
+def _migrate_saves_keys():
+    """Normalizuj používateľské kľúče v kb_saves.json na UPPERCASE."""
+    saves = load_jf(KB_SAVES, {})
+    new_saves = {}
+    changed = False
+    for key, slots in saves.items():
+        up = key.upper()
+        if up != key:
+            changed = True
+        if up not in new_saves:
+            new_saves[up] = slots
+        else:
+            # zlúč sloty — zachovaj novší ts
+            for slot, data in slots.items():
+                existing = new_saves[up].get(slot)
+                if not existing or (data.get("ts", 0) > existing.get("ts", 0)):
+                    new_saves[up][slot] = data
+                    changed = True
+    if changed:
+        save_jf(KB_SAVES, new_saves)
+        print("[migrate] kb_saves kľúče normalizované na uppercase")
+
+
 def _migrate_saves():
     saves = load_jf(KB_SAVES, {})
     if not saves or any(not k.isdigit() for k in saves.keys()):
@@ -601,6 +624,7 @@ def _migrate_saves():
 _migrate_saves()
 _migrate_users()
 _migrate_career_keys()
+_migrate_saves_keys()
 _seed_default_user()
 
 def _seed_admin_users():
