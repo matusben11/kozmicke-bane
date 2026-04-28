@@ -652,6 +652,33 @@ def _seed_admin_users():
 
 _seed_admin_users()
 
+
+def _seed_tester_users():
+    """
+    Env premenná TESTER_USERS = čiarkou oddelené mená testerov (is_tester=True).
+    Napr.: TESTER_USERS=matus,beta1
+    Spúšťa sa pri každom štarte — flag pretrváva aj po redeploy bez persistent disku.
+    """
+    raw = os.environ.get("TESTER_USERS", "").strip()
+    if not raw:
+        return
+    names = [n.strip() for n in raw.split(",") if n.strip()]
+    if not names:
+        return
+    users = load_users()
+    changed = False
+    for name in names:
+        match = next((k for k in users if k.lower() == name.lower()), None)
+        if match and not users[match].get("is_tester"):
+            users[match]["is_tester"] = True
+            changed = True
+            print(f"[seed] is_tester=True nastavené pre '{match}' (z TESTER_USERS env var).")
+    if changed:
+        save_users(users)
+
+_seed_tester_users()
+
+
 def get_sp_ranks(user_dict):
     """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
     sr = user_dict.get("special_ranks")
