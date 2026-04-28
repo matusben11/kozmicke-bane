@@ -116,7 +116,10 @@ FUEL_SHOP = [
     },
 ]
 
-MAX_ENERGY = 1000  # maximálna kapacita zásobníka energie
+MAX_ENERGY        = 1000  # maximálna kapacita zásobníka energie
+BANKRUPT_GRACE_H  = 8     # hodín mŕtvej firmy pred auto-bankrotom
+BANKRUPT_SHARE    = 0.60  # podiel výťažku aukcie pre bankrotujúceho hráča
+BANKRUPT_DUR_H    = 2     # trvanie bankrotovej aukcie (hodiny)
 
 # ── Fáza 3 — statický NPC trh ───────────────────────────────────────────────
 # npc_buys  = CR ktoré NPC zaplatí hráčovi za 1 jednotku (hráč predáva)
@@ -366,6 +369,20 @@ def _energy_tick(uname_upper):
     profile["energy"] = round(min(energy, MAX_ENERGY), 1)
     profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
     profile["last_tick"] = now
+
+    # ── Detekcia bankrotu ────────────────────────────────────────
+    fuel_plants = [p for p in profile["plants"]
+                   if PLANT_TYPES.get(p, {}).get("fuel_type")]
+    all_fuel_zero = all(profile["fuel"].get(ft, 0) == 0
+                        for ft in {"coal", "uranium"})
+    if fuel_plants and all_fuel_zero and profile["energy"] == 0:
+        if not profile.get("bankrupt_at"):
+            profile["bankrupt_at"] = now
+        elif now - profile["bankrupt_at"] > BANKRUPT_GRACE_H * 3600:
+            _trigger_bankruptcy(uname_upper, profile)
+    else:
+        profile.pop("bankrupt_at", None)
+
     data[uname_upper] = profile
     save_jf(KB_ENERGY, data)
     return profile
@@ -473,6 +490,94 @@ def _apply_price_impact(item_id, qty, direction):
     entry["ts"] = now
     raw[item_id] = entry
     save_jf(KB_MARKET, raw)
+
+
+def _estimate_company_value(profile):
+    """Odhadne hodnotu firmy (súčet build_cost elektrární) pre bankrotovú ponuku."""
+    total = sum(PLANT_TYPES.get(p, {}).get("build_cost", 0) for p in profile.get("plants", []))
+    fuel = profile.get("fuel", {})
+    comm = profile.get("commodities", {})
+    total += int(fuel.get("coal", 0)) * 45
+    total += int(fuel.get("uranium", 0)) * 1300
+    total += int(comm.get("oil", 0)) * 58
+    total += int(comm.get("gold", 0)) * 500
+    total += int(profile.get("energy", 0)) * 8
+    return max(500, total)
+
+
+def _trigger_bankruptcy(uname_upper, profile):
+    """
+    Automaticky vytvorí bankrotovú aukciu pre mŕtvu firmu.
+    Vymaže energetický profil hráča, vloží snímku do bankrupt_lots.
+    """
+    now = time.time()
+    auc = load_jf(KB_AUCTIONS, {"lots": [], "pending": {}, "company_lots": [],
+                                 "company_pending": {}, "bankrupt_lots": [], "bankrupt_pending": {}})
+    blots = auc.get("bankrupt_lots", [])
+
+    # Nespúšťaj ak už má aktívny bankrot
+    if any(l["seller"] == uname_upper for l in blots):
+        return
+
+    snap = {
+        "plants":      list(profile.get("plants", [])),
+        "energy":      round(profile.get("energy", 0), 1),
+        "fuel":        dict(profile.get("fuel", {})),
+        "commodities": dict(profile.get("commodities", {})),
+    }
+    val = _estimate_company_value(profile)
+    start_bid = max(500, round(val * 0.40))
+    lot_id = f"bankrupt_{uname_upper}_{int(now*1000) % 10**9}"
+    blots.append({
+        "id":          lot_id,
+        "seller":      uname_upper,
+        "snapshot":    snap,
+        "start_bid":   start_bid,
+        "current_bid": start_bid,
+        "bidder":      None,
+        "ends_at":     now + BANKRUPT_DUR_H * 3600,
+        "est_value":   val,
+    })
+    auc["bankrupt_lots"] = blots
+    save_jf(KB_AUCTIONS, auc)
+
+    # Reset energetického profilu hráča
+    profile["plants"] = []
+    profile["energy"] = 0.0
+    profile["fuel"] = {"coal": 0.0, "uranium": 0.0}
+    profile["commodities"] = {"oil": 0.0, "gold": 0.0}
+    profile.pop("bankrupt_at", None)
+    print(f"[bankrot] {uname_upper} — auto-bankrotová aukcia vytvorená, štartovacia ponuka {start_bid:,} CR")
+
+
+def _bankrupt_tick():
+    """Expirácia bankrotových lotov → bankrupt_pending."""
+    now = time.time()
+    data = load_jf(KB_AUCTIONS, {"lots": [], "pending": {}, "company_lots": [],
+                                  "company_pending": {}, "bankrupt_lots": [], "bankrupt_pending": {}})
+    blots = data.get("bankrupt_lots", [])
+    bpending = data.get("bankrupt_pending", {})
+    changed = False
+    active = []
+    for lot in blots:
+        if now < lot["ends_at"]:
+            active.append(lot)
+            continue
+        bidder = lot.get("bidder")
+        if bidder:
+            bpending.setdefault(bidder, []).append({
+                "lot_id":    lot["id"],
+                "seller":    lot["seller"],
+                "snapshot":  lot["snapshot"],
+                "paid":      lot["current_bid"],
+                "est_value": lot.get("est_value", lot["start_bid"]),
+            })
+        changed = True
+    data["bankrupt_lots"] = active
+    data["bankrupt_pending"] = bpending
+    if changed:
+        save_jf(KB_AUCTIONS, data)
+    return data
 
 
 def _auction_tick():
@@ -3675,11 +3780,18 @@ h2{color:#39ff6a;font-size:1.1em;letter-spacing:.08em;margin:14px 0 6px;}
 {flash_html}
 {pending_html}
 <a href="/auctions/company"
-  style="display:block;width:100%;max-width:700px;margin-bottom:14px;
+  style="display:block;width:100%;max-width:700px;margin-bottom:8px;
     background:#010d01;border:1px solid #ff44aa;color:#ff44aa;
     font-family:'VT323',monospace;font-size:1.05em;padding:9px;
     text-align:center;text-decoration:none;letter-spacing:.06em">
   🏢 {Lp("FIREMNÉ AUKCIE — predaj alebo kúp celú firmu","COMPANY AUCTIONS — buy or sell an entire company")}
+</a>
+<a href="/auctions/bankrupt"
+  style="display:block;width:100%;max-width:700px;margin-bottom:14px;
+    background:#0d0000;border:1px solid #ff3a3a;color:#ff3a3a;
+    font-family:'VT323',monospace;font-size:1.05em;padding:9px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  💥 {Lp("BANKROTOVÉ AUKCIE — mŕtve firmy so zľavou","BANKRUPTCY AUCTIONS — distressed assets at discount")}
 </a>
 <h2>&#128203; {Lp('AKTÍVNE LOTY','ACTIVE LOTS')} ({len(lots)})</h2>
 {lots_html}
@@ -4237,6 +4349,296 @@ def company_collect():
         parts.append(f"!Nedostatok CR pre firmy od: {', '.join(skipped)}")
     msg = " | ".join(parts) if parts else "Hotovo."
     return redirect(f"/auctions/company?msg={msg}")
+
+
+# ── Fáza 5c — Bankrotové aukcie ─────────────────────────────────────────────
+
+@app.route("/auctions/bankrupt")
+def bankrupt_auctions_page():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+
+    uname = _uname()
+    auc = _bankrupt_tick()
+    blots = auc.get("bankrupt_lots", [])
+    my_bpending = auc.get("bankrupt_pending", {}).get(uname, [])
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    lang = session.get("lang", "sk")
+    now = time.time()
+
+    def Lp(sk, en):
+        return en if lang == "en" else sk
+
+    msg = request.args.get("msg", "")
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:16px 16px 40px;}
+h1{color:#ff3a3a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
+  text-align:center;text-shadow:0 0 18px #ff3a3a88;}
+h2{color:#39ff6a;font-size:1.1em;letter-spacing:.08em;margin:14px 0 6px;}
+.sub{color:#2a7a45;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#0d0000;border:1px solid #ff3a3a44;width:100%;
+  max-width:700px;padding:16px 20px 18px;margin-bottom:12px;}
+.lot-header{display:flex;justify-content:space-between;align-items:baseline;
+  border-bottom:1px solid #2a0000;padding-bottom:6px;margin-bottom:10px;}
+.lot-title{color:#ff3a3a;font-size:1.05em;letter-spacing:.07em;}
+.timer{color:#ff9900;font-size:.95em;}
+.timer.urgent{color:#ff3a3a;animation:blink .8s step-end infinite;}
+@keyframes blink{50%{opacity:0;}}
+.snap{color:#cfffcf;font-size:1em;margin-bottom:8px;letter-spacing:.05em;}
+.discount{color:#ff9900;font-size:.85em;margin-bottom:6px;}
+.bid-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+.bid-current{color:#ff3a3a;font-size:1.05em;}
+.bidder-tag{color:#7a2a2a;font-size:.82em;}
+.inp{background:#000;border:1px solid #7a2a2a;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:1em;padding:3px 8px;width:110px;}
+.btn{background:#0d0000;border:1px solid #ff3a3a;color:#ff3a3a;
+  font-family:'VT323',monospace;font-size:.95em;padding:4px 12px;cursor:pointer;}
+.btn:hover{background:#1a0000;}
+.btn.gold{border-color:#ff9900;color:#ff9900;}
+.btn.gold:hover{background:#1a0d00;}
+.btn:disabled{border-color:#3a1a1a;color:#3a1a1a;cursor:default;}
+.pending-item{padding:8px 0;border-bottom:1px solid #1a0000;color:#cfffcf;}
+.pending-item:last-child{border-bottom:none;}
+.flash{color:#39ff6a;background:#001a00;border:1px solid #39ff6a33;
+  padding:6px 14px;font-size:.95em;margin-bottom:10px;max-width:700px;width:100%;}
+.flash.err{color:#ff3a3a;border-color:#ff3a3a33;background:#1a0000;}
+.btn-back{display:inline-block;background:#000;border:1px solid #2a7a45;
+  color:#2a7a45;font-family:'VT323',monospace;font-size:1em;
+  padding:6px 16px;text-decoration:none;letter-spacing:.06em;margin-bottom:14px;}
+.btn-back:hover{background:#0a1a0a;color:#39ff6a;}
+.no-lots{color:#7a2a2a;font-size:.9em;padding:10px 0;}
+</style>"""
+
+    flash_cls = "flash err" if msg.startswith("!") else "flash"
+    flash_html = f'<div class="{flash_cls}">{msg.lstrip("!")}</div>' if msg else ""
+
+    def _fmt_timer(ends_at):
+        secs = max(0, int(ends_at - now))
+        h, r = divmod(secs, 3600)
+        m, s = divmod(r, 60)
+        label = f"{h}h {m:02d}m" if h else f"{m:02d}:{s:02d}"
+        cls = "timer urgent" if secs < 300 else "timer"
+        return f'<span class="{cls}" data-ends="{int(ends_at)}">{label}</span>'
+
+    lots_html = ""
+    if not blots:
+        lots_html = f'<p class="no-lots">{Lp("Žiadne aktívne bankrotové aukcie.","No active bankruptcy auctions.")}</p>'
+    for lot in blots:
+        snap_txt = _snapshot_summary(lot["snapshot"], lang)
+        est = lot.get("est_value", lot["start_bid"])
+        pct = round(lot["start_bid"] / max(1, est) * 100)
+        bidder_tag = ""
+        if lot["bidder"]:
+            you = Lp("(ty)", "(you)") if lot["bidder"] == uname else ""
+            bidder_tag = f'<span class="bidder-tag"> — {lot["bidder"]} {you}</span>'
+        min_next = lot["current_bid"] + 1
+        can_bid = cr >= min_next and lot["seller"] != uname and lot["bidder"] != uname
+        lots_html += f"""
+<div class="card">
+  <div class="lot-header">
+    <span class="lot-title">💥 BANKROT: {lot['seller']}</span>
+    {_fmt_timer(lot['ends_at'])}
+  </div>
+  <div class="snap">{snap_txt}</div>
+  <div class="discount">
+    {Lp("Odh. hodnota","Est. value")}: {est:,} CR &nbsp;·&nbsp;
+    {Lp("Štart","Start")}: {lot['start_bid']:,} CR ({pct}% {Lp("hodnoty","of value")})
+  </div>
+  <div class="bid-row">
+    <span class="bid-current">{Lp("Ponuka","Bid")}: {lot["current_bid"]:,} CR</span>
+    {bidder_tag}
+  </div>
+  <form method="POST" action="/auctions/bankrupt/bid" class="bid-row">
+    <input type="hidden" name="lot_id" value="{lot['id']}">
+    <input class="inp" type="number" name="amount" value="{min_next}" min="{min_next}" step="1">
+    <button class="btn" {"" if can_bid else "disabled"}>
+      &#128200; {Lp("Ponúknuť","Place bid")}
+    </button>
+  </form>
+</div>"""
+
+    pending_html = ""
+    if my_bpending:
+        items_html = ""
+        for p in my_bpending:
+            snap_txt = _snapshot_summary(p["snapshot"], lang)
+            seller_share = round(p["paid"] * BANKRUPT_SHARE)
+            items_html += (
+                f'<div class="pending-item">'
+                f'💥 {Lp("Bankrot od","Bankrupt from")} <strong>{p["seller"]}</strong>: '
+                f'{snap_txt}<br>'
+                f'{Lp("Zaplatíš","You pay")}: <strong>{p["paid"]:,} CR</strong> '
+                f'<span style="color:#7a2a2a">({Lp("predávajúci dostane","seller gets")} {seller_share:,} CR)</span>'
+                f'</div>'
+            )
+        pending_html = f"""
+<div class="card" style="border-color:#ff9900aa;background:#0d0800">
+  <h2 style="color:#ff9900">&#127881; {Lp('BANKROTOVÁ FIRMA NA PREVZATIE','BANKRUPT COMPANY TO COLLECT')}</h2>
+  {items_html}
+  <form method="POST" action="/auctions/bankrupt/collect" style="margin-top:10px">
+    <button class="btn gold">&#128179; {Lp("PREVZIAŤ","COLLECT")}</button>
+  </form>
+</div>"""
+
+    js = """
+<script>
+(function(){
+  function tick(){
+    document.querySelectorAll('[data-ends]').forEach(function(el){
+      var secs=Math.max(0,parseInt(el.dataset.ends)-Math.floor(Date.now()/1000));
+      var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
+      el.textContent=h?(h+'h '+('0'+m).slice(-2)+'m'):(('0'+m).slice(-2)+':'+('0'+s).slice(-2));
+      el.className=secs<300?'timer urgent':'timer';
+      if(secs===0)setTimeout(function(){location.reload();},1500);
+    });
+  }
+  tick();setInterval(tick,1000);
+})();
+</script>"""
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp('Bankrotové aukcie','Bankruptcy Auctions')} — KB</title>
+{css}</head><body>
+<a href="/auctions" class="btn-back">&#8592; {Lp('Späť na aukcie','Back to auctions')}</a>
+<h1>💥 {Lp('BANKROTOVÉ AUKCIE','BANKRUPTCY AUCTIONS')}</h1>
+<div class="sub">
+  PILOT: {session['username'].upper()} &nbsp;|&nbsp;
+  {Lp('Kariéra CR','Career CR')}:
+  <span style="color:#cfffcf">{cr:,} CR</span>
+  &nbsp;|&nbsp; BETA v0.5c &nbsp;|&nbsp; &#946;
+</div>
+<div style="color:#7a2a2a;font-size:.85em;max-width:700px;width:100%;margin-bottom:10px">
+  {Lp(
+    "Firmy ktoré zbankrotovali (0 paliva + 0 energie po dobu 8h) sa automaticky draží so zľavou 60%.",
+    "Companies that went bankrupt (0 fuel + 0 energy for 8h) are auto-auctioned at 60% off."
+  )}
+  &nbsp;|&nbsp;
+  {Lp(
+    f"Predávajúci dostane {round(BANKRUPT_SHARE*100)}% z výťažku ako likvidačnú platbu.",
+    f"Seller receives {round(BANKRUPT_SHARE*100)}% of winning bid as liquidation payment."
+  )}
+</div>
+{flash_html}
+{pending_html}
+<h2>&#9888; {Lp('AKTÍVNE BANKROTY','ACTIVE BANKRUPTCIES')} ({len(blots)})</h2>
+{lots_html}
+{js}
+</body></html>"""
+    return html
+
+
+@app.route("/auctions/bankrupt/bid", methods=["POST"])
+def bankrupt_bid():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    lot_id = request.form.get("lot_id", "").strip()
+    try:
+        amount = int(request.form.get("amount", 0))
+    except ValueError:
+        return redirect("/auctions/bankrupt")
+
+    uname = _uname()
+    auc = _bankrupt_tick()
+    blots = auc.get("bankrupt_lots", [])
+    now = time.time()
+
+    lot = next((l for l in blots if l["id"] == lot_id), None)
+    if not lot or now >= lot["ends_at"]:
+        return redirect("/auctions/bankrupt?msg=!Lot neexistuje alebo expiroval.")
+    if lot["seller"] == uname:
+        return redirect("/auctions/bankrupt?msg=!Nemôžeš bidonvať na vlastný bankrot.")
+    if amount <= lot["current_bid"]:
+        return redirect(f"/auctions/bankrupt?msg=!Ponuka musí byť vyššia ako {lot['current_bid']:,} CR.")
+    if lot["bidder"] == uname:
+        return redirect("/auctions/bankrupt?msg=!Už máš najvyššiu ponuku.")
+
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    if cr < amount:
+        return redirect(f"/auctions/bankrupt?msg=!Nedostatok CR ({cr:,} máš, {amount:,} ponúkaš).")
+
+    lot["current_bid"] = amount
+    lot["bidder"] = uname
+    save_jf(KB_AUCTIONS, auc)
+
+    msg = f"Ponuka {amount:,} CR prijatá."
+    return redirect(f"/auctions/bankrupt?msg={msg}")
+
+
+@app.route("/auctions/bankrupt/collect", methods=["POST"])
+def bankrupt_collect():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    uname = _uname()
+    auc = _bankrupt_tick()
+    bpending = auc.get("bankrupt_pending", {})
+    my_lots = bpending.get(uname, [])
+    if not my_lots:
+        return redirect("/auctions/bankrupt?msg=Nič na prevzatie.")
+
+    career = load_jf(KB_CAREER, {})
+    energy_data = load_jf(KB_ENERGY, {})
+    winner_profile = _energy_tick(uname)
+    lang = session.get("lang", "sk")
+    collected = []
+    skipped = []
+
+    for p in my_lots:
+        cost = p["paid"]
+        buyer_entry = career.get(uname, {})
+        buyer_cr = buyer_entry.get("career_cr", 0)
+        if buyer_cr < cost:
+            skipped.append(p["seller"])
+            continue
+
+        buyer_entry["career_cr"] = buyer_cr - cost
+        career[uname] = buyer_entry
+
+        seller_share = round(cost * BANKRUPT_SHARE)
+        seller = p["seller"]
+        seller_entry = career.get(seller, {"career_cr": 0})
+        seller_entry["career_cr"] = seller_entry.get("career_cr", 0) + seller_share
+        career[seller] = seller_entry
+
+        snap = p["snapshot"]
+        winner_profile.setdefault("plants", []).extend(snap.get("plants", []))
+        winner_profile["energy"] = min(
+            MAX_ENERGY, winner_profile.get("energy", 0) + snap.get("energy", 0))
+        for k, v in snap.get("fuel", {}).items():
+            winner_profile.setdefault("fuel", {})[k] = round(
+                winner_profile["fuel"].get(k, 0) + v, 2)
+        for k, v in snap.get("commodities", {}).items():
+            winner_profile.setdefault("commodities", {})[k] = round(
+                winner_profile["commodities"].get(k, 0) + v, 2)
+
+        collected.append(f'{p["seller"]} (+{seller_share:,} CR {Lp("predajcovi","to seller")})')
+
+    save_jf(KB_CAREER, career)
+    energy_data[uname] = winner_profile
+    save_jf(KB_ENERGY, energy_data)
+
+    bpending[uname] = []
+    auc["bankrupt_pending"] = bpending
+    save_jf(KB_AUCTIONS, auc)
+
+    parts = []
+    if collected:
+        parts.append("Prevzaté: " + ", ".join(collected))
+    if skipped:
+        parts.append("!Nedostatok CR pre: " + ", ".join(skipped))
+    msg = " | ".join(parts) if parts else "Hotovo."
+    return redirect(f"/auctions/bankrupt?msg={msg}")
 
 
 @app.route("/api/message_admin", methods=["POST"])
