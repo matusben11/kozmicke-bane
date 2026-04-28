@@ -3498,6 +3498,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
         )
 
     # ── Eventy ──────────────────────────────────────────────────
+    now = time.time()
     last_ev = profile.get("last_event")
     last_ev_html = ""
     if last_ev and (now - last_ev.get("ts", 0)) < 120:
