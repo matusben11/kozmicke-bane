@@ -542,6 +542,51 @@ def _auction_tick():
     return data
 
 
+_USER_FIELD_DEFAULTS = {
+    "is_admin":     False,
+    "is_tester":    False,
+    "banned_until": None,
+    "special_ranks": [],
+    "score":        0,
+    "games_played": 0,
+    "kb_sessions":  0,
+}
+
+def _migrate_users():
+    """Pridaj chýbajúce polia starým účtom (z v1/v2 keď polia ešte neexistovali)."""
+    users = load_users()
+    changed = False
+    for u in users.values():
+        for field, default in _USER_FIELD_DEFAULTS.items():
+            if field not in u:
+                u[field] = default
+                changed = True
+    if changed:
+        save_users(users)
+        print("[migrate] user fields doplnené pre staré účty")
+
+
+def _migrate_career_keys():
+    """Normalizuj kľúče kb_career.json na UPPERCASE (staré verzie mohli ukladať inak)."""
+    career = load_jf(KB_CAREER, {})
+    new_career = {}
+    changed = False
+    for key, val in career.items():
+        up = key.upper()
+        if up != key:
+            changed = True
+        if up not in new_career:
+            new_career[up] = val
+        else:
+            # zlúč: zachovaj vyššie career_cr
+            if val.get("career_cr", 0) > new_career[up].get("career_cr", 0):
+                new_career[up] = val
+                changed = True
+    if changed:
+        save_jf(KB_CAREER, new_career)
+        print("[migrate] kb_career kľúče normalizované na uppercase")
+
+
 def _migrate_saves():
     saves = load_jf(KB_SAVES, {})
     if not saves or any(not k.isdigit() for k in saves.keys()):
@@ -554,6 +599,8 @@ def _migrate_saves():
     print(f"[migrate] kb_saves.json migrated: {list(new_saves.keys())}")
 
 _migrate_saves()
+_migrate_users()
+_migrate_career_keys()
 _seed_default_user()
 
 def _seed_admin_users():

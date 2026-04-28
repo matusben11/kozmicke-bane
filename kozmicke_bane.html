@@ -2684,7 +2684,8 @@ function applyLayout(mode){
 (function(){ const l=localStorage.getItem('kb_layout'); if(l) applyLayout(l); })();
 
 function _showLayoutSelect(next){
-  rG([`<div style="text-align:center;padding:1.2rem 0">
+  setScr(`<div class="panel" style="text-align:center;min-width:520px;">
+    ${corners()}
     <div style="font-size:1.5rem;color:var(--a);letter-spacing:.1em;margin-bottom:1.2rem">
       ${t('layout_title')}
     </div>
@@ -2701,7 +2702,7 @@ function _showLayoutSelect(next){
         🖥️<br><span style="font-size:1rem;color:var(--ad)">${t('layout_pc')}</span>
       </button>
     </div>
-  </div>`]);
+  </div>`);
 }
 
 //  ENTRY POINT
