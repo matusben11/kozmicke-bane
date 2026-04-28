@@ -9,6 +9,7 @@ import json
 import math
 import os
 import pathlib
+import random
 import smtplib
 import time
 from collections import Counter
@@ -120,6 +121,51 @@ MAX_ENERGY        = 1000  # maximálna kapacita zásobníka energie
 BANKRUPT_GRACE_H  = 8     # hodín mŕtvej firmy pred auto-bankrotom
 BANKRUPT_SHARE    = 0.60  # podiel výťažku aukcie pre bankrotujúceho hráča
 BANKRUPT_DUR_H    = 2     # trvanie bankrotovej aukcie (hodiny)
+
+# ── Fáza 6 — Eventy a dráma ─────────────────────────────────────────────────
+EVENT_PROB       = 0.20   # pravdepodobnosť eventu pri každej návšteve /energy
+EVENT_COOLDOWN_H = 3.0    # minimálna pauza medzi eventmi (hodiny)
+
+# type: "positive" | "negative"
+# effect: čo sa stane
+#   fuel_gift    → pridaj palivo (value = qty, fuel = "coal"|"uranium"|"random")
+#   solar_boost  → solárna produkcia ×value po dobu duration_h hodín
+#   sell_bonus   → predaj energie za ×value po dobu duration_h hodín
+#   fuel_leak    → stratíš value% paliva (oboch druhov)
+#   plant_fail   → náhodná elektráreň offline duration_h hodín
+#   energy_drain → stratíš value% zásobníka energie
+ENERGY_EVENTS = [
+    {"id": "coal_gift",    "type": "pos", "weight": 25,
+     "effect": "fuel_gift", "fuel": "coal",    "value": 20,
+     "name_sk": "⛏ Nečakaná dodávka uhlia!",      "name_en": "⛏ Surprise coal delivery!",
+     "desc_sk": "+20 ton uhlia zadarmo.",           "desc_en": "+20 tons of coal for free."},
+    {"id": "uranium_gift", "type": "pos", "weight": 10,
+     "effect": "fuel_gift", "fuel": "uranium",  "value": 3,
+     "name_sk": "☢ Urán od výskumníkov!",          "name_en": "☢ Uranium from researchers!",
+     "desc_sk": "+3 palivové články zadarmo.",       "desc_en": "+3 fuel rods for free."},
+    {"id": "solar_boost",  "type": "pos", "weight": 20, "duration_h": 6,
+     "effect": "solar_boost", "value": 2.0,
+     "name_sk": "☀ Solárny prielom!",              "name_en": "☀ Solar breakthrough!",
+     "desc_sk": "Solárna produkcia ×2 na 6 hodín.", "desc_en": "Solar output ×2 for 6 hours."},
+    {"id": "sell_bonus",   "type": "pos", "weight": 15, "duration_h": 4,
+     "effect": "sell_bonus", "value": 2.0,
+     "name_sk": "⚡ Špičkový dopyt po energii!",   "name_en": "⚡ Peak energy demand!",
+     "desc_sk": "Predaj energie za 2× cenu 4 hodiny.","desc_en": "Sell energy at 2× price for 4 hours."},
+    {"id": "fuel_leak",    "type": "neg", "weight": 20,
+     "effect": "fuel_leak", "value": 0.30,
+     "name_sk": "💧 Únik paliva!",                 "name_en": "💧 Fuel leak!",
+     "desc_sk": "Stratíš 30% zásob paliva.",        "desc_en": "You lose 30% of fuel stocks."},
+    {"id": "plant_fail",   "type": "neg", "weight": 15, "duration_h": 6,
+     "effect": "plant_fail", "value": 1,
+     "name_sk": "🔧 Porucha elektrárne!",           "name_en": "🔧 Plant malfunction!",
+     "desc_sk": "Jedna elektráreň offline 6 hodín.", "desc_en": "One plant offline for 6 hours."},
+    {"id": "energy_drain", "type": "neg", "weight": 15,
+     "effect": "energy_drain", "value": 0.35,
+     "name_sk": "⚠ Výpadok siete!",               "name_en": "⚠ Grid blackout!",
+     "desc_sk": "Zásobník energie klesne o 35%.",   "desc_en": "Energy storage drops by 35%."},
+]
+_EVENT_WEIGHTS   = [e["weight"] for e in ENERGY_EVENTS]
+_EVENT_TOTAL_W   = sum(_EVENT_WEIGHTS)
 
 # ── Fáza 3 — statický NPC trh ───────────────────────────────────────────────
 # npc_buys  = CR ktoré NPC zaplatí hráčovi za 1 jednotku (hráč predáva)
@@ -337,7 +383,59 @@ def _ensure_profile_fields(profile):
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
+    profile.setdefault("active_events", [])
+    profile.setdefault("last_event", None)
+    profile.setdefault("last_event_at", 0.0)
     return profile
+
+
+def _apply_energy_event(ev_cfg, profile, now):
+    """Aplikuj efekt eventu na profil hráča. Upravuje profil in-place."""
+    effect = ev_cfg["effect"]
+    val = ev_cfg["value"]
+    dur_h = ev_cfg.get("duration_h", 0)
+    expires_at = now + dur_h * 3600 if dur_h else 0
+
+    if effect == "fuel_gift":
+        fuel_key = ev_cfg.get("fuel", "coal")
+        profile.setdefault("fuel", {})[fuel_key] = round(
+            profile["fuel"].get(fuel_key, 0) + val, 2)
+
+    elif effect == "solar_boost" or effect == "sell_bonus":
+        profile.setdefault("active_events", []).append({
+            "id": ev_cfg["id"], "effect": effect,
+            "value": val, "expires_at": expires_at,
+            "name_sk": ev_cfg["name_sk"], "name_en": ev_cfg["name_en"],
+        })
+
+    elif effect == "fuel_leak":
+        fuel = profile.get("fuel", {})
+        for k in fuel:
+            fuel[k] = round(fuel[k] * (1.0 - val), 2)
+        profile["fuel"] = fuel
+
+    elif effect == "plant_fail":
+        plants = profile.get("plants", [])
+        if plants:
+            idx = random.randint(0, len(plants) - 1)
+            profile.setdefault("active_events", []).append({
+                "id": ev_cfg["id"], "effect": effect,
+                "value": val, "expires_at": expires_at,
+                "plant_idx": idx,
+                "plant_type": plants[idx],
+                "name_sk": ev_cfg["name_sk"], "name_en": ev_cfg["name_en"],
+            })
+
+    elif effect == "energy_drain":
+        profile["energy"] = round(profile.get("energy", 0) * (1.0 - val), 1)
+
+    # Zaznamenaj posledný event pre flash správu
+    profile["last_event"] = {
+        "name_sk": ev_cfg["name_sk"], "name_en": ev_cfg["name_en"],
+        "desc_sk": ev_cfg["desc_sk"], "desc_en": ev_cfg["desc_en"],
+        "type":    ev_cfg["type"],
+        "ts":      now,
+    }
 
 
 def _energy_tick(uname_upper):
@@ -352,12 +450,25 @@ def _energy_tick(uname_upper):
     fuel = {k: float(v) for k, v in profile["fuel"].items()}
     energy = float(profile["energy"])
 
-    for plant_id in profile["plants"]:
+    # Aktívne eventy — vymaž expirované, zozbieraj efekty
+    active_events = [e for e in profile.get("active_events", []) if e["expires_at"] > now]
+    solar_mult = 1.0
+    failed_plant_idx = None
+    for ae in active_events:
+        if ae["effect"] == "solar_boost":
+            solar_mult = max(solar_mult, ae["value"])
+        elif ae["effect"] == "plant_fail":
+            failed_plant_idx = ae.get("plant_idx")
+    profile["active_events"] = active_events
+
+    for idx, plant_id in enumerate(profile["plants"]):
+        if idx == failed_plant_idx:
+            continue
         pt = PLANT_TYPES.get(plant_id)
         if not pt:
             continue
         if pt["fuel_type"] is None:
-            energy += pt["energy_per_hr"] * elapsed_hrs
+            energy += pt["energy_per_hr"] * elapsed_hrs * solar_mult
         else:
             avail = fuel.get(pt["fuel_type"], 0.0)
             if avail <= 0:
@@ -369,6 +480,23 @@ def _energy_tick(uname_upper):
     profile["energy"] = round(min(energy, MAX_ENERGY), 1)
     profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
     profile["last_tick"] = now
+
+    # ── Event trigger ────────────────────────────────────────────
+    new_event = None
+    if profile.get("plants"):
+        last_event_t = profile.get("last_event_at", 0)
+        if (now - last_event_t) > EVENT_COOLDOWN_H * 3600:
+            if random.random() < EVENT_PROB:
+                r = random.uniform(0, _EVENT_TOTAL_W)
+                acc = 0
+                for ev_cfg in ENERGY_EVENTS:
+                    acc += ev_cfg["weight"]
+                    if r <= acc:
+                        new_event = ev_cfg
+                        break
+            if new_event:
+                profile["last_event_at"] = now
+                _apply_energy_event(new_event, profile, now)
 
     # ── Detekcia bankrotu ────────────────────────────────────────
     fuel_plants = [p for p in profile["plants"]
@@ -3222,13 +3350,55 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             f'</div>'
         )
 
+    # ── Eventy ──────────────────────────────────────────────────
+    last_ev = profile.get("last_event")
+    last_ev_html = ""
+    if last_ev and (now - last_ev.get("ts", 0)) < 120:
+        name_ev = Lp(last_ev["name_sk"], last_ev["name_en"])
+        desc_ev = Lp(last_ev["desc_sk"], last_ev["desc_en"])
+        col = "#39ff6a" if last_ev["type"] == "pos" else "#ff3a3a"
+        last_ev_html = (
+            f'<div style="background:{col}18;border:1px solid {col}55;'
+            f'color:{col};padding:8px 14px;font-size:1em;max-width:680px;'
+            f'width:100%;margin-bottom:10px;letter-spacing:.05em">'
+            f'&#9889; {name_ev} &mdash; {desc_ev}'
+            f'</div>'
+        )
+
+    active_evs = profile.get("active_events", [])
+    active_ev_html = ""
+    if active_evs:
+        rows_ev = ""
+        for ae in active_evs:
+            name_ae = Lp(ae["name_sk"], ae["name_en"])
+            secs_left = max(0, int(ae["expires_at"] - now))
+            h, r = divmod(secs_left, 3600)
+            m_left, s_left = divmod(r, 60)
+            t_str = f"{h}h {m_left:02d}m" if h else f"{m_left:02d}:{s_left:02d}"
+            col = "#39ff6a" if ae["effect"] in ("solar_boost","sell_bonus") else "#ff9900"
+            rows_ev += (
+                f'<div style="display:flex;justify-content:space-between;'
+                f'padding:4px 0;border-bottom:1px solid #0a1a0a;font-size:.9em">'
+                f'<span style="color:{col}">{name_ae}</span>'
+                f'<span style="color:#2a7a45">⏱ {t_str}</span>'
+                f'</div>'
+            )
+        active_ev_html = (
+            f'<div class="card" style="border-color:#ff990044">'
+            f'<div class="card-title" style="color:#ff9900">'
+            f'&#9888; {Lp("AKTÍVNE EVENTY","ACTIVE EVENTS")}</div>'
+            f'{rows_ev}</div>'
+        )
+
     html = f"""<!DOCTYPE html><html lang='{lang}'><head>
 <meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>{Lp("Energetická minihra","Energy Minigame")} — KB</title>
 {css}</head><body>
 <a href="/lobby" class="btn-back">&#8592; {Lp("Späť do lobby","Back to lobby")}</a>
 <h1>&#9889; {Lp("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}</h1>
-<div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.1 &nbsp;|&nbsp; &#946;</div>
+<div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.6 &nbsp;|&nbsp; &#946;</div>
+{last_ev_html}
+{active_ev_html}
 
 <div class="card">
   <div class="card-title">&#9889; {Lp("ENERGIA — ZÁSOBNÍK","ENERGY STORAGE")}</div>
@@ -3541,7 +3711,13 @@ def market_sell():
 
     prices = _get_market_prices()
     price_b = (prices.get(item_id) or {}).get("b") or item["npc_buys"]
-    earnings = round(qty * price_b)
+    # sell_bonus event — energia za 2× cenu
+    sell_mult = 1.0
+    now_t = time.time()
+    for ae in profile.get("active_events", []):
+        if ae["effect"] == "sell_bonus" and ae["expires_at"] > now_t:
+            sell_mult = max(sell_mult, ae["value"])
+    earnings = round(qty * price_b * sell_mult)
     _set_commodity_stock(profile, item["source"], stock - qty)
 
     data = load_jf(KB_ENERGY, {})
@@ -3558,7 +3734,8 @@ def market_sell():
 
     lang = session.get("lang", "sk")
     unit = item["unit_sk"] if lang != "en" else item["unit_en"]
-    msg = f"+{earnings:,} CR ({qty} {unit} @ {price_b:.1f} CR)"
+    bonus_tag = f" ×{sell_mult:.0f} EVENT BONUS" if sell_mult > 1 else ""
+    msg = f"+{earnings:,} CR ({qty} {unit} @ {price_b:.1f} CR{bonus_tag})"
     return redirect(f"/market?msg={msg}")
 
 
