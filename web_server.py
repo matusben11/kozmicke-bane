@@ -3674,6 +3674,13 @@ h2{color:#39ff6a;font-size:1.1em;letter-spacing:.08em;margin:14px 0 6px;}
 </div>
 {flash_html}
 {pending_html}
+<a href="/auctions/company"
+  style="display:block;width:100%;max-width:700px;margin-bottom:14px;
+    background:#010d01;border:1px solid #ff44aa;color:#ff44aa;
+    font-family:'VT323',monospace;font-size:1.05em;padding:9px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  🏢 {Lp("FIREMNÉ AUKCIE — predaj alebo kúp celú firmu","COMPANY AUCTIONS — buy or sell an entire company")}
+</a>
 <h2>&#128203; {Lp('AKTÍVNE LOTY','ACTIVE LOTS')} ({len(lots)})</h2>
 {lots_html}
 {js}
@@ -3776,6 +3783,460 @@ def auctions_collect():
         parts.append("!Nedostatok CR pre: " + ", ".join(skipped))
     msg = " | ".join(parts) if parts else "Hotovo."
     return redirect(f"/auctions?msg={msg}")
+
+
+# ── Fáza 5b — Firemné aukcie ────────────────────────────────────────────────
+
+def _company_tick():
+    """Expirácia firemných lotov → pending výhry, vráti aktívne loty."""
+    now = time.time()
+    data = load_jf(KB_AUCTIONS, {"lots": [], "pending": {}, "company_lots": [], "company_pending": {}})
+    clots = data.get("company_lots", [])
+    cpending = data.get("company_pending", {})
+    changed = False
+    active = []
+    for lot in clots:
+        if now < lot["ends_at"]:
+            active.append(lot)
+            continue
+        bidder = lot.get("bidder")
+        if bidder:
+            cpending.setdefault(bidder, []).append({
+                "lot_id":    lot["id"],
+                "seller":    lot["seller"],
+                "snapshot":  lot["snapshot"],
+                "paid":      lot["current_bid"],
+            })
+        changed = True
+    data["company_lots"] = active
+    data["company_pending"] = cpending
+    if changed:
+        save_jf(KB_AUCTIONS, data)
+    return data
+
+
+def _company_snapshot(profile):
+    """Vezme snímku energie/zásoby hráča pre predaj firmy."""
+    return {
+        "plants":      list(profile.get("plants", [])),
+        "energy":      round(profile.get("energy", 0), 1),
+        "fuel":        dict(profile.get("fuel", {})),
+        "commodities": dict(profile.get("commodities", {})),
+    }
+
+
+def _snapshot_summary(snap, lang="sk"):
+    """Textový súhrn firmy pre zobrazenie v aukcii."""
+    plants = snap.get("plants", [])
+    if not plants:
+        return "Žiadne elektrárne" if lang != "en" else "No plants"
+    counts = {}
+    for p in plants:
+        counts[p] = counts.get(p, 0) + 1
+    icons = {"solar": "☀", "coal": "🏭", "nuclear": "⚛"}
+    parts = [f"{icons.get(k,'?')}×{v}" for k, v in counts.items()]
+    fuel = snap.get("fuel", {})
+    comm = snap.get("commodities", {})
+    extras = []
+    if snap.get("energy", 0) > 0:
+        extras.append(f"⚡{snap['energy']:.0f}")
+    if fuel.get("coal", 0) > 0:
+        extras.append(f"⛏{fuel['coal']:.0f}t")
+    if fuel.get("uranium", 0) > 0:
+        extras.append(f"☢{fuel['uranium']:.0f}ks")
+    if comm.get("oil", 0) > 0:
+        extras.append(f"🛢{comm['oil']:.0f}")
+    if comm.get("gold", 0) > 0:
+        extras.append(f"🥇{comm['gold']:.0f}oz")
+    return "  ".join(parts + extras)
+
+
+@app.route("/auctions/company")
+def company_auctions_page():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+
+    uname = _uname()
+    auc = _company_tick()
+    clots = auc.get("company_lots", [])
+    my_cpending = auc.get("company_pending", {}).get(uname, [])
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    energy_data = load_jf(KB_ENERGY, {})
+    profile = _energy_tick(uname)
+    lang = session.get("lang", "sk")
+    now = time.time()
+
+    def Lp(sk, en):
+        return en if lang == "en" else sk
+
+    msg = request.args.get("msg", "")
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  padding:16px 16px 40px;}
+h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
+  text-align:center;text-shadow:0 0 18px #39ff6a88;}
+h2{color:#39ff6a;font-size:1.1em;letter-spacing:.08em;margin:14px 0 6px;}
+.sub{color:#2a7a45;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#010d01;border:1px solid #39ff6a44;width:100%;
+  max-width:700px;padding:16px 20px 18px;margin-bottom:12px;}
+.lot-header{display:flex;justify-content:space-between;align-items:baseline;
+  border-bottom:1px solid #0d2a0d;padding-bottom:6px;margin-bottom:10px;}
+.lot-title{color:#39ff6a;font-size:1.05em;letter-spacing:.07em;}
+.timer{color:#ff9900;font-size:.95em;}
+.timer.urgent{color:#ff3a3a;animation:blink .8s step-end infinite;}
+@keyframes blink{50%{opacity:0;}}
+.lot-detail{color:#2a7a45;font-size:.88em;margin-bottom:6px;}
+.snap{color:#cfffcf;font-size:1em;margin-bottom:8px;letter-spacing:.05em;}
+.bid-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+.bid-current{color:#39ff6a;font-size:1.05em;}
+.bidder-tag{color:#2a7a45;font-size:.82em;}
+.inp{background:#000;border:1px solid #2a7a45;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:1em;padding:3px 8px;width:110px;}
+.sel{background:#000;border:1px solid #2a7a45;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:1em;padding:3px 6px;}
+.btn{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+  font-family:'VT323',monospace;font-size:.95em;padding:4px 12px;cursor:pointer;}
+.btn:hover{background:#003a10;}
+.btn.gold{border-color:#ff9900;color:#ff9900;}
+.btn.gold:hover{background:#1a0d00;}
+.btn.sell{border-color:#ff44aa;color:#ff44aa;}
+.btn.sell:hover{background:#1a0010;}
+.btn:disabled{border-color:#1a3a1a;color:#1a3a1a;cursor:default;}
+.pending-item{padding:8px 0;border-bottom:1px solid #0a1a0a;color:#cfffcf;}
+.pending-item:last-child{border-bottom:none;}
+.flash{color:#39ff6a;background:#001a00;border:1px solid #39ff6a33;
+  padding:6px 14px;font-size:.95em;margin-bottom:10px;max-width:700px;width:100%;}
+.flash.err{color:#ff3a3a;border-color:#ff3a3a33;background:#1a0000;}
+.btn-back{display:inline-block;background:#000;border:1px solid #2a7a45;
+  color:#2a7a45;font-family:'VT323',monospace;font-size:1em;
+  padding:6px 16px;text-decoration:none;letter-spacing:.06em;margin-bottom:14px;}
+.btn-back:hover{background:#0a1a0a;color:#39ff6a;}
+.no-lots{color:#2a7a45;font-size:.9em;padding:10px 0;}
+.form-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+.lbl{color:#2a7a45;font-size:.88em;}
+</style>"""
+
+    flash_cls = "flash err" if msg.startswith("!") else "flash"
+    flash_html = f'<div class="{flash_cls}">{msg.lstrip("!")}</div>' if msg else ""
+
+    def _fmt_timer(ends_at):
+        secs = max(0, int(ends_at - now))
+        h, r = divmod(secs, 3600)
+        m, s = divmod(r, 60)
+        label = f"{h}h {m:02d}m" if h else f"{m:02d}:{s:02d}"
+        cls = "timer urgent" if secs < 300 else "timer"
+        return f'<span class="{cls}" data-ends="{int(ends_at)}">{label}</span>'
+
+    # Aktívne firemné loty
+    my_active_lot = next((l for l in clots if l["seller"] == uname), None)
+
+    lots_html = ""
+    if not clots:
+        lots_html = f'<p class="no-lots">{Lp("Žiadne aktívne firemné aukcie.","No active company auctions.")}</p>'
+    for lot in clots:
+        snap_txt = _snapshot_summary(lot["snapshot"], lang)
+        bidder_tag = ""
+        if lot["bidder"]:
+            you = Lp("(ty)", "(you)") if lot["bidder"] == uname else ""
+            bidder_tag = f'<span class="bidder-tag"> — {Lp("Top bid","Top bid")}: {lot["bidder"]} {you}</span>'
+        min_next = lot["current_bid"] + 1
+        is_seller = lot["seller"] == uname
+        can_bid = cr >= min_next and not is_seller and lot["bidder"] != uname
+        seller_tag = f' <span style="color:#ff44aa">({Lp("tvoje","yours")})</span>' if is_seller else ""
+        lots_html += f"""
+<div class="card">
+  <div class="lot-header">
+    <span class="lot-title">🏢 {lot['seller']}{seller_tag}</span>
+    {_fmt_timer(lot['ends_at'])}
+  </div>
+  <div class="snap">{snap_txt}</div>
+  <div class="bid-row">
+    <span class="bid-current">{Lp('Ponuka','Bid')}: {lot['current_bid']:,} CR</span>
+    {bidder_tag}
+  </div>
+  {"" if is_seller else f'''
+  <form method="POST" action="/auctions/company/bid" class="bid-row">
+    <input type="hidden" name="lot_id" value="{lot['id']}">
+    <input class="inp" type="number" name="amount" value="{min_next}" min="{min_next}" step="1">
+    <button class="btn" {"" if can_bid else "disabled"}>
+      &#128200; {Lp("Ponúknuť","Place bid")}
+    </button>
+  </form>'''}
+</div>"""
+
+    # Formulár na pridanie vlastnej firmy
+    my_plants = profile.get("plants", [])
+    list_html = ""
+    if my_plants and not my_active_lot:
+        snap = _company_snapshot(profile)
+        snap_txt = _snapshot_summary(snap, lang)
+        list_html = f"""
+<div class="card" style="border-color:#ff44aa44">
+  <h2 style="color:#ff44aa">🏢 {Lp("PREDAJ SVOJU FIRMU","SELL YOUR COMPANY")}</h2>
+  <div class="lbl" style="margin-bottom:8px">
+    {Lp("Čo bude zahrnuté","What will be listed")}:
+    <span class="snap">{snap_txt}</span>
+  </div>
+  <form method="POST" action="/auctions/company/list">
+    <div class="form-row">
+      <span class="lbl">{Lp("Štartovacia cena","Starting bid")} (CR):</span>
+      <input class="inp" type="number" name="start_bid" value="10000" min="1000" step="1000">
+      <span class="lbl">{Lp("Trvanie","Duration")}:</span>
+      <select class="sel" name="duration_h">
+        <option value="4">4h</option>
+        <option value="8" selected>8h</option>
+        <option value="12">12h</option>
+        <option value="24">24h</option>
+      </select>
+      <button class="btn sell">📢 {Lp("Dať do aukcie","List for auction")}</button>
+    </div>
+  </form>
+</div>"""
+    elif my_active_lot:
+        list_html = f"""
+<div class="card" style="border-color:#ff44aa44">
+  <div style="color:#ff44aa">{Lp("Tvoja firma je už v aukcii.","Your company is already listed.")}</div>
+</div>"""
+    elif not my_plants:
+        list_html = f"""
+<div class="card" style="border-color:#1a3a1a">
+  <div class="no-lots">{Lp("Nemáš žiadne elektrárne — nie je čo predať.","No plants to sell.")}</div>
+</div>"""
+
+    # Čakajúce výhry
+    pending_html = ""
+    if my_cpending:
+        items_html = ""
+        for p in my_cpending:
+            snap_txt = _snapshot_summary(p["snapshot"], lang)
+            items_html += (
+                f'<div class="pending-item">'
+                f'🏢 {Lp("Firma od","Company from")} <strong>{p["seller"]}</strong>: '
+                f'{snap_txt}<br>'
+                f'{Lp("Zaplatíš","You pay")}: <strong>{p["paid"]:,} CR</strong>'
+                f'</div>'
+            )
+        pending_html = f"""
+<div class="card" style="border-color:#ff9900aa">
+  <h2 style="color:#ff9900">&#127881; {Lp('FIRMA NA PREVZATIE','COMPANY TO COLLECT')}</h2>
+  {items_html}
+  <form method="POST" action="/auctions/company/collect" style="margin-top:10px">
+    <button class="btn gold">&#128179; {Lp("PREVZIAŤ FIRMU","COLLECT COMPANY")}</button>
+  </form>
+</div>"""
+
+    js = """
+<script>
+(function(){
+  function tick(){
+    document.querySelectorAll('[data-ends]').forEach(function(el){
+      var secs=Math.max(0,parseInt(el.dataset.ends)-Math.floor(Date.now()/1000));
+      var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60;
+      el.textContent=h?(h+'h '+('0'+m).slice(-2)+'m'):(('0'+m).slice(-2)+':'+('0'+s).slice(-2));
+      el.className=secs<300?'timer urgent':'timer';
+      if(secs===0)setTimeout(function(){location.reload();},1500);
+    });
+  }
+  tick();setInterval(tick,1000);
+})();
+</script>"""
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp('Firemné aukcie','Company Auctions')} — KB</title>
+{css}</head><body>
+<a href="/auctions" class="btn-back">&#8592; {Lp('Späť na aukcie','Back to auctions')}</a>
+<h1>🏢 {Lp('FIREMNÉ AUKCIE','COMPANY AUCTIONS')}</h1>
+<div class="sub">
+  PILOT: {session['username'].upper()} &nbsp;|&nbsp;
+  {Lp('Kariéra CR','Career CR')}:
+  <span style="color:#cfffcf">{cr:,} CR</span>
+  &nbsp;|&nbsp; BETA v0.5b &nbsp;|&nbsp; &#946;
+</div>
+{flash_html}
+{pending_html}
+{list_html}
+<h2>&#128203; {Lp('AKTÍVNE FIREMNÉ AUKCIE','ACTIVE COMPANY AUCTIONS')} ({len(clots)})</h2>
+{lots_html}
+{js}
+</body></html>"""
+    return html
+
+
+@app.route("/auctions/company/list", methods=["POST"])
+def company_list():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    uname = _uname()
+    profile = _energy_tick(uname)
+    plants = profile.get("plants", [])
+    if not plants:
+        return redirect("/auctions/company?msg=!Nemáš žiadne elektrárne.")
+
+    auc = _company_tick()
+    clots = auc.get("company_lots", [])
+    if any(l["seller"] == uname for l in clots):
+        return redirect("/auctions/company?msg=!Už máš aktívnu firemnú aukciu.")
+
+    try:
+        start_bid = max(1000, int(request.form.get("start_bid", 10000)))
+        duration_h = max(4, min(24, int(request.form.get("duration_h", 8))))
+    except ValueError:
+        return redirect("/auctions/company")
+
+    snap = _company_snapshot(profile)
+    now = time.time()
+    lot_id = f"company_{uname}_{int(now*1000) % 10**9}"
+    clots.append({
+        "id":          lot_id,
+        "seller":      uname,
+        "snapshot":    snap,
+        "start_bid":   start_bid,
+        "current_bid": start_bid,
+        "bidder":      None,
+        "ends_at":     now + duration_h * 3600,
+    })
+    auc["company_lots"] = clots
+    save_jf(KB_AUCTIONS, auc)
+
+    lang = session.get("lang", "sk")
+    msg = f"Firma daná do aukcie na {duration_h}h." if lang != "en" else f"Company listed for {duration_h}h."
+    return redirect(f"/auctions/company?msg={msg}")
+
+
+@app.route("/auctions/company/bid", methods=["POST"])
+def company_bid():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    lot_id = request.form.get("lot_id", "").strip()
+    try:
+        amount = int(request.form.get("amount", 0))
+    except ValueError:
+        return redirect("/auctions/company")
+
+    uname = _uname()
+    auc = _company_tick()
+    clots = auc.get("company_lots", [])
+    now = time.time()
+
+    lot = next((l for l in clots if l["id"] == lot_id), None)
+    if not lot or now >= lot["ends_at"]:
+        return redirect("/auctions/company?msg=!Lot neexistuje alebo expiroval.")
+    if lot["seller"] == uname:
+        return redirect("/auctions/company?msg=!Nemôžeš bidonvať na vlastnú firmu.")
+    if amount <= lot["current_bid"]:
+        return redirect(f"/auctions/company?msg=!Ponuka musí byť vyššia ako {lot['current_bid']:,} CR.")
+    if lot["bidder"] == uname:
+        return redirect("/auctions/company?msg=!Už máš najvyššiu ponuku.")
+
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname, {}).get("career_cr", 0)
+    if cr < amount:
+        return redirect(f"/auctions/company?msg=!Nedostatok CR ({cr:,} máš, {amount:,} ponúkaš).")
+
+    lot["current_bid"] = amount
+    lot["bidder"] = uname
+    save_jf(KB_AUCTIONS, auc)
+
+    lang = session.get("lang", "sk")
+    msg = f"Ponuka {amount:,} CR prijatá." if lang != "en" else f"Bid {amount:,} CR accepted."
+    return redirect(f"/auctions/company?msg={msg}")
+
+
+@app.route("/auctions/company/collect", methods=["POST"])
+def company_collect():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    uname = _uname()
+    auc = _company_tick()
+    cpending = auc.get("company_pending", {})
+    my_lots = cpending.get(uname, [])
+    if not my_lots:
+        return redirect("/auctions/company?msg=Nič na prevzatie.")
+
+    career = load_jf(KB_CAREER, {})
+    energy_data = load_jf(KB_ENERGY, {})
+    winner_profile = _energy_tick(uname)
+    lang = session.get("lang", "sk")
+    collected = []
+    skipped = []
+
+    for p in my_lots:
+        cost = p["paid"]
+        buyer_entry = career.get(uname, {})
+        buyer_cr = buyer_entry.get("career_cr", 0)
+        if buyer_cr < cost:
+            skipped.append(p["seller"])
+            continue
+
+        # Odpočítaj CR kupujúcemu
+        buyer_entry["career_cr"] = buyer_cr - cost
+        career[uname] = buyer_entry
+
+        # Preveď CR predajcovi
+        seller = p["seller"]
+        seller_entry = career.get(seller, {"career_cr": 0})
+        seller_entry["career_cr"] = seller_entry.get("career_cr", 0) + cost
+        career[seller] = seller_entry
+
+        # Preveď assets kupujúcemu
+        snap = p["snapshot"]
+        winner_profile.setdefault("plants", []).extend(snap.get("plants", []))
+        winner_profile["energy"] = min(
+            MAX_ENERGY,
+            winner_profile.get("energy", 0) + snap.get("energy", 0)
+        )
+        for k, v in snap.get("fuel", {}).items():
+            winner_profile.setdefault("fuel", {})[k] = round(
+                winner_profile["fuel"].get(k, 0) + v, 2)
+        for k, v in snap.get("commodities", {}).items():
+            winner_profile.setdefault("commodities", {})[k] = round(
+                winner_profile["commodities"].get(k, 0) + v, 2)
+
+        # Odober assets predajcovi (cap na 0)
+        seller_profile = energy_data.get(seller, {})
+        sp = seller_profile.get("plants", [])
+        for plant in snap.get("plants", []):
+            if plant in sp:
+                sp.remove(plant)
+        seller_profile["plants"] = sp
+        seller_profile["energy"] = max(0, round(
+            seller_profile.get("energy", 0) - snap.get("energy", 0), 1))
+        for k, v in snap.get("fuel", {}).items():
+            seller_profile.setdefault("fuel", {})[k] = max(0, round(
+                seller_profile["fuel"].get(k, 0) - v, 2))
+        for k, v in snap.get("commodities", {}).items():
+            seller_profile.setdefault("commodities", {})[k] = max(0, round(
+                seller_profile["commodities"].get(k, 0) - v, 2))
+        energy_data[seller] = seller_profile
+
+        collected.append(p["seller"])
+
+    save_jf(KB_CAREER, career)
+    energy_data[uname] = winner_profile
+    save_jf(KB_ENERGY, energy_data)
+
+    cpending[uname] = []
+    auc["company_pending"] = cpending
+    save_jf(KB_AUCTIONS, auc)
+
+    parts = []
+    if collected:
+        parts.append(f"Prevzaté firmy od: {', '.join(collected)}")
+    if skipped:
+        parts.append(f"!Nedostatok CR pre firmy od: {', '.join(skipped)}")
+    msg = " | ".join(parts) if parts else "Hotovo."
+    return redirect(f"/auctions/company?msg={msg}")
 
 
 @app.route("/api/message_admin", methods=["POST"])
