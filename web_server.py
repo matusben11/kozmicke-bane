@@ -35,6 +35,21 @@ KB_ENERGY   = DATA_DIR / "kb_energy.json"
 KB_MARKET   = DATA_DIR / "kb_market.json"
 KB_AUCTIONS = DATA_DIR / "kb_auctions.json"
 
+# ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
+def _atomic_write(path, text):
+    """Write text to a temp file then rename. Returns True on success."""
+    try:
+        path = pathlib.Path(path)
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        tmp.replace(path)
+        return True
+    except Exception as e:
+        print(f"[FS] zápis zlyhal pre '{path.name}': {e}")
+        return False
+
+
 # ── Upstash Redis — voliteľné perzistentné KV úložisko ─────────────────────
 # Nastav UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN v Render env vars.
 # Ak nie sú nastavené, používajú sa lokálne súbory (pre vývoj).
@@ -478,19 +493,6 @@ def _seed_default_user():
 
 def _uname():
     return session["username"].upper()
-
-def _atomic_write(path, text):
-    """Write text to a temp file then rename. Returns True on success."""
-    try:
-        path = pathlib.Path(path)
-        tmp = path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(text)
-        tmp.replace(path)
-        return True
-    except Exception as e:
-        print(f"[FS] zápis zlyhal pre '{path.name}': {e}")
-        return False
 
 def load_users():
     try:
