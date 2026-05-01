@@ -55,32 +55,72 @@ _KV_KEYS = {
 
 def _kv_get(key):
     """Načítaj JSON z Upstash REST API. Vráti None ak kľúč neexistuje alebo chyba."""
+    if not _KV_URL:
+        return None
     try:
         req = urllib.request.Request(
             f"{_KV_URL}/get/{key}",
             headers={"Authorization": f"Bearer {_KV_TOKEN}"}
         )
-        with urllib.request.urlopen(req, timeout=5) as r:
-            result = json.loads(r.read()).get("result")
-        return json.loads(result) if result else None
+        with urllib.request.urlopen(req, timeout=8) as r:
+            payload = json.loads(r.read())
+        result = payload.get("result")
+        if result is None:
+            return None
+        return json.loads(result)
     except Exception as e:
-        print(f"[KV] get '{key}' error: {e}")
+        print(f"[KV] get '{key}' CHYBA: {e}")
         return None
 
 
 def _kv_set(key, value):
-    """Ulož JSON do Upstash REST API."""
+    """Ulož JSON do Upstash REST API. Vráti True ak úspech."""
+    if not _KV_URL:
+        return False
     try:
-        body = json.dumps(["SET", key, json.dumps(value, ensure_ascii=False)]).encode()
+        # Upstash REST: POST /set/key s hodnotou v tele ako plain string
+        val_str = json.dumps(value, ensure_ascii=False)
+        body = val_str.encode("utf-8")
         req = urllib.request.Request(
-            _KV_URL,
+            f"{_KV_URL}/set/{key}",
             data=body,
-            headers={"Authorization": f"Bearer {_KV_TOKEN}",
-                     "Content-Type": "application/json"}
+            headers={
+                "Authorization": f"Bearer {_KV_TOKEN}",
+                "Content-Type": "application/octet-stream",
+            }
         )
-        urllib.request.urlopen(req, timeout=5)
+        with urllib.request.urlopen(req, timeout=8) as r:
+            resp = json.loads(r.read())
+        if resp.get("result") == "OK":
+            return True
+        print(f"[KV] set '{key}' neočakávaná odpoveď: {resp}")
+        return False
     except Exception as e:
-        print(f"[KV] set '{key}' error: {e}")
+        print(f"[KV] set '{key}' CHYBA: {e}")
+        return False
+
+
+def _kv_load_all():
+    """
+    Startup warm-up: načítaj všetky kľúče z Upstash do lokálnych súborov.
+    Lokálne súbory slúžia ako rýchla cache — čítanie beží vždy z disku.
+    """
+    if not _KV_URL:
+        return
+    print("[KV] Načítavam dáta z Upstash Redis...")
+    for path, key in _KV_KEYS.items():
+        data = _kv_get(key)
+        if data is not None:
+            try:
+                _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
+                print(f"[KV] ✓ {key}")
+            except Exception as e:
+                print(f"[KV] ✗ {key} zápis zlyhal: {e}")
+        else:
+            print(f"[KV] - {key} (prázdne v Upstash)")
+
+# Startup: načítaj dáta z Upstash do lokálnych súborov (pred migráciami a seedmi)
+_kv_load_all()
 
 # Migrácia zo starého disk path (pred zmenou mountPath)
 _OLD_SRC = pathlib.Path("/opt/render/project/src")
@@ -353,9 +393,6 @@ def _atomic_write(path, text):
     tmp.replace(path)
 
 def load_users():
-    if _KV_URL:
-        data = _kv_get("game_users")
-        return data if data is not None else {}
     try:
         if DATA_FILE.exists():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -365,10 +402,8 @@ def load_users():
     return {}
 
 def save_users(u):
-    if _KV_URL:
-        _kv_set("game_users", u)
-        return
     _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
+    _kv_set("game_users", u)  # dual-write do Upstash (ticho zlyhá ak nie je nakonfigurovaný)
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -406,10 +441,7 @@ def validate_pw(pw):
     return True, "OK"
 
 def load_jf(path, default=None):
-    if _KV_URL:
-        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
-        data = _kv_get(key)
-        return data if data is not None else (default if default is not None else {})
+    """Načítaj zo lokálneho súboru (po startup warm-up je vždy aktuálny)."""
     try:
         p = pathlib.Path(path)
         if p.exists():
@@ -420,11 +452,10 @@ def load_jf(path, default=None):
     return default if default is not None else {}
 
 def save_jf(path, data):
-    if _KV_URL:
-        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
-        _kv_set(key, data)
-        return
+    """Zapiš do lokálneho súboru A zároveň do Upstash (dual-write)."""
     _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
+    key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
+    _kv_set(key, data)  # ticho zlyhá ak Upstash nie je nakonfigurovaný
 
 
 # ── Energetická minihra — helpers ───────────────────────────────────────────
