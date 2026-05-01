@@ -257,7 +257,43 @@ MINE_TYPES = {
         "max_count":  3,
     },
 }
-ENRICH_RATIO = 10   # 10 t surového uránu → 1 palivový článok
+ENRICH_RATIO = 10   # legacy: /energy/enrich button (LEU-3 quick convert)
+
+# ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
+# feed_per_rod = t surového uránu na 1 palivový článok
+# energy_mult  = koľkonásobok energie oproti štandardu dáva každý článok
+# cr_cost      = CR za celú dávku (separačná práca)
+# u238_per_rod = t ochudobneného U-238 ako vedľajší produkt
+ENRICHMENT_GRADES = [
+    {
+        "id": "leu3",  "fuel_key": "uranium",
+        "name_sk": "LEU-3  (štandard)",    "name_en": "LEU-3  (standard)",
+        "u235_pct": 3,  "feed_per_rod": 10, "energy_mult": 1.0,
+        "cr_cost": 0,   "stages": 4,        "u238_per_rod": 9.0,
+        "desc_sk": "Bežné reaktorové palivo. Jednoduchá kaskáda 4 stupní.",
+        "desc_en": "Standard reactor fuel. Simple 4-stage cascade.",
+    },
+    {
+        "id": "leu5",  "fuel_key": "uranium_leu5",
+        "name_sk": "LEU-5  (vylepšené)",   "name_en": "LEU-5  (enhanced)",
+        "u235_pct": 5,  "feed_per_rod": 17, "energy_mult": 1.5,
+        "cr_cost": 600, "stages": 8,        "u238_per_rod": 15.5,
+        "desc_sk": "Každý článok dá 1.5× viac energie. 8-stupňová kaskáda.",
+        "desc_en": "Each rod yields 1.5× more energy. 8-stage cascade.",
+    },
+    {
+        "id": "heu20", "fuel_key": "uranium_heu20",
+        "name_sk": "HEU-20 (výskumný)",   "name_en": "HEU-20 (research)",
+        "u235_pct": 20, "feed_per_rod": 70, "energy_mult": 3.0,
+        "cr_cost": 7000,"stages": 25,       "u238_per_rod": 68.0,
+        "desc_sk": "3× energia. Vysoký proliferačný dopad. 25 stupní.",
+        "desc_en": "3× energy. High proliferation impact. 25 stages.",
+    },
+]
+_GRADE_BY_ID  = {g["id"]: g for g in ENRICHMENT_GRADES}
+_GRADE_BY_KEY = {g["fuel_key"]: g for g in ENRICHMENT_GRADES}
+# Poradie tried pre jadrové elektrárne: najlepší stupeň sa spotrebuje prvý
+_NUCLEAR_GRADE_ORDER = ["heu20", "leu5", "leu3"]
 
 PLANT_TYPES["fusion"] = {
     "id": "fusion", "icon": "🌟",
@@ -581,8 +617,11 @@ def _ensure_profile_fields(profile):
     profile.setdefault("energy", 0.0)
     profile.setdefault("fuel", {})
     profile["fuel"].setdefault("coal", 0.0)
-    profile["fuel"].setdefault("uranium", 0.0)
+    profile["fuel"].setdefault("uranium", 0.0)       # LEU-3
+    profile["fuel"].setdefault("uranium_leu5", 0.0)  # LEU-5
+    profile["fuel"].setdefault("uranium_heu20", 0.0) # HEU-20
     profile["fuel"].setdefault("helium", 0.0)
+    profile["raw_materials"].setdefault("u238", 0.0)  # ochudobnený urán
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
@@ -679,6 +718,17 @@ def _energy_tick(uname_upper):
             continue
         if pt["fuel_type"] is None:
             energy += pt["energy_per_hr"] * elapsed_hrs * solar_mult
+        elif pt["fuel_type"] == "uranium":
+            # Jadrové elektrárne — spotrebuj najlepší dostupný stupeň
+            for gid in _NUCLEAR_GRADE_ORDER:
+                g = _GRADE_BY_ID[gid]
+                avail = fuel.get(g["fuel_key"], 0.0)
+                if avail <= 0:
+                    continue
+                hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
+                energy += pt["energy_per_hr"] * hrs * g["energy_mult"]
+                fuel[g["fuel_key"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
+                break
         else:
             avail = fuel.get(pt["fuel_type"], 0.0)
             if avail <= 0:
@@ -3885,6 +3935,13 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 
 {_mines_html}
 
+<a href="/energy/enrichment"
+  style="display:block;width:100%;max-width:680px;margin-bottom:8px;
+    background:#0d0900;border:1px solid #ffaa00;color:#ffaa00;
+    font-family:'VT323',monospace;font-size:1.1em;padding:10px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  ⚗ {Lp("OBOHACOVACIA STANICA — U-235 vs U-238","ENRICHMENT STATION — U-235 vs U-238")}
+</a>
 <a href="/market"
   style="display:block;width:100%;max-width:680px;margin-bottom:8px;
     background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
@@ -4033,6 +4090,235 @@ def energy_enrich():
     data[uname] = profile
     save_jf(KB_ENERGY, data)
     return redirect("/energy")
+
+
+# ── Fáza 2 jadrovej vetvy — obohacovacia minihra ────────────────────────────
+
+@app.route("/energy/enrichment")
+def enrichment_page():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    career  = load_jf(KB_CAREER, {})
+    cr      = career.get(uname, {}).get("career_cr", 0)
+    fuel    = profile.get("fuel", {})
+    raw     = profile.get("raw_materials", {})
+    lang    = session.get("lang", "sk")
+    msg     = request.args.get("msg", "")
+
+    def Lp(sk, en): return en if lang == "en" else sk
+
+    css = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#000;color:#39ff6a;font-family:'VT323',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px 16px 40px;}
+h1{color:#ffaa00;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;
+  text-align:center;text-shadow:0 0 18px #ffaa0088;}
+h2{color:#ffaa00;font-size:1.05em;letter-spacing:.08em;margin:12px 0 6px;}
+.sub{color:#7a6000;font-size:.9em;margin-bottom:18px;letter-spacing:.08em;}
+.card{background:#0d0900;border:1px solid #ffaa0044;width:100%;max-width:720px;
+  padding:16px 20px 18px;margin-bottom:12px;}
+.card-title{color:#ffaa00;font-size:1.05em;border-bottom:1px solid #2a1a00;
+  padding-bottom:5px;margin-bottom:12px;letter-spacing:.08em;}
+.stock-row{display:flex;justify-content:space-between;padding:5px 0;
+  border-bottom:1px solid #0d0900;font-size:.95em;}
+.stock-row:last-child{border-bottom:none;}
+.lbl{color:#7a6000;}
+.val{color:#cfffcf;}
+.grade-card{border:1px solid #ffaa0033;padding:12px 16px;margin-bottom:10px;
+  background:#080500;}
+.grade-title{color:#ffaa00;font-size:1.05em;margin-bottom:4px;}
+.grade-desc{color:#7a6000;font-size:.85em;margin-bottom:8px;}
+.cascade{font-family:'VT323',monospace;font-size:.78em;color:#4a3a00;
+  white-space:pre;overflow-x:auto;margin:6px 0 10px;line-height:1.3;}
+.cascade .active-stage{color:#ffaa00;}
+.inp{background:#000;border:1px solid #7a6000;color:#cfffcf;
+  font-family:'VT323',monospace;font-size:1em;padding:3px 8px;width:80px;}
+.btn{background:#0d0900;border:1px solid #ffaa00;color:#ffaa00;
+  font-family:'VT323',monospace;font-size:.95em;padding:4px 12px;cursor:pointer;}
+.btn:hover{background:#1a0d00;}
+.btn:disabled{border-color:#2a1a00;color:#2a1a00;cursor:default;}
+.form-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.tag-mult{color:#39ff6a;font-size:.85em;}
+.tag-cost{color:#ff9900;font-size:.85em;}
+.tag-u238{color:#7a6000;font-size:.85em;}
+.flash{color:#39ff6a;background:#001a00;border:1px solid #39ff6a33;
+  padding:6px 14px;font-size:.95em;margin-bottom:10px;max-width:720px;width:100%;}
+.flash.err{color:#ff3a3a;border-color:#ff3a3a33;background:#1a0000;}
+.btn-back{display:inline-block;background:#000;border:1px solid #7a6000;
+  color:#7a6000;font-family:'VT323',monospace;font-size:1em;
+  padding:6px 16px;text-decoration:none;letter-spacing:.06em;margin-bottom:14px;}
+.btn-back:hover{background:#0d0900;color:#ffaa00;}
+</style>"""
+
+    uranium_raw = raw.get("uranium_raw", 0.0)
+    u238_stock  = raw.get("u238", 0.0)
+
+    flash_cls  = "flash err" if msg.startswith("!") else "flash"
+    flash_html = f'<div class="{flash_cls}">{msg.lstrip("!")}</div>' if msg else ""
+
+    # Zásoby
+    stocks_html = (
+        f'<div class="stock-row"><span class="lbl">☢ {Lp("Surový urán","Raw uranium")}</span>'
+        f'<span class="val">{uranium_raw:.1f} t</span></div>'
+    )
+    for g in ENRICHMENT_GRADES:
+        stk = fuel.get(g["fuel_key"], 0.0)
+        stocks_html += (
+            f'<div class="stock-row">'
+            f'<span class="lbl">{g["name_sk"] if lang!="en" else g["name_en"]}</span>'
+            f'<span class="val">{stk:.1f} {Lp("ks","rods")}</span>'
+            f'</div>'
+        )
+    stocks_html += (
+        f'<div class="stock-row"><span class="lbl">⚫ {Lp("Ochudobnený U-238","Depleted U-238")}</span>'
+        f'<span class="val">{u238_stock:.1f} t</span></div>'
+    )
+
+    def _cascade_art(stages, highlight=True):
+        """Vygeneruj ASCII kaskádu centrifúg."""
+        cols = min(stages, 12)
+        rows = (stages + cols - 1) // cols
+        lines = []
+        idx = 0
+        for r in range(rows):
+            row_stages = min(cols, stages - r * cols)
+            line = ""
+            for c in range(row_stages):
+                cls = "active-stage" if highlight else ""
+                line += f'[C{idx+1:02d}]'
+                idx += 1
+            lines.append("  " + " → ".join(f"[C{r*cols+c+1:02d}]" for c in range(row_stages)))
+        return "\n".join(lines)
+
+    # Grade karty
+    grades_html = ""
+    for g in ENRICHMENT_GRADES:
+        gid      = g["id"]
+        desc     = Lp(g["desc_sk"], g["desc_en"])
+        name     = Lp(g["name_sk"], g["name_en"])
+        min_rods = 1
+        max_rods = max(1, int(uranium_raw) // g["feed_per_rod"])
+        can_enrich = uranium_raw >= g["feed_per_rod"]
+        cost_1   = g["cr_cost"]
+        disabled = "disabled" if (not can_enrich or (cr < cost_1 and cost_1 > 0)) else ""
+        warn = ""
+        feed_needed = g["feed_per_rod"]
+        if not can_enrich:
+            warn_txt = Lp(f"Potrebuješ aspoň {feed_needed} t surového uránu.",
+                          f"Need at least {feed_needed} t raw uranium.")
+            warn = f'<div style="color:#7a4400;font-size:.82em">{warn_txt}</div>'
+        elif cost_1 > 0 and cr < cost_1:
+            warn = f'<div style="color:#7a4400;font-size:.82em">{Lp("Nedostatok CR.","Not enough CR.")}</div>'
+
+        cascade = _cascade_art(g["stages"])
+        grades_html += f"""
+<div class="grade-card">
+  <div class="grade-title">⚗ {name} &nbsp;
+    <span class="tag-mult">×{g["energy_mult"]:.1f} {Lp("energia","energy")}</span>
+    {f'<span class="tag-cost"> | {cost_1:,} CR/{Lp("dávku","batch")}</span>' if cost_1 else ''}
+    <span class="tag-u238"> | U-238: +{g["u238_per_rod"]} t/{Lp("čl","rod")}</span>
+  </div>
+  <div class="grade-desc">{desc} &nbsp; {Lp("Stupeň","Grade")}: {g["u235_pct"]}% U-235</div>
+  <div class="cascade">{cascade}</div>
+  {warn}
+  <form method="POST" action="/energy/enrichment" class="form-row">
+    <input type="hidden" name="grade" value="{gid}">
+    <span class="lbl">{Lp("Počet článkov","Rods")}:</span>
+    <input class="inp" type="number" name="rods" value="1" min="1" max="{max_rods}" step="1">
+    <span class="lbl" style="font-size:.82em">
+      ({Lp("potrebuješ","need")} {g["feed_per_rod"]} t/čl,
+       {Lp("máš","have")} {uranium_raw:.1f} t → max {max_rods})
+    </span>
+    <button class="btn" {disabled}>⚗ {Lp("Obohatiť","Enrich")}</button>
+  </form>
+</div>"""
+
+    html = f"""<!DOCTYPE html><html lang='{lang}'><head>
+<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>{Lp("Obohacovacia stanica","Enrichment Station")} — KB</title>
+{css}</head><body>
+<a href="/energy" class="btn-back">&#8592; {Lp("Späť","Back")}</a>
+<h1>⚗ {Lp("OBOHACOVACIA STANICA","ENRICHMENT STATION")}</h1>
+<div class="sub">
+  PILOT: {session['username'].upper()} &nbsp;|&nbsp;
+  {Lp("Kariéra CR","Career CR")}:
+  <span style="color:#cfffcf">{cr:,} CR</span>
+  &nbsp;|&nbsp; {Lp("Jadrová vetva","Nuclear branch")} Fáza 2
+</div>
+{flash_html}
+<div class="card">
+  <div class="card-title">&#128204; {Lp("ZÁSOBY MATERIÁLU","MATERIAL STOCKS")}</div>
+  {stocks_html}
+</div>
+<h2>⚗ {Lp("ZVOĽ STUPEŇ OBOHACOVANIA","SELECT ENRICHMENT GRADE")}</h2>
+{grades_html}
+</body></html>"""
+    return html
+
+
+@app.route("/energy/enrichment", methods=["POST"])
+def enrichment_process():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    grade_id = request.form.get("grade", "").strip()
+    g = _GRADE_BY_ID.get(grade_id)
+    if not g:
+        return redirect("/energy/enrichment")
+
+    try:
+        rods = max(1, int(request.form.get("rods", 1)))
+    except ValueError:
+        return redirect("/energy/enrichment")
+
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    career  = load_jf(KB_CAREER, {})
+    entry   = career.get(uname, {})
+    cr      = entry.get("career_cr", 0)
+
+    raw         = profile.get("raw_materials", {})
+    uranium_raw = raw.get("uranium_raw", 0.0)
+    needed_raw  = rods * g["feed_per_rod"]
+    total_cr    = rods * g["cr_cost"]
+
+    if uranium_raw < needed_raw:
+        rods = int(uranium_raw // g["feed_per_rod"])
+        needed_raw = rods * g["feed_per_rod"]
+        total_cr   = rods * g["cr_cost"]
+    if rods <= 0:
+        return redirect(f"/energy/enrichment?msg=!{Lp('Nedostatok surového uránu.','Not enough raw uranium.')}")
+    if cr < total_cr:
+        return redirect(f"/energy/enrichment?msg=!{Lp('Nedostatok CR.','Not enough CR.')}")
+
+    # Odpočítaj suroviny a CR
+    raw["uranium_raw"] = round(uranium_raw - needed_raw, 2)
+    raw["u238"] = round(raw.get("u238", 0.0) + rods * g["u238_per_rod"], 2)
+    profile["raw_materials"] = raw
+    profile.setdefault("fuel", {})[g["fuel_key"]] = round(
+        profile["fuel"].get(g["fuel_key"], 0.0) + rods, 2)
+
+    if total_cr > 0:
+        entry["career_cr"] = cr - total_cr
+        career[uname] = entry
+        save_jf(KB_CAREER, career)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+
+    lang = session.get("lang", "sk")
+    name = g["name_sk"] if lang != "en" else g["name_en"]
+    u238_gained = round(rods * g["u238_per_rod"], 1)
+    msg = (f'+{rods} {name} | '
+           f'+{u238_gained} t U-238 | '
+           f'-{total_cr:,} CR' if total_cr else f'+{rods} {name} | +{u238_gained} t U-238')
+    return redirect(f"/energy/enrichment?msg={msg}")
 
 
 # ── Fáza 3 — NPC trh ────────────────────────────────────────────────────────
