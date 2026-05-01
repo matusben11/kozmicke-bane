@@ -227,6 +227,23 @@ PLANT_TYPES = {
     },
 }
 
+# ── Jadrová vetva — Fáza 1 ──────────────────────────────────────────────────
+MINE_TYPES = {
+    "uranium_mine": {
+        "id":         "uranium_mine",
+        "icon":       "⛏☢",
+        "name_sk":    "Uránová baňa",
+        "name_en":    "Uranium mine",
+        "desc_sk":    "Ťaží 2 t surového uránu/hod. pasívne.",
+        "desc_en":    "Passively mines 2 t raw uranium/hr.",
+        "build_cost": 15000,
+        "rate_per_hr": 2.0,
+        "produces":   "uranium_raw",
+        "max_count":  3,
+    },
+}
+ENRICH_RATIO = 10   # 10 t surového uránu → 1 palivový článok
+
 PLANT_TYPES["fusion"] = {
     "id": "fusion", "icon": "🌟",
     "name_sk": "Fúzny reaktor", "name_en": "Fusion reactor",
@@ -557,6 +574,9 @@ def _ensure_profile_fields(profile):
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
     profile["commodities"].setdefault("platinum", 0.0)
+    profile.setdefault("mines", [])
+    profile.setdefault("raw_materials", {})
+    profile["raw_materials"].setdefault("uranium_raw", 0.0)
     profile.setdefault("active_events", [])
     profile.setdefault("last_event", None)
     profile.setdefault("last_event_at", 0.0)
@@ -657,6 +677,16 @@ def _energy_tick(uname_upper):
 
     profile["energy"] = round(min(energy, MAX_ENERGY), 1)
     profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
+
+    # ── Bane — pasívna ťažba surovín ────────────────────────────
+    raw = profile.get("raw_materials", {})
+    for mine_id in profile.get("mines", []):
+        mt = MINE_TYPES.get(mine_id)
+        if not mt:
+            continue
+        key = mt["produces"]
+        raw[key] = round(raw.get(key, 0.0) + mt["rate_per_hr"] * elapsed_hrs, 2)
+    profile["raw_materials"] = raw
     profile["last_tick"] = now
 
     # ── Event trigger ────────────────────────────────────────────
@@ -799,14 +829,19 @@ def _apply_price_impact(item_id, qty, direction):
 
 
 def _estimate_company_value(profile):
-    """Odhadne hodnotu firmy (súčet build_cost elektrární) pre bankrotovú ponuku."""
+    """Odhadne hodnotu firmy pre bankrotovú ponuku."""
     total = sum(PLANT_TYPES.get(p, {}).get("build_cost", 0) for p in profile.get("plants", []))
+    total += sum(MINE_TYPES.get(m, {}).get("build_cost", 0) for m in profile.get("mines", []))
     fuel = profile.get("fuel", {})
     comm = profile.get("commodities", {})
+    raw  = profile.get("raw_materials", {})
     total += int(fuel.get("coal", 0)) * 45
     total += int(fuel.get("uranium", 0)) * 1300
+    total += int(fuel.get("helium", 0)) * 10000
     total += int(comm.get("oil", 0)) * 58
     total += int(comm.get("gold", 0)) * 500
+    total += int(comm.get("platinum", 0)) * 1200
+    total += int(raw.get("uranium_raw", 0)) * 45
     total += int(profile.get("energy", 0)) * 8
     return max(500, total)
 
@@ -3672,6 +3707,92 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             f'</div>'
         )
 
+    # ── Jadrová vetva — bane + obohacovanie ─────────────────────
+    mine_counts  = Counter(profile.get("mines", []))
+    raw_mats     = profile.get("raw_materials", {})
+    uranium_raw  = raw_mats.get("uranium_raw", 0.0)
+    max_rods     = int(uranium_raw) // ENRICH_RATIO
+
+    # Aktívne bane
+    mine_status_html = ""
+    for mid, mt in MINE_TYPES.items():
+        cnt  = mine_counts.get(mid, 0)
+        name = Lp(mt["name_sk"], mt["name_en"])
+        if cnt > 0:
+            mine_status_html += (
+                f'<div class="plant-row">'
+                f'<span>{mt["icon"]} {name} ×{cnt}</span>'
+                f'<span class="active">▶ +{mt["rate_per_hr"]*cnt:.0f} t/hod</span>'
+                f'</div>'
+            )
+
+    # Surový urán + obohacovanie
+    enrich_html = ""
+    if uranium_raw > 0:
+        can_enrich = max_rods > 0
+        enrich_html = (
+            f'<div class="plant-row">'
+            f'<div>'
+            f'<span style="color:#cfffcf">☢ {Lp("Surový urán","Raw uranium")}: '
+            f'{uranium_raw:.1f} t</span>'
+            f'<span style="color:#2a7a45;font-size:.85em"> '
+            f'({Lp("max","max")} {max_rods} {Lp("palivových článkov","fuel rods")})</span>'
+            f'</div>'
+            f'{"" if not can_enrich else ""}'
+            f'</div>'
+        )
+        if can_enrich:
+            enrich_html += (
+                f'<div class="plant-row">'
+                f'<span style="color:#2a7a45;font-size:.85em">'
+                f'{Lp("Obohacovanie","Enrichment")}: {ENRICH_RATIO} t → 1 {Lp("palivový článok","fuel rod")}</span>'
+                f'<form method="POST" action="/energy/enrich" style="display:inline-flex;gap:4px;align-items:center">'
+                f'<input type="number" name="qty_raw" value="{ENRICH_RATIO}" '
+                f'min="{ENRICH_RATIO}" step="{ENRICH_RATIO}" max="{int(uranium_raw)}" '
+                f'style="width:70px;background:#000;border:1px solid #2a7a45;color:#cfffcf;'
+                f'font-family:inherit;font-size:.9em;padding:2px 4px">'
+                f'<button class="btn-buy">⚗ {Lp("Obohatiť","Enrich")}</button>'
+                f'</form>'
+                f'</div>'
+            )
+
+    # Kúpa bane
+    buy_mines_html = ""
+    for mid, mt in MINE_TYPES.items():
+        name  = Lp(mt["name_sk"], mt["name_en"])
+        desc  = Lp(mt["desc_sk"], mt["desc_en"])
+        cnt   = mine_counts.get(mid, 0)
+        at_max     = cnt >= mt["max_count"]
+        can_afford = cr >= mt["build_cost"]
+        disabled   = "disabled" if (at_max or not can_afford) else ""
+        note  = f'({Lp("max","max")} {mt["max_count"]})' if at_max else ""
+        warn  = f'<span class="warn"> — {Lp("nedostatok CR","not enough CR")}</span>' if (not can_afford and not at_max) else ""
+        buy_mines_html += (
+            f'<div class="plant-row">'
+            f'<div><span style="color:#cfffcf">{mt["icon"]} {name}</span>'
+            f' &nbsp;<span style="color:#2a7a45;font-size:.85em">{desc}</span>'
+            f'{warn}</div>'
+            f'<form method="POST" action="/energy/build_mine" style="display:inline">'
+            f'<input type="hidden" name="type" value="{mid}">'
+            f'<button class="btn-buy" {disabled}>{mt["build_cost"]:,} CR {note}</button>'
+            f'</form>'
+            f'</div>'
+        )
+
+    mine_section = mine_status_html + enrich_html
+    _mines_html = (
+        f'<div class="card" style="border-color:#ffaa0044">'
+        f'<div class="card-title" style="color:#ffaa00">'
+        f'&#9762; {Lp("JADROVÁ VETVA — ŤAŽBA URÁNU","NUCLEAR — URANIUM MINING")}</div>'
+        f'{mine_section if mine_section else f"""<div class="idle" style="padding:6px 0">{Lp("Žiadne bane. Postav svoju prvú baňu nižšie.", "No mines. Build your first one below.")}</div>"""}'
+        f'<div style="border-top:1px solid #0d2a0d;margin-top:10px;padding-top:8px">'
+        f'<div style="color:#2a7a45;font-size:.82em;margin-bottom:6px">'
+        f'&#43; {Lp("POSTAVIŤ BAŇU","BUILD MINE")}</div>'
+        f'{buy_mines_html}'
+        f'</div>'
+        f'</div>'
+    ) if (mine_section or True) else ""
+
     # ── Eventy ──────────────────────────────────────────────────
     now = time.time()
     last_ev = profile.get("last_event")
@@ -3748,6 +3869,8 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
   </div>
   {buy_fuel_html}
 </div>
+
+{_mines_html}
 
 <a href="/market"
   style="display:block;width:100%;max-width:680px;margin-bottom:8px;
@@ -3831,6 +3954,71 @@ def energy_buy_fuel():
     data[uname] = profile
     save_jf(KB_ENERGY, data)
 
+    return redirect("/energy")
+
+
+# ── Jadrová vetva — Fáza 1 ──────────────────────────────────────────────────
+
+@app.route("/energy/build_mine", methods=["POST"])
+def energy_build_mine():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    mine_id = request.form.get("type", "").strip()
+    if mine_id not in MINE_TYPES:
+        return redirect("/energy")
+
+    uname  = _uname()
+    mt     = MINE_TYPES[mine_id]
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr     = entry.get("career_cr", 0)
+    profile = _energy_tick(uname)
+    cnt = profile.get("mines", []).count(mine_id)
+
+    if cr < mt["build_cost"] or cnt >= mt["max_count"]:
+        return redirect("/energy")
+
+    entry["career_cr"] = cr - mt["build_cost"]
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname].setdefault("mines", []).append(mine_id)
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/enrich", methods=["POST"])
+def energy_enrich():
+    """Obohatenie surového uránu na palivové články."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+
+    uname = _uname()
+    try:
+        qty_raw = max(ENRICH_RATIO, int(request.form.get("qty_raw", ENRICH_RATIO)))
+        qty_raw = (qty_raw // ENRICH_RATIO) * ENRICH_RATIO  # zaokrúhli na násobok
+    except ValueError:
+        return redirect("/energy")
+
+    profile = _energy_tick(uname)
+    raw = profile.get("raw_materials", {})
+    have_raw = raw.get("uranium_raw", 0.0)
+
+    if have_raw < qty_raw:
+        qty_raw = int(have_raw // ENRICH_RATIO) * ENRICH_RATIO
+    if qty_raw < ENRICH_RATIO:
+        return redirect("/energy")
+
+    rods = qty_raw // ENRICH_RATIO
+    raw["uranium_raw"] = round(have_raw - qty_raw, 2)
+    profile["raw_materials"] = raw
+    profile.setdefault("fuel", {})
+    profile["fuel"]["uranium"] = round(profile["fuel"].get("uranium", 0) + rods, 2)
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
     return redirect("/energy")
 
 
@@ -4430,10 +4618,12 @@ def _company_tick():
 def _company_snapshot(profile):
     """Vezme snímku energie/zásoby hráča pre predaj firmy."""
     return {
-        "plants":      list(profile.get("plants", [])),
-        "energy":      round(profile.get("energy", 0), 1),
-        "fuel":        dict(profile.get("fuel", {})),
-        "commodities": dict(profile.get("commodities", {})),
+        "plants":        list(profile.get("plants", [])),
+        "mines":         list(profile.get("mines", [])),
+        "energy":        round(profile.get("energy", 0), 1),
+        "fuel":          dict(profile.get("fuel", {})),
+        "commodities":   dict(profile.get("commodities", {})),
+        "raw_materials": dict(profile.get("raw_materials", {})),
     }
 
 
