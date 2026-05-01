@@ -227,6 +227,16 @@ PLANT_TYPES = {
     },
 }
 
+PLANT_TYPES["fusion"] = {
+    "id": "fusion", "icon": "🌟",
+    "name_sk": "Fúzny reaktor", "name_en": "Fusion reactor",
+    "desc_sk": "Spotrebuje 1 hélium-3/hod. Produkuje 800 energie/hod.",
+    "desc_en": "Consumes 1 helium-3/hr. Produces 800 energy/hr.",
+    "build_cost": 300000,
+    "fuel_type": "helium", "fuel_per_hr": 1,
+    "energy_per_hr": 800, "max_count": 1,
+}
+
 FUEL_SHOP = [
     {
         "id": "coal", "icon": "⛏",
@@ -239,6 +249,12 @@ FUEL_SHOP = [
         "name_sk": "Urán (palivové články)", "name_en": "Uranium (fuel rods)",
         "pack_qty": 5, "pack_cost": 6000,
         "unit_sk": "ks", "unit_en": "rods",
+    },
+    {
+        "id": "helium", "icon": "🌟",
+        "name_sk": "Hélium-3 (fúzne palivá)", "name_en": "Helium-3 (fusion fuel)",
+        "pack_qty": 3, "pack_cost": 30000,
+        "unit_sk": "ks", "unit_en": "cells",
     },
 ]
 
@@ -288,6 +304,15 @@ ENERGY_EVENTS = [
      "effect": "energy_drain", "value": 0.35,
      "name_sk": "⚠ Výpadok siete!",               "name_en": "⚠ Grid blackout!",
      "desc_sk": "Zásobník energie klesne o 35%.",   "desc_en": "Energy storage drops by 35%."},
+    # ── Fáza 7 eventy ───────────────────────────────────────────
+    {"id": "helium_find",  "type": "pos", "weight": 6,
+     "effect": "fuel_gift", "fuel": "helium", "value": 2,
+     "name_sk": "🌟 Héliové nálezisko!",            "name_en": "🌟 Helium-3 deposit found!",
+     "desc_sk": "+2 hélium-3 palivá zadarmo.",       "desc_en": "+2 helium-3 cells for free."},
+    {"id": "plasma_boost", "type": "pos", "weight": 8, "duration_h": 4,
+     "effect": "plasma_boost", "value": 2.0,
+     "name_sk": "🌟 Plazmový prielom!",             "name_en": "🌟 Plasma breakthrough!",
+     "desc_sk": "Fúzny reaktor ×2 na 4 hodiny.",    "desc_en": "Fusion reactor ×2 for 4 hours."},
 ]
 _EVENT_WEIGHTS   = [e["weight"] for e in ENERGY_EVENTS]
 _EVENT_TOTAL_W   = sum(_EVENT_WEIGHTS)
@@ -345,6 +370,16 @@ NPC_MARKET = [
         "note_sk": "Uchovávateľ hodnoty. Cena stabilná (zatiaľ).",
         "note_en": "Store of value. Price stable (for now).",
     },
+    {
+        "id": "platinum", "icon": "💎",
+        "name_sk": "Platina", "name_en": "Platinum",
+        "unit_sk": "oz", "unit_en": "oz",
+        "npc_buys": 1200, "npc_sells": 1350,
+        "min_qty": 1, "step": 1,
+        "source": "commodity_platinum",
+        "note_sk": "Endgame komodita. Vzácnejšia ako zlato.",
+        "note_en": "Endgame commodity. Rarer than gold.",
+    },
 ]
 
 # ── Fáza 4 — dynamický trh ──────────────────────────────────────────────────
@@ -357,7 +392,8 @@ MARKET_DYN = {
     "coal":    {"liq": 150, "rev": 0.20,                "min_s": 15,  "max_s": 180},
     "uranium": {"liq": 20,  "rev": 0.15,                "min_s": 600, "max_s": 4000},
     "oil":     {"liq": 100, "rev": 0.20, "min_b": 15,  "max_b": 250, "min_s": 20,  "max_s": 300},
-    "gold":    {"liq": 25,  "rev": 0.10, "min_b": 150, "max_b": 3000,"min_s": 160, "max_s": 3200},
+    "gold":    {"liq": 25,  "rev": 0.10, "min_b": 150, "max_b": 3000, "min_s": 160, "max_s": 3200},
+    "platinum":{"liq": 12,  "rev": 0.08, "min_b": 400, "max_b": 8000, "min_s": 450, "max_s": 9000},
 }
 
 # ── Fáza 5a — Komoditné aukcie ──────────────────────────────────────────────
@@ -375,7 +411,13 @@ AUCTION_LOTS_CFG = [
      "qty": 200, "start_bid": 7500,  "source": "commodity_oil",  "duration_min": 30},
     {"commodity": "gold",    "icon": "🥇", "name_sk": "Zlato",
      "name_en": "Gold",    "unit_sk": "oz",     "unit_en": "oz",
-     "qty": 5,   "start_bid": 1800,  "source": "commodity_gold", "duration_min": 60},
+     "qty": 5,   "start_bid": 1800,  "source": "commodity_gold",    "duration_min": 60},
+    {"commodity": "helium",   "icon": "🌟", "name_sk": "Hélium-3",
+     "name_en": "Helium-3", "unit_sk": "ks",    "unit_en": "cells",
+     "qty": 8,   "start_bid": 60000, "source": "fuel_helium",       "duration_min": 90},
+    {"commodity": "platinum", "icon": "💎", "name_sk": "Platina",
+     "name_en": "Platinum", "unit_sk": "oz",    "unit_en": "oz",
+     "qty": 3,   "start_bid": 3200,  "source": "commodity_platinum", "duration_min": 75},
 ]
 MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
@@ -510,9 +552,11 @@ def _ensure_profile_fields(profile):
     profile.setdefault("fuel", {})
     profile["fuel"].setdefault("coal", 0.0)
     profile["fuel"].setdefault("uranium", 0.0)
+    profile["fuel"].setdefault("helium", 0.0)
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
+    profile["commodities"].setdefault("platinum", 0.0)
     profile.setdefault("active_events", [])
     profile.setdefault("last_event", None)
     profile.setdefault("last_event_at", 0.0)
@@ -531,7 +575,7 @@ def _apply_energy_event(ev_cfg, profile, now):
         profile.setdefault("fuel", {})[fuel_key] = round(
             profile["fuel"].get(fuel_key, 0) + val, 2)
 
-    elif effect == "solar_boost" or effect == "sell_bonus":
+    elif effect in ("solar_boost", "sell_bonus", "plasma_boost"):
         profile.setdefault("active_events", []).append({
             "id": ev_cfg["id"], "effect": effect,
             "value": val, "expires_at": expires_at,
@@ -582,11 +626,14 @@ def _energy_tick(uname_upper):
 
     # Aktívne eventy — vymaž expirované, zozbieraj efekty
     active_events = [e for e in profile.get("active_events", []) if e["expires_at"] > now]
-    solar_mult = 1.0
+    solar_mult  = 1.0
+    plasma_mult = 1.0
     failed_plant_idx = None
     for ae in active_events:
         if ae["effect"] == "solar_boost":
             solar_mult = max(solar_mult, ae["value"])
+        elif ae["effect"] == "plasma_boost":
+            plasma_mult = max(plasma_mult, ae["value"])
         elif ae["effect"] == "plant_fail":
             failed_plant_idx = ae.get("plant_idx")
     profile["active_events"] = active_events
@@ -604,7 +651,8 @@ def _energy_tick(uname_upper):
             if avail <= 0:
                 continue
             hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
-            energy += pt["energy_per_hr"] * hrs
+            mult = plasma_mult if plant_id == "fusion" else 1.0
+            energy += pt["energy_per_hr"] * hrs * mult
             fuel[pt["fuel_type"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
 
     profile["energy"] = round(min(energy, MAX_ENERGY), 1)
