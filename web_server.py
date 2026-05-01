@@ -480,12 +480,17 @@ def _uname():
     return session["username"].upper()
 
 def _atomic_write(path, text):
-    """Write text to a temp file then rename — prevents corruption on crash."""
-    path = pathlib.Path(path)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-    tmp.replace(path)
+    """Write text to a temp file then rename. Returns True on success."""
+    try:
+        path = pathlib.Path(path)
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        tmp.replace(path)
+        return True
+    except Exception as e:
+        print(f"[FS] zápis zlyhal pre '{path.name}': {e}")
+        return False
 
 def load_users():
     try:
@@ -497,8 +502,11 @@ def load_users():
     return {}
 
 def save_users(u):
-    _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
-    _kv_set("game_users", u)  # dual-write do Upstash (ticho zlyhá ak nie je nakonfigurovaný)
+    if _KV_URL:
+        _kv_set("game_users", u)          # primárne úložisko
+        _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))  # best-effort cache
+    else:
+        _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -547,10 +555,13 @@ def load_jf(path, default=None):
     return default if default is not None else {}
 
 def save_jf(path, data):
-    """Zapiš do lokálneho súboru A zároveň do Upstash (dual-write)."""
-    _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
+    """Zapiš dáta. Ak je Upstash nakonfigurovaný = primárne; lokálny súbor = cache."""
     key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
-    _kv_set(key, data)  # ticho zlyhá ak Upstash nie je nakonfigurovaný
+    if _KV_URL:
+        _kv_set(key, data)                                                   # primárne
+        _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))  # best-effort cache
+    else:
+        _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))  # jediné úložisko
 
 
 # ── Energetická minihra — helpers ───────────────────────────────────────────
