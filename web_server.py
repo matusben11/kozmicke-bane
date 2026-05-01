@@ -53,71 +53,94 @@ _KV_KEYS = {
 }
 
 
-def _kv_get(key):
-    """Načítaj JSON z Upstash REST API. Vráti None ak kľúč neexistuje alebo chyba."""
+def _kv_request(path, body_obj=None):
+    """
+    Nízkoúrovňový Upstash REST request.
+    path  = napr. '/get/mykey' alebo '/pipeline'
+    body  = Python objekt → JSON; None = GET request
+    Vráti parsed JSON alebo None pri chybe.
+    """
     if not _KV_URL:
         return None
     try:
+        url = f"{_KV_URL}{path}"
+        data = json.dumps(body_obj).encode("utf-8") if body_obj is not None else None
         req = urllib.request.Request(
-            f"{_KV_URL}/get/{key}",
-            headers={"Authorization": f"Bearer {_KV_TOKEN}"}
-        )
-        with urllib.request.urlopen(req, timeout=8) as r:
-            payload = json.loads(r.read())
-        result = payload.get("result")
-        if result is None:
-            return None
-        return json.loads(result)
-    except Exception as e:
-        print(f"[KV] get '{key}' CHYBA: {e}")
-        return None
-
-
-def _kv_set(key, value):
-    """Ulož JSON do Upstash REST API. Vráti True ak úspech."""
-    if not _KV_URL:
-        return False
-    try:
-        # Upstash REST: POST /set/key s hodnotou v tele ako plain string
-        val_str = json.dumps(value, ensure_ascii=False)
-        body = val_str.encode("utf-8")
-        req = urllib.request.Request(
-            f"{_KV_URL}/set/{key}",
-            data=body,
+            url, data=data,
             headers={
                 "Authorization": f"Bearer {_KV_TOKEN}",
-                "Content-Type": "application/octet-stream",
+                "Content-Type": "application/json",
             }
         )
         with urllib.request.urlopen(req, timeout=8) as r:
-            resp = json.loads(r.read())
-        if resp.get("result") == "OK":
-            return True
-        print(f"[KV] set '{key}' neočakávaná odpoveď: {resp}")
-        return False
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode("utf-8", errors="replace")
+        print(f"[KV] HTTP {e.code} pre '{path}': {body_txt[:200]}")
     except Exception as e:
-        print(f"[KV] set '{key}' CHYBA: {e}")
+        print(f"[KV] chyba pri '{path}': {e}")
+    return None
+
+
+def _kv_get(key):
+    """Načítaj JSON hodnotu z Upstash. Vráti Python objekt alebo None."""
+    resp = _kv_request(f"/get/{key}")
+    if resp is None:
+        return None
+    result = resp.get("result")
+    if result is None:
+        return None          # kľúč neexistuje
+    try:
+        return json.loads(result)
+    except Exception:
+        return result        # hodnota nebola JSON-enkódovaná (napr. starý záznam)
+
+
+def _kv_set(key, value):
+    """Ulož Python objekt do Upstash ako JSON string. Vráti True ak OK."""
+    val_str = json.dumps(value, ensure_ascii=False)
+    # Pipeline endpoint: POST /pipeline s [["SET", key, val]]
+    resp = _kv_request("/pipeline", [["SET", key, val_str]])
+    if resp is None:
         return False
+    # Pipeline vracia list: [{"result": "OK"}]
+    if isinstance(resp, list) and resp and resp[0].get("result") == "OK":
+        return True
+    print(f"[KV] set '{key}' neočakávaná odpoveď: {resp}")
+    return False
+
+
+def _kv_ping():
+    """Otestuj spojenie s Upstash. Vráti True/False."""
+    resp = _kv_request("/ping")
+    return isinstance(resp, dict) and resp.get("result") == "PONG"
 
 
 def _kv_load_all():
     """
     Startup warm-up: načítaj všetky kľúče z Upstash do lokálnych súborov.
-    Lokálne súbory slúžia ako rýchla cache — čítanie beží vždy z disku.
+    Lokálne súbory slúžia ako cache — čítanie beží vždy z lokálneho disku.
     """
     if not _KV_URL:
+        print("[KV] Upstash nie je nakonfigurovaný — používajú sa lokálne súbory.")
         return
-    print("[KV] Načítavam dáta z Upstash Redis...")
+    if not _kv_ping():
+        print("[KV] VAROVANIE: Upstash nedostupný pri štarte — používajú sa lokálne súbory.")
+        return
+    print("[KV] Upstash dostupný. Načítavam dáta...")
+    loaded = 0
     for path, key in _KV_KEYS.items():
         data = _kv_get(key)
         if data is not None:
             try:
                 _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
                 print(f"[KV] ✓ {key}")
+                loaded += 1
             except Exception as e:
                 print(f"[KV] ✗ {key} zápis zlyhal: {e}")
         else:
             print(f"[KV] - {key} (prázdne v Upstash)")
+    print(f"[KV] Warm-up hotový: {loaded}/{len(_KV_KEYS)} kľúčov načítaných.")
 
 # Startup: načítaj dáta z Upstash do lokálnych súborov (pred migráciami a seedmi)
 _kv_load_all()
@@ -2735,6 +2758,65 @@ def owner_login():
 </form>
 </body></html>"""
 
+@app.route("/owner/kv")
+def owner_kv_status():
+    if not _owner_check():
+        return redirect("/owner")
+    rows = ""
+    if not _KV_URL:
+        status_html = '<p style="color:#ff3a3a">UPSTASH_REDIS_REST_URL nie je nastavený.</p>'
+    else:
+        ping_ok = _kv_ping()
+        status_html = (
+            f'<p style="color:{"#39ff6a" if ping_ok else "#ff3a3a"}">'
+            f'Upstash ping: {"OK ✓" if ping_ok else "ZLYHALO ✗"}</p>'
+            f'<p style="color:#888;font-size:.85em">URL: {_KV_URL[:40]}...</p>'
+        )
+        for path, key in _KV_KEYS.items():
+            data = _kv_get(key)
+            if data is None:
+                size_str = '<span style="color:#ff3a3a">prázdne / chyba</span>'
+            else:
+                size_str = f'<span style="color:#39ff6a">{len(json.dumps(data))} B</span>'
+            rows += f"<tr><td>{key}</td><td>{size_str}</td></tr>"
+
+    css = "<style>body{background:#000;color:#ccc;font-family:monospace;padding:20px}" \
+          "h1{color:#ffb000}table{border-collapse:collapse;margin-top:10px}" \
+          "td,th{border:1px solid #333;padding:6px 14px}a{color:#ffb000}</style>"
+    return f"""<!DOCTYPE html><html><head><title>KV Status</title>{css}</head><body>
+<h1>&#128190; Upstash KV Status</h1>
+{status_html}
+<table><tr><th>Kľúč</th><th>Veľkosť v Upstash</th></tr>{rows}</table>
+<br><a href="/owner/panel">← Owner panel</a>
+&nbsp;|&nbsp;
+<form method="POST" action="/owner/kv_write_test" style="display:inline">
+  <button style="background:#111;border:1px solid #ffb000;color:#ffb000;
+    padding:4px 12px;cursor:pointer;font-family:monospace">
+    ⬆ Zapíš aktuálne lokálne súbory do Upstash
+  </button>
+</form>
+</body></html>"""
+
+
+@app.route("/owner/kv_write_test", methods=["POST"])
+def owner_kv_write_test():
+    if not _owner_check():
+        return redirect("/owner")
+    if not _KV_URL:
+        return "Upstash nie je nakonfigurovaný.", 400
+    results = []
+    for path, key in _KV_KEYS.items():
+        data = load_jf(path, {})
+        ok = _kv_set(key, data)
+        results.append(f"{key}: {'OK ✓' if ok else 'ZLYHALO ✗'}")
+    css = "<style>body{background:#000;color:#ccc;font-family:monospace;padding:20px}a{color:#ffb000}</style>"
+    return f"""<!DOCTYPE html><html><head><title>KV Write</title>{css}</head><body>
+<h1>Výsledky zápisu</h1>
+<pre>{'<br>'.join(results)}</pre>
+<br><a href="/owner/kv">← Späť na KV Status</a>
+</body></html>"""
+
+
 @app.route("/owner/logout")
 def owner_logout():
     session.pop("owner", None)
@@ -2973,6 +3055,7 @@ input[type=number],input[type=text],select{{outline:none}}</style>
   Celkove CR: <strong style="color:#ffb000">{total_cr:,}</strong> &nbsp;|&nbsp;
   Spec. ranky: <strong style="color:#ffd700">{sum(1 for u in users.values() if get_sp_ranks(u))}</strong> &nbsp;|&nbsp;
   <a href="/owner/logout" class="btn btn-r">Logout</a>
+  <a href="/owner/kv" class="btn" style="border-color:#39ff6a;color:#39ff6a">&#128190; KV</a>
   <a href="/owner/diag" class="btn">Diag</a>
   <a href="/lobby" class="btn">Lobby</a>
 </p>
