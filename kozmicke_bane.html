@@ -2713,12 +2713,18 @@ function _syncSaves(){
   let ls={};
   try{ls=JSON.parse(localStorage.getItem(LS_KEY)||'{}');}catch(e){}
   const sv=window.__SERVER_SAVES__;
+  const currentUser=PILOT.toLowerCase();
+  // Začni so serverovými save-mi (zdroj pravdy pre tento účet)
   const merged=Object.assign({},sv);
   for(const slot in ls){
-    const local=ls[slot], server=sv[slot];
+    const local=ls[slot];
+    // Preskočiť save ak patrí inému hráčovi — zabrání krížovej kontaminácii účtov
+    const saveUser=(local.username||'').toLowerCase();
+    if(saveUser && saveUser!==currentUser) continue;
+    const server=sv[slot];
     if(!server||(local.ts||0)>(server.ts||0)){
       merged[slot]=local;
-      api.save_game(parseInt(slot),JSON.stringify(local)); // upload starší/chýbajúci slot
+      api.save_game(parseInt(slot),JSON.stringify(local));
     }
   }
   localStorage.setItem(LS_KEY,JSON.stringify(merged));
@@ -2729,6 +2735,20 @@ function _syncSaves(){
 const _params = new URLSearchParams(window.location.search);
 let PILOT = _params.get('pilot') || 'PILOT';
 const _startSlot = _params.get('slot');   // napr. ?slot=2 = načítaj slot 2
+
+// Vyčisti localStorage saves ak patria inému hráčovi (ochrana pred krížovou kontamináciou)
+(function(){
+  const sessionUser=(window.__SESSION_USER__||PILOT).toLowerCase();
+  try{
+    const ls=JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+    let changed=false;
+    for(const slot in ls){
+      const u=(ls[slot].username||'').toLowerCase();
+      if(u && u!==sessionUser){delete ls[slot];changed=true;}
+    }
+    if(changed) localStorage.setItem(LS_KEY,JSON.stringify(ls));
+  }catch(e){}
+})();
 
 initDesktopData();
 _syncSaves();

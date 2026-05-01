@@ -2532,6 +2532,7 @@ def game():
         f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
         f"window.__IS_TESTER__={'true' if _is_tester else 'false'};"
         f"window.__BETA_FLAGS__={json.dumps(_beta_flags)};"
+        f"window.__SESSION_USER__={json.dumps(session['username'].lower())};"
         f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
