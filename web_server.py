@@ -38,9 +38,21 @@ KB_AUCTIONS = DATA_DIR / "kb_auctions.json"
 # ── Upstash Redis — voliteľné perzistentné KV úložisko ─────────────────────
 # Nastav UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN v Render env vars.
 # Ak nie sú nastavené, používajú sa lokálne súbory (pre vývoj).
-_KV_URL   = os.environ.get("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
-_KV_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "").strip()
-print(f"[KV] URL set: {bool(_KV_URL)} | TOKEN set: {bool(_KV_TOKEN)} | URL prefix: {_KV_URL[:30] if _KV_URL else 'NONE'}")
+_KV_URL = next(
+    (os.environ.get(k, "").strip().rstrip("/")
+     for k in ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_URL",
+                "KV_REST_API_URL", "UPSTASH_URL"]
+     if os.environ.get(k, "").strip()),
+    ""
+)
+_KV_TOKEN = next(
+    (os.environ.get(k, "").strip()
+     for k in ["UPSTASH_REDIS_REST_TOKEN", "UPSTASH_REDIS_TOKEN",
+                "KV_REST_API_TOKEN", "UPSTASH_TOKEN"]
+     if os.environ.get(k, "").strip()),
+    ""
+)
+print(f"[KV] URL set: {bool(_KV_URL)} | TOKEN set: {bool(_KV_TOKEN)} | URL prefix: {_KV_URL[:40] if _KV_URL else 'NONE'}")
 
 # Mapovanie cesty súboru → Redis kľúč
 _KV_KEYS = {
