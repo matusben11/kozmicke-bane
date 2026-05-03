@@ -202,7 +202,7 @@ BETA_FEATURES = [
     },
     {
         "id": "energy_minigame",
-        "public": False,
+        "public": True,
         "name_sk": "Energetická minihra",
         "desc_sk": "Stav elektrárne, vyrábaj energiu — základ pre budúci trh",
         "name_en": "Energy minigame",
