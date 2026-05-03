@@ -3774,14 +3774,21 @@ def energy_page():
 
     # Celková produkcia za hodinu
     total_rate = 0.0
+    raw_mats_disp = profile.get("raw_materials", {})
     for pid, cnt in plant_counts.items():
         pt = PLANT_TYPES.get(pid)
         if not pt:
             continue
         if pt["fuel_type"] is None:
             total_rate += pt["energy_per_hr"] * cnt
+        elif pt["fuel_type"] == "u238_breed":
+            if raw_mats_disp.get("u238", 0) > 0:
+                total_rate += pt["energy_per_hr"] * cnt
         else:
-            if fuel.get(pt["fuel_type"], 0) > 0:
+            has_fuel = fuel.get(pt["fuel_type"], 0) > 0
+            if pt["fuel_type"] == "uranium":
+                has_fuel = has_fuel or fuel.get("pu239", 0) > 0
+            if has_fuel:
                 total_rate += pt["energy_per_hr"] * cnt
 
     lang = session.get("lang", "sk")
@@ -3882,18 +3889,31 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
                 rate_str = f'+{pt["energy_per_hr"] * cnt} E/hod'
                 fuel_str = ""
             else:
-                fstock = fuel.get(pt["fuel_type"], 0)
+                # Špeciálne fuel typy (breeder používa U-238 z raw_materials)
+                if pt["fuel_type"] == "u238_breed":
+                    raw_mats = profile.get("raw_materials", {})
+                    fstock   = raw_mats.get("u238", 0.0)
+                    fuel_name = Lp("Ochudobnený U-238", "Depleted U-238")
+                    unit      = "t"
+                else:
+                    fstock    = fuel.get(pt["fuel_type"], 0)
+                    fs_entry  = next((f for f in FUEL_SHOP if f["id"] == pt["fuel_type"]), None)
+                    fuel_name = Lp(fs_entry["name_sk"], fs_entry["name_en"]) if fs_entry else pt["fuel_type"]
+                    unit      = Lp(fs_entry["unit_sk"], fs_entry["unit_en"]) if fs_entry else "ks"
+                # Pu-239 má prednosť v jadrových elektrárňach
+                if pt["fuel_type"] == "uranium":
+                    pu_stk = fuel.get("pu239", 0.0)
+                    if pu_stk > 0:
+                        fstock = pu_stk
+                        fuel_name = "Pu-239"
+                        unit = "ks"
                 if fstock > 0:
                     status   = f'<span class="active">▶ {Lp("AKTÍVNA","ACTIVE")}</span>'
                     rate_str = f'+{pt["energy_per_hr"] * cnt} E/hod'
                 else:
                     status   = f'<span class="idle">⏸ {Lp("NEČINNÁ — bez paliva","IDLE — no fuel")}</span>'
                     rate_str = "+0 E/hod"
-                fuel_name = Lp(next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["name_sk"],
-                               next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["name_en"])
-                unit      = Lp(next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["unit_sk"],
-                               next(f for f in FUEL_SHOP if f["id"] == pt["fuel_type"])["unit_en"])
-                fuel_str  = f'<span style="color:#2a7a45;font-size:.85em"> — {fuel_name}: {fstock:.1f} {unit}</span>'
+                fuel_str = f'<span style="color:#2a7a45;font-size:.85em"> — {fuel_name}: {fstock:.1f} {unit}</span>'
             plants_html += (
                 f'<div class="plant-row">'
                 f'<span>{pt["icon"]} {name} ×{cnt}{fuel_str}</span>'
