@@ -259,6 +259,44 @@ MINE_TYPES = {
 }
 ENRICH_RATIO = 10   # legacy: /energy/enrich button (LEU-3 quick convert)
 
+# ── Jadrová vetva — Fáza 4: Hazard mechanika ────────────────────────────────
+PLANT_TYPES["rbmk"] = {
+    "id": "rbmk", "icon": "⚠☢",
+    "name_sk": "RBMK reaktor", "name_en": "RBMK reactor",
+    "desc_sk": "300 E/hod. Lacný ale pozitívny dutinový koef. = havárne riziko.",
+    "desc_en": "300 E/hr. Cheap but positive void coeff. = accident risk.",
+    "build_cost": 35000,
+    "fuel_type": "uranium", "fuel_per_hr": 1,
+    "energy_per_hr": 300, "max_count": 1,
+}
+
+# Pravdepodobnosť havárie za jeden energy_tick podľa safety level 0-3
+HAZARD_PROBS = {
+    "rbmk":    [0.07, 0.028, 0.008, 0.001],
+    "breeder": [0.04, 0.015, 0.005, 0.001],
+}
+
+SAFETY_UPGRADES = [
+    {"level": 1, "cost": 5000,
+     "name_sk": "Bezpečnostný stupeň 1", "name_en": "Safety Level 1",
+     "desc_sk": "Základné SCRAM systémy. Riziko havárie ÷2.5.",
+     "desc_en": "Basic SCRAM systems. Accident risk ÷2.5."},
+    {"level": 2, "cost": 15000,
+     "name_sk": "Bezpečnostný stupeň 2", "name_en": "Safety Level 2",
+     "desc_sk": "Pokročilé ochranné okruhy. Riziko ÷8.75.",
+     "desc_en": "Advanced protection circuits. Risk ÷8.75."},
+    {"level": 3, "cost": 40000,
+     "name_sk": "Bezpečnostný stupeň 3", "name_en": "Safety Level 3",
+     "desc_sk": "Pasívna bezpečnosť. Riziko minimálne.",
+     "desc_en": "Passive safety systems. Risk minimal."},
+]
+
+REPAIR_COSTS = {
+    "rbmk":    8000,   # CR na opravu poškodeného RBMK
+    "breeder": 20000,  # CR na opravu poškodeného breederu
+}
+DAMAGE_OFFLINE_H = 10  # hodín offline po havárii
+
 # ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
 # feed_per_rod = t surového uránu na 1 palivový článok
 # energy_mult  = koľkonásobok energie oproti štandardu dáva každý článok
@@ -648,6 +686,8 @@ def _ensure_profile_fields(profile):
     profile["fuel"].setdefault("helium", 0.0)
     profile["raw_materials"].setdefault("u238", 0.0)   # ochudobnený urán
     profile.setdefault("proliferation_heat", 0.0)      # 0.0–100.0
+    profile.setdefault("safety_level", 0)             # 0–3
+    profile.setdefault("damaged_plants", [])          # [{plant_id, damage_type, expires_at}]
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
@@ -736,9 +776,14 @@ def _energy_tick(uname_upper):
             failed_plant_idx = ae.get("plant_idx")
     profile["active_events"] = active_events
 
+    damaged_ids_tick = {d["plant_id"] for d in profile.get("damaged_plants", [])
+                        if d["expires_at"] > now}
+
     for idx, plant_id in enumerate(profile["plants"]):
         if idx == failed_plant_idx:
             continue
+        if plant_id in damaged_ids_tick:
+            continue  # poškodený reaktor neprodukuje
         pt = PLANT_TYPES.get(plant_id)
         if not pt:
             continue
@@ -800,6 +845,46 @@ def _energy_tick(uname_upper):
     # Proliferačná horúčava — prirodzený pokles 1.5 bodu/hod
     heat = profile.get("proliferation_heat", 0.0)
     profile["proliferation_heat"] = max(0.0, round(heat - 1.5 * elapsed_hrs, 2))
+
+    # ── Hazard check ─────────────────────────────────────────────
+    safety = profile.get("safety_level", 0)
+    damaged = profile.get("damaged_plants", [])
+    # Vymaž expirované poškodenia (oprava prebehla alebo čas uplynul)
+    active_dmg = [d for d in damaged if d["expires_at"] > now]
+    # Reaktory ktoré sú momentálne poškodené
+    damaged_ids = {d["plant_id"] for d in active_dmg}
+    hazard_event = None
+
+    for haz_type in ("rbmk", "breeder"):
+        if haz_type in profile.get("plants", []) and haz_type not in damaged_ids:
+            prob = HAZARD_PROBS.get(haz_type, [0])[min(safety, 3)]
+            if random.random() < prob:
+                active_dmg.append({
+                    "plant_id":    haz_type,
+                    "damage_type": "sodium_leak" if haz_type == "breeder" else "meltdown",
+                    "expires_at":  now + DAMAGE_OFFLINE_H * 3600,
+                })
+                damaged_ids.add(haz_type)
+                # Vedľajšie efekty havárie
+                profile["energy"] = round(profile.get("energy", 0) * 0.50, 1)
+                if haz_type == "breeder":
+                    profile["proliferation_heat"] = min(100.0, round(
+                        profile.get("proliferation_heat", 0) + 35, 2))
+                    profile["raw_materials"]["u238"] = round(
+                        profile.get("raw_materials", {}).get("u238", 0) * 0.60, 2)
+                hazard_event = haz_type
+                break  # jedna havária na tick stačí
+
+    profile["damaged_plants"] = active_dmg
+    if hazard_event:
+        dmg_name = "RBMK" if hazard_event == "rbmk" else "Breeder"
+        profile["last_event"] = {
+            "name_sk": f"💥 HAVÁRIA — {dmg_name}!",
+            "name_en": f"💥 ACCIDENT — {dmg_name}!",
+            "desc_sk": f"Reaktor poškodený. Offline {DAMAGE_OFFLINE_H}h. Oprav ho cez /{'/energy'}.",
+            "desc_en": f"Reactor damaged. Offline {DAMAGE_OFFLINE_H}h. Repair via /energy.",
+            "type": "neg", "ts": now,
+        }
 
     profile["last_tick"] = now
 
@@ -3935,8 +4020,74 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
         f'</div>'
     ) if (mine_section or True) else ""
 
-    # ── Eventy ──────────────────────────────────────────────────
+    # ── Safety upgrades + poškodené reaktory ────────────────────
     now = time.time()
+    safety_lvl  = profile.get("safety_level", 0)
+    damaged_now = [d for d in profile.get("damaged_plants", []) if d["expires_at"] > now]
+    has_rbmk    = "rbmk" in profile.get("plants", [])
+    has_breeder = "breeder" in profile.get("plants", [])
+    show_safety = has_rbmk or has_breeder or safety_lvl > 0
+
+    _hazard_html = ""
+    if show_safety:
+        # Poškodené reaktory
+        dmg_rows = ""
+        for d in damaged_now:
+            pid   = d["plant_id"]
+            pname = PLANT_TYPES.get(pid, {}).get("name_sk" if lang != "en" else "name_en", pid)
+            secs  = max(0, int(d["expires_at"] - now))
+            h, r  = divmod(secs, 3600)
+            m_d, _ = divmod(r, 60)
+            t_str = f"{h}h {m_d:02d}m"
+            rcost = REPAIR_COSTS.get(pid, 10000)
+            can_repair = cr >= rcost
+            dmg_rows += (
+                f'<div class="plant-row" style="color:#ff3a3a">'
+                f'<span>💥 {pname} — {Lp("offline","offline")} {t_str} | '
+                f'{d["damage_type"]}</span>'
+                f'<form method="POST" action="/energy/repair" style="display:inline">'
+                f'<input type="hidden" name="plant_id" value="{pid}">'
+                f'<button class="btn-buy" style="border-color:#ff3a3a;color:#ff3a3a" '
+                f'{"" if can_repair else "disabled"}>'
+                f'{Lp("Opraviť","Repair")} — {rcost:,} CR</button>'
+                f'</form></div>'
+            )
+
+        # Safety upgrade button
+        next_lvl = safety_lvl + 1
+        next_upg = next((u for u in SAFETY_UPGRADES if u["level"] == next_lvl), None)
+        safety_btn = ""
+        if next_upg:
+            uname_txt = Lp(next_upg["name_sk"], next_upg["name_en"])
+            udesc_txt = Lp(next_upg["desc_sk"], next_upg["desc_en"])
+            can_buy   = cr >= next_upg["cost"]
+            safety_btn = (
+                f'<div class="plant-row">'
+                f'<div><span style="color:#cfffcf">🛡 {uname_txt}</span>'
+                f'<span style="color:#2a7a45;font-size:.85em"> — {udesc_txt}</span></div>'
+                f'<form method="POST" action="/energy/buy_safety" style="display:inline">'
+                f'<button class="btn-buy" {"" if can_buy else "disabled"}>'
+                f'{next_upg["cost"]:,} CR</button></form>'
+                f'</div>'
+            )
+        safety_stars = "★" * safety_lvl + "☆" * (3 - safety_lvl)
+        prob_rbmk = f'{HAZARD_PROBS["rbmk"][min(safety_lvl,3)]*100:.1f}%' if has_rbmk else "—"
+        prob_brd  = f'{HAZARD_PROBS["breeder"][min(safety_lvl,3)]*100:.1f}%' if has_breeder else "—"
+
+        _hazard_html = (
+            f'<div class="card" style="border-color:#ff440044">'
+            f'<div class="card-title" style="color:#ff9900">'
+            f'🛡 {Lp("BEZPEČNOSŤ REAKTOROV","REACTOR SAFETY")}</div>'
+            f'<div class="row"><span class="lbl">{Lp("Bezpečnostný stupeň","Safety level")}</span>'
+            f'<span style="color:#ff9900">{safety_stars} (L{safety_lvl})</span></div>'
+            f'<div class="row"><span class="lbl">{Lp("Riziko havárie/tick","Accident risk/tick")}</span>'
+            f'<span class="val">RBMK {prob_rbmk} | Breeder {prob_brd}</span></div>'
+            f'{dmg_rows}'
+            f'{safety_btn}'
+            f'</div>'
+        )
+
+    # ── Eventy ──────────────────────────────────────────────────
     last_ev = profile.get("last_event")
     last_ev_html = ""
     if last_ev and (now - last_ev.get("ts", 0)) < 120:
@@ -3985,6 +4136,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 <div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.6 &nbsp;|&nbsp; &#946;</div>
 {last_ev_html}
 {active_ev_html}
+{_hazard_html}
 {heat_html}
 
 <div class="card">
@@ -4166,6 +4318,61 @@ def energy_enrich():
     profile.setdefault("fuel", {})
     profile["fuel"]["uranium"] = round(profile["fuel"].get("uranium", 0) + rods, 2)
 
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+# ── Jadrová vetva — Fáza 4: Safety upgrades + oprava ───────────────────────
+
+@app.route("/energy/buy_safety", methods=["POST"])
+def energy_buy_safety():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    current = profile.get("safety_level", 0)
+    next_lvl = current + 1
+    upg = next((u for u in SAFETY_UPGRADES if u["level"] == next_lvl), None)
+    if not upg:
+        return redirect("/energy")
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr     = entry.get("career_cr", 0)
+    if cr < upg["cost"]:
+        return redirect("/energy")
+    entry["career_cr"] = cr - upg["cost"]
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+    profile["safety_level"] = next_lvl
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/repair", methods=["POST"])
+def energy_repair():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    plant_id = request.form.get("plant_id", "").strip()
+    uname    = _uname()
+    profile  = _energy_tick(uname)
+    damaged  = profile.get("damaged_plants", [])
+    dmg_item = next((d for d in damaged if d["plant_id"] == plant_id), None)
+    if not dmg_item:
+        return redirect("/energy")
+    cost = REPAIR_COSTS.get(plant_id, 10000)
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr     = entry.get("career_cr", 0)
+    if cr < cost:
+        return redirect("/energy")
+    entry["career_cr"] = cr - cost
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+    profile["damaged_plants"] = [d for d in damaged if d["plant_id"] != plant_id]
     data = load_jf(KB_ENERGY, {})
     data[uname] = profile
     save_jf(KB_ENERGY, data)
