@@ -3601,6 +3601,16 @@ def owner_panel():
                 +/-CR
               </button>
             </form>
+            <form method="POST" action="/owner/set_heat" style="display:inline">
+              <input type="hidden" name="uname" value="{display}">
+              <input type="number" name="heat" value="0" min="0" max="100"
+                style="width:50px;background:#000;border:1px solid #ff440044;color:#ff9900;
+                font-family:inherit;font-size:.85em;padding:2px 4px">
+              <button type="submit" style="background:#0d0000;border:1px solid #ff4400;
+                color:#ff9900;padding:2px 6px;cursor:pointer;font-family:inherit;font-size:.85em">
+                =heat
+              </button>
+            </form>
             &nbsp;
             <form method="POST" action="/owner/ban" style="display:inline">
               <input type="hidden" name="uname" value="{display}">
@@ -3748,6 +3758,22 @@ def owner_set_rank():
     career[key] = e
     save_jf(KB_CAREER, career)
     return redirect("/owner/panel")
+
+@app.route("/owner/set_heat", methods=["POST"])
+def owner_set_heat():
+    if not _owner_check():
+        return redirect("/owner")
+    uname = request.form.get("uname", "").strip().upper()
+    try:
+        heat = max(0.0, min(100.0, float(request.form.get("heat", 0))))
+    except ValueError:
+        return redirect("/owner/panel")
+    data = load_jf(KB_ENERGY, {})
+    if uname in data:
+        data[uname]["proliferation_heat"] = heat
+        save_jf(KB_ENERGY, data)
+    return redirect("/owner/panel")
+
 
 @app.route("/owner/add_cr", methods=["POST"])
 def owner_add_cr():
