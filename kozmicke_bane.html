@@ -245,7 +245,7 @@ const T = {
     'hud_research': 'VÝSKUM:',
     'hud_missing': 'chýba {n} CR',
     'hud_rocket_ready': '🚀 Raketa pripravená!',
-    'hud_colony': 'Kolónia: 👷{w} 🍞{f} ⚡{e}',
+    'hud_colony': 'Kolónia: 👷{w} ⚡{e}',
     // game buttons
     'btn_mine': '⛏ Ťažiť',
     'btn_sell': '💰 Predať',
@@ -289,13 +289,11 @@ const T = {
     'mine_depth_dmg': '  [HĹBKA L{n}] Prostredie spôsobilo HP -{dmg}',
     'mine_colony_collapsed': '🚫 KOLÓNIA SKOLABOVALA — ťažba nie je možná!',
     'mine_colony_no_corp': '  Bez zmluvy s NOVA Corp musíš sám zásobovať kolóniu.',
-    'mine_colony_buy': '  Kúp jedlo ⚡ energiu 👷 pracovníkov v [3] Obchode alebo',
+    'mine_colony_buy': '  Kúp 👷 pracovníkov v [3] Obchode alebo',
     'mine_colony_sign': '  podpíš zmluvu s NOVA Corp cez [N].',
     'mine_colony_fee_warn': '⚠ NOVA CORP: Nemáš dostatok CR na poplatok! Zmluva pozastavená.',
-    'mine_food_depleted': '🍞 Jedlo vyčerpané! Pracovník odišiel. ({n} zostalo)',
-    'mine_energy_depleted': '⚡ Energia vyčerpaná! Efektivita ťažby klesla.',
-    'mine_food_low': '⚠ Jedlo dochádzajúce: {n} jednotiek!',
-    'mine_energy_low': '⚠ Energia kritická: {n}!',
+    'mine_energy_depleted': '⚡ Energia z minihry vyčerpaná! Efektivita ťažby klesla.',
+    'mine_energy_low': '⚠ Energia z minihry: {n} — doplň ju v Energetickej minihere!',
     'mine_scanner': '[SCANNER] Sektor: {sec} · Hĺbka: {m}m',
     'mine_turn': '[ TÁH {n} · {sec} · {m}m ]',
     // sell
@@ -407,28 +405,23 @@ const T = {
     'colony_title': '🏗 KOLÓNIA NOVA-{name}-1 — ZYRAX-8',
     'colony_workers': '👷 Pracovníci:',
     'colony_housing': '🏠 Obydlia:',
-    'colony_food': '🍞 Jedlo:',
-    'colony_energy': '⚡ Energia:',
+    'colony_energy': '⚡ Energia (minihra):',
     'colony_medicine': '💊 Medicina:',
-    'colony_fuel': '🚀 Palivo:',
     'colony_worker_bonus': '+{n} ťažba/ťah',
-    'colony_food_per_turn': '−{n}/ťah',
     'colony_energy_per_turn': '−{n}/ťah',
     'colony_medicine_hint': '(−HP mod)',
-    'colony_fuel_hint': '(cestovanie)',
-    'colony_food_warn': '⚠ Jedlo dochádzajúce! Kúp v obchode [3].',
-    'colony_energy_warn': '⚠ Energia dochádzajúca! Kúp v obchode [3].',
-    'colony_hint': 'Pracovníci spotrebúvajú jedlo a energiu každý ťah. Viac pracovníkov = viac minerálov.',
+    'colony_energy_warn': '⚠ Energia z minihry dochádzajúca! Vybuduj elektrárne v Energetickej minihere.',
+    'colony_hint': 'Pracovníci spotrebúvajú energiu z Energetickej minihry každý ťah. Viac pracovníkov = viac minerálov.',
     // planet travel
     'travel_title': '🪐 MAPA GALAXIE — Aktuálna: ',
-    'travel_fuel_cr': 'Palivo: 🚀 {fuel}  ·  Kredity: {cr} CR  ·  Výskum: {rp} RP',
+    'travel_fuel_cr': 'Kredity: {cr} CR  ·  Výskum: {rp} RP',
     'travel_here': '◉ TU',
     'travel_locked_btn': 'Odomkni výskumom',
     'travel_base': 'ZÁKLADŇA',
-    'travel_cost': '{cr} CR + {fuel} palivo',
-    'travel_no_cr_fuel': '✗ Nedostatok CR alebo paliva na cestu!',
+    'travel_cost': '{cr} CR',
+    'travel_no_cr_fuel': '✗ Nedostatok CR na cestu!',
     'travel_flying': '🚀 Letiš na {planet}...',
-    'travel_expenses': '  Výdavky: {cr} CR + {fuel} palivo',
+    'travel_expenses': '  Výdavky: {cr} CR',
     // corp
     'corp_title': '🏢 NOVA MINING CORP. — DASHBOARD',
     'corp_contract': 'Zmluva:    ',
@@ -439,8 +432,8 @@ const T = {
     'corp_no_fee': 'žiadny',
     'corp_benefits_yes': 'Logistika · Zásoby · +15% minerálov',
     'corp_benefits_no': '—',
-    'corp_desc_active': 'NOVA Corp riadi logistiku tvojej kolónie. Môžeš zmluvu kedykoľvek ukončiť — potom musíš jedlo, energiu a obydlia kupovať sám.',
-    'corp_desc_inactive': 'Bez zmluvy si samostatný. Musíš sám manažovať zásoby. Zmluva stojí 400 CR/ťah.',
+    'corp_desc_active': 'NOVA Corp riadi logistiku tvojej kolónie. Môžeš zmluvu kedykoľvek ukončiť — potom musíš obydlia kupovať sám.',
+    'corp_desc_inactive': 'Bez zmluvy si samostatný. Musíš sám manažovať pracovníkov. Zmluva stojí 400 CR/ťah.',
     'corp_terminate': '✗ Ukončiť zmluvu',
     'corp_activate': '✓ Aktivovať zmluvu (400 CR/ťah)',
     'corp_terminated': '✗ Zmluva s NOVA Corp ukončená. Teraz si na vlastnú päsť.',
@@ -497,7 +490,7 @@ const T = {
     'era4_start_1': '★ VÍTAJ V UPDATE 4.0 — GALAKTICKÁ EXPANZIA ★',
     'era4_start_2': '  Základňa: Zyrax-8  ·  Kolónia aktívna',
     'era4_corp_yes': '  NOVA CORP partnerstvo: −400 CR/ťah. Logistika zabezpečená.',
-    'era4_corp_no': '  Samostatná kolónia. Musíš riadiť jedlo, energiu a pracovníkov sám.',
+    'era4_corp_no': '  Samostatná kolónia. Musíš riadiť pracovníkov a obydlia sám.',
     'era4_new_btns': '  Nové tlačidlá: [C] Kolónia  [P] Planéty  [N] NOVA Corp',
     'era4_colony_locked': '✗ Kolónia sa odomkne v Update 4.0.',
     'era4_travel_locked': '✗ Cestovanie medzi planétami sa odomkne v Update 4.0.',
@@ -594,7 +587,7 @@ const T = {
     'hud_research': 'RESEARCH:',
     'hud_missing': 'missing {n} CR',
     'hud_rocket_ready': '🚀 Rocket ready!',
-    'hud_colony': 'Colony: 👷{w} 🍞{f} ⚡{e}',
+    'hud_colony': 'Colony: 👷{w} ⚡{e}',
     // game buttons
     'btn_mine': '⛏ Mine',
     'btn_sell': '💰 Sell',
@@ -638,13 +631,11 @@ const T = {
     'mine_depth_dmg': '  [DEPTH L{n}] Environment caused HP -{dmg}',
     'mine_colony_collapsed': '🚫 COLONY COLLAPSED — mining not possible!',
     'mine_colony_no_corp': '  Without a NOVA Corp contract you must supply the colony yourself.',
-    'mine_colony_buy': '  Buy food ⚡ energy 👷 workers in [3] Shop or',
+    'mine_colony_buy': '  Buy 👷 workers in [3] Shop or',
     'mine_colony_sign': '  sign a contract with NOVA Corp via [N].',
     'mine_colony_fee_warn': '⚠ NOVA CORP: Not enough CR for the fee! Contract suspended.',
-    'mine_food_depleted': '🍞 Food depleted! Worker left. ({n} remaining)',
-    'mine_energy_depleted': '⚡ Energy depleted! Mining efficiency reduced.',
-    'mine_food_low': '⚠ Food running low: {n} units!',
-    'mine_energy_low': '⚠ Energy critical: {n}!',
+    'mine_energy_depleted': '⚡ Minigame energy depleted! Mining efficiency reduced.',
+    'mine_energy_low': '⚠ Minigame energy: {n} — refuel in the Energy Minigame!',
     'mine_scanner': '[SCANNER] Sector: {sec} · Depth: {m}m',
     'mine_turn': '[ TURN {n} · {sec} · {m}m ]',
     // sell
@@ -755,28 +746,23 @@ const T = {
     'colony_title': '🏗 COLONY NOVA-{name}-1 — ZYRAX-8',
     'colony_workers': '👷 Workers:',
     'colony_housing': '🏠 Housing:',
-    'colony_food': '🍞 Food:',
-    'colony_energy': '⚡ Energy:',
+    'colony_energy': '⚡ Energy (minigame):',
     'colony_medicine': '💊 Medicine:',
-    'colony_fuel': '🚀 Fuel:',
     'colony_worker_bonus': '+{n} mining/turn',
-    'colony_food_per_turn': '−{n}/turn',
     'colony_energy_per_turn': '−{n}/turn',
     'colony_medicine_hint': '(−HP mod)',
-    'colony_fuel_hint': '(travel)',
-    'colony_food_warn': '⚠ Food running low! Buy in shop [3].',
-    'colony_energy_warn': '⚠ Energy running low! Buy in shop [3].',
-    'colony_hint': 'Workers consume food and energy each turn. More workers = more minerals.',
+    'colony_energy_warn': '⚠ Minigame energy low! Build more power plants.',
+    'colony_hint': 'Workers consume energy from the Energy Minigame each turn. More workers = more minerals.',
     // planet travel
     'travel_title': '🪐 GALAXY MAP — Current: ',
-    'travel_fuel_cr': 'Fuel: 🚀 {fuel}  ·  Credits: {cr} CR  ·  Research: {rp} RP',
+    'travel_fuel_cr': 'Credits: {cr} CR  ·  Research: {rp} RP',
     'travel_here': '◉ HERE',
     'travel_locked_btn': 'Unlock via research',
     'travel_base': 'BASE',
-    'travel_cost': '{cr} CR + {fuel} fuel',
-    'travel_no_cr_fuel': '✗ Not enough CR or fuel for travel!',
+    'travel_cost': '{cr} CR',
+    'travel_no_cr_fuel': '✗ Not enough CR for travel!',
     'travel_flying': '🚀 Flying to {planet}...',
-    'travel_expenses': '  Expenses: {cr} CR + {fuel} fuel',
+    'travel_expenses': '  Expenses: {cr} CR',
     // corp
     'corp_title': '🏢 NOVA MINING CORP. — DASHBOARD',
     'corp_contract': 'Contract:  ',
@@ -787,7 +773,7 @@ const T = {
     'corp_no_fee': 'none',
     'corp_benefits_yes': 'Logistics · Supplies · +15% minerals',
     'corp_benefits_no': '—',
-    'corp_desc_active': 'NOVA Corp manages your colony logistics. You can terminate the contract at any time — then you must buy food, energy and housing yourself.',
+    'corp_desc_active': 'NOVA Corp manages your colony logistics. You can terminate the contract at any time — then you must buy housing yourself.',
     'corp_desc_inactive': 'Without a contract you are independent. You must manage supplies yourself. Contract costs 400 CR/turn.',
     'corp_terminate': '✗ Terminate contract',
     'corp_activate': '✓ Activate contract (400 CR/turn)',
@@ -845,7 +831,7 @@ const T = {
     'era4_start_1': '★ WELCOME TO UPDATE 4.0 — GALACTIC EXPANSION ★',
     'era4_start_2': '  Base: Zyrax-8  ·  Colony active',
     'era4_corp_yes': '  NOVA CORP partnership: −400 CR/turn. Logistics secured.',
-    'era4_corp_no': '  Independent colony. You must manage food, energy and workers yourself.',
+    'era4_corp_no': '  Independent colony. You must manage workers and housing yourself.',
     'era4_new_btns': '  New buttons: [C] Colony  [P] Planets  [N] NOVA Corp',
     'era4_colony_locked': '✗ Colony unlocks in Update 4.0.',
     'era4_travel_locked': '✗ Planet travel unlocks in Update 4.0.',
@@ -1152,6 +1138,11 @@ function fmtDuration(turns){return turns<50?t('duration_short'):turns<120?t('dur
 //  GAME STATE
 // ══════════════════════════════════════════════════════════════
 let G={};
+let _mineEnergyFetched=false;
+async function fetchMineEnergy(){
+  try{const r=await fetch('/api/energy');const d=await r.json();G.mineEnergy=d.energy||0;_mineEnergyFetched=true;}
+  catch(e){G.mineEnergy=G.mineEnergy||0;}
+}
 let _miningLock=false;
 function newGame(username){
   G={
@@ -1164,6 +1155,7 @@ function newGame(username){
     rp:0, weapon:null, rocket:0, planet:1,
     era:1, colony:null, currentPlanet4:'zyrax8', corpContract:false, corpFee:0,
     omegaUnlocked: !!(window.__BETA_FLAGS__ && window.__BETA_FLAGS__.omega7),
+    mineEnergy:0,
   };
 }
 function hU(id){return G.upgrades.some(u=>u.id===id);}
@@ -1470,6 +1462,7 @@ function upgB(){
 function showGame(logs=[]){
   document.getElementById('qsbtn').style.display='inline-block';
   document.getElementById('lbbtn').style.display='inline-block';
+  if(!_mineEnergyFetched)fetchMineEnergy();
   rG(logs);
 }
 
@@ -1507,7 +1500,7 @@ function rG(logs=[]){
   ].filter(Boolean);
 
   const _plabel=G.era===4?curPlanet4().name:G.planet===3?t('planet_zyrax8_col'):G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
-  const _pturnlabel=G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?t('hud_colony',{w:G.colony?.workers||0,f:G.colony?.food||0,e:G.colony?.energy||0}):`${t('hud_goal')}: ${G.goal} CR`;
+  const _pturnlabel=G.planet===3?`⊕${G.inv.titanium?.qty||0}/5 ⊗${G.inv.exoternimium?.qty||0}/3`:G.era===4?t('hud_colony',{w:G.colony?.workers||0,e:Math.round(G.mineEnergy||0)}):`${t('hud_goal')}: ${G.goal} CR`;
   setScr(`<div class="panel" style="min-width:750px;max-width:830px;">
     ${corners()}
     <div id="plabel">◈  ${_plabel}  v4.8  ◈  ${t('hud_turn')} ${G.turn}  ◈  ${_pturnlabel}  ◈</div>
@@ -1592,7 +1585,7 @@ function aMine(){
   // Era 4 bez zmluvy: ak sú zásoby vyčerpané, ťažba je zablokovaná
   if(G.era===4&&G.colony&&!G.corpContract){
     const c=G.colony;
-    if(c.food<=0&&c.energy<=0&&c.workers<=0){
+    if(c.workers<=0){
       rG([{txt:t('mine_colony_collapsed'),cls:'ldng'},
           {txt:t('mine_colony_no_corp'),cls:'lwarn'},
           {txt:t('mine_colony_buy'),cls:'linf'},
@@ -1605,37 +1598,37 @@ function aMine(){
   let p=0;function step(){p=Math.min(100,p+Math.random()*20+9);if(pf)pf.style.width=p+'%';
     if(p<100)setTimeout(step,50);else setTimeout(doMine,165);}setTimeout(step,55);}
 
-function doMine(){
+async function doMine(){
   const logs=[];G.turn++;
   G.depthM+=Math.floor(Math.random()*80+40);
   if(hU('reactor'))G.hp=Math.min(G.maxHp,G.hp+3);
 
   // ── ERA 4: kolónia + korporácia ───────────────────────────────
+  let era4EnergyOk=true;
   if(G.era===4&&G.colony){
     const c=G.colony;
     // Corp poplatok
     if(G.corpContract&&G.corpFee>0){
       if(G.credits>=G.corpFee){G.credits-=G.corpFee;}
       else{logs.push({txt:t('mine_colony_fee_warn'),cls:'ldng'});G.corpContract=false;}}
-    // Spotreba jedla
-    const foodEat=c.workers;
-    if(c.food>=foodEat){c.food-=foodEat;}
-    else{c.workers=Math.max(0,c.workers-1);c.food=0;
-      logs.push({txt:t('mine_food_depleted',{n:c.workers}),cls:'ldng'});}
-    // Spotreba energie
+    // Spotreba energie z minihry
     const engUse=Math.max(1,Math.floor(c.workers*.8));
-    if(c.energy>=engUse){c.energy-=engUse;}
-    else{c.energy=0;logs.push({txt:t('mine_energy_depleted'),cls:'lwarn'});}
+    try{
+      const r=await fetch('/api/energy_use',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({amount:engUse})});
+      const d=await r.json();
+      G.mineEnergy=d.energy;
+      era4EnergyOk=d.ok;
+      if(!d.ok)logs.push({txt:t('mine_energy_depleted'),cls:'lwarn'});
+      else if(d.energy<engUse*3)logs.push({txt:t('mine_energy_low',{n:Math.round(d.energy)}),cls:'lwarn'});
+    }catch(e){/* offline — energy OK by default */}
     // Medicína — pasívna HP regen
     if(c.medicine>0){G.hp=Math.min(G.maxHp,G.hp+Math.floor(c.medicine/20));c.medicine=Math.max(0,c.medicine-1);}
-    // Varovania pri nízkych zásobách
-    if(c.food<c.workers*2&&c.food>0)logs.push({txt:t('mine_food_low',{n:c.food}),cls:'lwarn'});
-    if(c.energy<10)logs.push({txt:t('mine_energy_low',{n:c.energy}),cls:'lwarn'});
   }
 
   const dep=curDepthObj();
   const era4WorkerBonus=(G.era===4&&G.colony)?Math.min(5,Math.floor(G.colony.workers/2)):0;
-  const era4EnergyOk=G.era<4||(G.colony&&G.colony.energy>0);
   const mb=mBonus()+(era4EnergyOk?era4WorkerBonus:0),hQ=hU('quantum'),hS=hU('scanner'),hC=hU('chrono'),hSon=hU('sonar');
   const sTypes=['Normal','Normal','Normal','Hot','Toxic','Rich','Deep','Frozen','Ancient'];
   const secPool=sTypes.filter(s=>s!=='Deep'||G.depth>=3);
@@ -1762,12 +1755,7 @@ function aShop(){
   if(G.era===4&&G.colony){
     const c=G.colony;
     const supplies=[
-      {id:'food50',   label:t('food50'),   cost:800,  act:()=>{c.food=Math.min(200,c.food+50);}},
-      {id:'food100',  label:t('food100'),  cost:1500, act:()=>{c.food=Math.min(200,c.food+100);}},
-      {id:'energy50', label:t('energy50'), cost:600,  act:()=>{c.energy=Math.min(200,c.energy+50);}},
-      {id:'energy100',label:t('energy100'),cost:1100, act:()=>{c.energy=Math.min(200,c.energy+100);}},
       {id:'med30',    label:t('med30'),    cost:900,  act:()=>{c.medicine=Math.min(100,c.medicine+30);}},
-      {id:'fuel20',   label:t('fuel20'),   cost:1200, act:()=>{c.fuel=Math.min(100,c.fuel+20);}},
       {id:'recruit1', label:t('recruit'),  cost:2000, act:()=>{if(c.workers<c.housing)c.workers++;else c.housing++;c.workers=Math.min(c.workers,c.housing);}},
       {id:'housing5', label:t('housing5'), cost:3500, act:()=>{c.housing+=5;}},
     ];
@@ -1814,16 +1802,11 @@ function weaponBuy(id){const w=WEAPONS.find(x=>x.id===id);
 function buySupply(id){
   if(G.era<4||!G.colony)return;
   const c=G.colony;
-  const costs={food50:800,food100:1500,energy50:600,energy100:1100,med30:900,fuel20:1200,recruit1:2000,housing5:3500};
+  const costs={med30:900,recruit1:2000,housing5:3500};
   const cost=costs[id];if(!cost)return;
   if(G.credits<cost){sFX('danger');rG([{txt:t('buy_no_cr',{n:cost-G.credits}),cls:'ldng'}]);return;}
   G.credits-=cost;
-  if(id==='food50')c.food=Math.min(200,c.food+50);
-  else if(id==='food100')c.food=Math.min(200,c.food+100);
-  else if(id==='energy50')c.energy=Math.min(200,c.energy+50);
-  else if(id==='energy100')c.energy=Math.min(200,c.energy+100);
-  else if(id==='med30')c.medicine=Math.min(100,c.medicine+30);
-  else if(id==='fuel20')c.fuel=Math.min(100,c.fuel+20);
+  if(id==='med30')c.medicine=Math.min(100,c.medicine+30);
   else if(id==='recruit1'){c.housing=Math.max(c.housing,c.workers+1);c.workers++;}
   else if(id==='housing5')c.housing+=5;
   sFX('buy');flash('rgba(170,238,255,.15)');
@@ -2298,7 +2281,8 @@ function startEra4(withCorp){
   G.corpFee=withCorp?400:0;
   G.currentPlanet4='zyrax8';
   G.planet=4;
-  G.colony={workers:5,food:80,energy:100,housing:10,medicine:40,fuel:30};
+  G.colony={workers:5,housing:10,medicine:40};
+  G.mineEnergy=0; // synced from /api/energy
   // Pridaj 4.0 minerály do inventára ak ešte nie sú
   for(const m of MINERALS_4)if(!G.inv[m.id])G.inv[m.id]={qty:0,pl:0};
   sFX('win');flash('rgba(255,136,255,.25)');
@@ -2313,37 +2297,35 @@ function startEra4(withCorp){
 
 function curPlanet4(){return PLANETS_4.find(p=>p.id===G.currentPlanet4)||PLANETS_4[0];}
 
-function aColony(){
+async function aColony(){
   if(G.era<4){rG([{txt:t('era4_colony_locked'),cls:'ldng'}]);return;}
   const c=G.colony;
+  // Načítaj aktuálnu energiu z minihry
+  try{const r=await fetch('/api/energy');const d=await r.json();G.mineEnergy=d.energy||0;}catch(e){}
   const workerBonus=Math.min(5,Math.floor(c.workers/2));
-  const foodPerTurn=c.workers;
   const energyPerTurn=Math.max(1,Math.floor(c.workers*0.8));
-  const foodWarn=c.food<c.workers*3;
-  const energyWarn=c.energy<c.workers*3;
+  const energyWarn=G.mineEnergy<energyPerTurn*5;
   const bar=(v,max,col)=>{const p=Math.min(100,v/max*100);
     return `<div style="display:flex;align-items:center;gap:.4rem;margin:.15rem 0">
       <div style="flex:1;height:8px;background:#180f00;border:1px solid #333;overflow:hidden;">
         <div style="height:100%;width:${p}%;background:${col};transition:width .3s"></div></div>
-      <span style="color:${col};font-size:.88rem;white-space:nowrap">${v}/${max}</span></div>`;};
+      <span style="color:${col};font-size:.88rem;white-space:nowrap">${Math.round(v)}/${max}</span></div>`;};
+  const maxE=1000;
   setScr(`<div class="panel" style="min-width:700px;">
     ${corners()}
     <div class="st">${t('colony_title',{name:G.username.toUpperCase()})}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 1.2rem;font-size:1rem;margin-bottom:.5rem">
       <div><span class="hl">${t('colony_workers')}</span> ${c.workers}/${c.housing} <small style="color:var(--ad)">(${t('colony_worker_bonus',{n:workerBonus})})</small></div>
       <div><span class="hl">${t('colony_housing')}</span> ${c.housing}</div>
-      <div style="color:${foodWarn?'var(--r)':'inherit'}"><span class="hl">${t('colony_food')}</span> ${c.food} <small style="color:var(--ad)">(${t('colony_food_per_turn',{n:foodPerTurn})})</small>
-        ${bar(c.food,200,'#aadd44')}</div>
-      <div style="color:${energyWarn?'var(--r)':'inherit'}"><span class="hl">${t('colony_energy')}</span> ${c.energy} <small style="color:var(--ad)">(${t('colony_energy_per_turn',{n:energyPerTurn})})</small>
-        ${bar(c.energy,200,'#38d1ff')}</div>
+      <div style="color:${energyWarn?'var(--r)':'inherit'}" colspan="2"><span class="hl">${t('colony_energy')}</span> ${Math.round(G.mineEnergy)} <small style="color:var(--ad)">(${t('colony_energy_per_turn',{n:energyPerTurn})})</small>
+        ${bar(G.mineEnergy,maxE,'#38d1ff')}</div>
       <div><span class="hl">${t('colony_medicine')}</span> ${c.medicine} <small style="color:var(--ad)">${t('colony_medicine_hint')}</small>
         ${bar(c.medicine,100,'#ff69ff')}</div>
-      <div><span class="hl">${t('colony_fuel')}</span> ${c.fuel} <small style="color:var(--ad)">${t('colony_fuel_hint')}</small>
-        ${bar(c.fuel,100,'#ff9944')}</div>
     </div>
-    ${foodWarn?`<div style="color:var(--r);font-size:.9rem">${t('colony_food_warn')}</div>`:''}
     ${energyWarn?`<div style="color:var(--r);font-size:.9rem">${t('colony_energy_warn')}</div>`:''}
     <div style="font-size:.85rem;color:var(--ad);margin:.4rem 0">${t('colony_hint')}</div>
+    <a href="/energy" style="display:block;text-align:center;color:#38d1ff;font-size:.95rem;margin:.5rem 0;text-decoration:none">
+      ⚡ Energetická minihra — vybuduj elektrárne →</a>
     <div class="mg g1" style="margin-top:.5rem;">
       <button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button>
     </div>
@@ -2356,8 +2338,8 @@ function aPlanetTravel(){
   for(const p of PLANETS_4){
     const isCurrent=p.id===G.currentPlanet4;
     const isLocked=p.locked&&!G.omegaUnlocked;
-    const canAfford=G.credits>=p.travelCR&&G.colony.fuel>=(p.travelCR>0?5:0);
-    const fuelNeed=p.travelCR>0?5:0;
+    const canAfford=G.credits>=p.travelCR;
+    const fuelNeed=0;
     html+=`<div class="si${isCurrent?' owned':''}${isLocked?' owned':''}" onclick="${isCurrent||isLocked?'':canAfford?`doTravel('${p.id}')`:''}" style="${isLocked?'opacity:.35':''}">
       <span>
         <strong style="color:${p.col}">${p.name}</strong>
@@ -2367,7 +2349,7 @@ function aPlanetTravel(){
         ${isCurrent?t('travel_here')
           :isLocked?t('travel_locked_btn')
           :p.travelCR===0?t('travel_base')
-          :t('travel_cost',{cr:p.travelCR,fuel:fuelNeed})}</span></div>`;
+          :t('travel_cost',{cr:p.travelCR})}</span></div>`;
   }
   // Omega unlock panel
   let omegaHtml='';
@@ -2383,7 +2365,7 @@ function aPlanetTravel(){
   setScr(`<div class="panel" style="min-width:700px;max-height:92vh;overflow-y:auto;">
     ${corners()}
     <div class="st">${t('travel_title')}<span style="color:${curPlanet4().col}">${curPlanet4().name}</span></div>
-    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">${t('travel_fuel_cr',{fuel:G.colony.fuel,cr:G.credits,rp:G.rp})}</div>
+    <div style="font-size:.85rem;color:var(--ad);margin-bottom:.4rem">${t('travel_fuel_cr',{cr:G.credits,rp:G.rp})}</div>
     ${html}
     ${omegaHtml}
     <div class="mg g1" style="margin-top:.5rem;"><button class="btn bbig" onclick="sFX('click');rG([])">${t('btn_back')}</button></div>
@@ -2392,14 +2374,13 @@ function aPlanetTravel(){
 
 function doTravel(planetId){
   const p=PLANETS_4.find(x=>x.id===planetId);if(!p)return;
-  const fuelNeed=p.travelCR>0?5:0;
-  if(G.credits<p.travelCR||G.colony.fuel<fuelNeed){
+  if(G.credits<p.travelCR){
     sFX('danger');rG([{txt:t('travel_no_cr_fuel'),cls:'ldng'}]);return;}
-  G.credits-=p.travelCR;G.colony.fuel-=fuelNeed;
+  G.credits-=p.travelCR;
   G.currentPlanet4=planetId;G.depth=1;G.depthM=0;
   sFX('depth');flash(p.col+'22');
   rG([{txt:t('travel_flying',{planet:p.name}),cls:'lrar'},
-      {txt:t('travel_expenses',{cr:p.travelCR,fuel:fuelNeed}),cls:'lwarn'},
+      {txt:t('travel_expenses',{cr:p.travelCR}),cls:'lwarn'},
       {txt:`  ${p.desc}`,cls:'linf'}]);}
 
 function aCorpDashboard(){

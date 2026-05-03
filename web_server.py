@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v5.0 — Web Server
+KOZMICKÉ BANE v5.3 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -240,6 +240,33 @@ PLANT_TYPES = {
         "fuel_type": "uranium", "fuel_per_hr": 1,
         "energy_per_hr": 200, "max_count": 1,
     },
+    "wind": {
+        "id": "wind", "icon": "🌬",
+        "name_sk": "Veterná farma", "name_en": "Wind farm",
+        "desc_sk": "Bez paliva. Produkuje 20 energie/hod. Max 4.",
+        "desc_en": "No fuel needed. Produces 20 energy/hr. Max 4.",
+        "build_cost": 12000,
+        "fuel_type": None, "fuel_per_hr": 0,
+        "energy_per_hr": 20, "max_count": 4,
+    },
+    "gas": {
+        "id": "gas", "icon": "🔥",
+        "name_sk": "Plynová elektráreň", "name_en": "Gas power plant",
+        "desc_sk": "Spotrebuje 2 tony plynu/hod. Produkuje 75 energie/hod.",
+        "desc_en": "Consumes 2 gas tons/hr. Produces 75 energy/hr.",
+        "build_cost": 22000,
+        "fuel_type": "gas", "fuel_per_hr": 2,
+        "energy_per_hr": 75, "max_count": 2,
+    },
+    "geothermal": {
+        "id": "geothermal", "icon": "🌋",
+        "name_sk": "Geotermálna elektráreň", "name_en": "Geothermal plant",
+        "desc_sk": "Bez paliva. Produkuje 55 energie/hod. Max 2.",
+        "desc_en": "No fuel needed. Produces 55 energy/hr. Max 2.",
+        "build_cost": 40000,
+        "fuel_type": None, "fuel_per_hr": 0,
+        "energy_per_hr": 55, "max_count": 2,
+    },
 }
 
 # ── Jadrová vetva — Fáza 1 ──────────────────────────────────────────────────
@@ -353,6 +380,29 @@ SOVIET_OPTS = [
      "label_en": "Refuse — no reward, no risk"},
 ]
 
+# ── Kaskádová havária (RBMK) ─────────────────────────────────────────────────
+# Kombinácia faktorov: únava operátora + nestabilita + tlak dispečingu
+CASCADE_FACTORS = {
+    "xenon_high":    {"threshold": 75,  "weight": 3},  # xenón > 75 = kumuluje sa
+    "dispatch_on":   {"weight": 2},                     # aktívny dispatch kontrakt
+    "online_refuel": {"weight": 2},                     # RBMK online refueling zapnutý
+    "safety_low":    {"threshold": 1,   "weight": 2},  # safety < 1 = nechránený
+    "heat_high":     {"threshold": 70,  "weight": 2},  # prolif heat > 70
+}
+CASCADE_THRESHOLD = 5   # suma váh pre spustenie kaskády (max ~11)
+CASCADE_OFFLINE_H = 24  # poškodenie kaskády = 24h offline (vs normálnych 10h)
+CASCADE_HEAT_DUMP = 45  # kaskáda dumpa +45 proliferačnej horúčavy
+
+# ── Viacúrovňový sodíkový únik (Breeder / BN-800) ────────────────────────────
+SODIUM_LEVELS = [
+    {"name": "minor",  "prob_mult": 0.6, "offline_h": 6,  "heat_add": 15,
+     "name_sk": "Menší sodíkový únik", "name_en": "Minor sodium leak"},
+    {"name": "major",  "prob_mult": 0.3, "offline_h": 18, "heat_add": 40,
+     "name_sk": "Veľký sodíkový únik — POŽIAR", "name_en": "Major sodium leak — FIRE"},
+    {"name": "explosion", "prob_mult": 0.1, "offline_h": 48, "heat_add": 60,
+     "name_sk": "EXPLÓZIA SODÍKA — TOTÁLNA HAVÁRIA", "name_en": "SODIUM EXPLOSION — TOTAL LOSS"},
+]
+
 # ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
 # feed_per_rod = t surového uránu na 1 palivový článok
 # energy_mult  = koľkonásobok energie oproti štandardu dáva každý článok
@@ -432,6 +482,12 @@ FUEL_SHOP = [
         "id": "coal", "icon": "⛏",
         "name_sk": "Uhlie", "name_en": "Coal",
         "pack_qty": 20, "pack_cost": 800,
+        "unit_sk": "ton", "unit_en": "tons",
+    },
+    {
+        "id": "gas", "icon": "🔥",
+        "name_sk": "Zemný plyn", "name_en": "Natural gas",
+        "pack_qty": 30, "pack_cost": 1800,
         "unit_sk": "ton", "unit_en": "tons",
     },
     {
@@ -763,6 +819,7 @@ def _ensure_profile_fields(profile):
     profile.setdefault("energy", 0.0)
     profile.setdefault("fuel", {})
     profile["fuel"].setdefault("coal", 0.0)
+    profile["fuel"].setdefault("gas", 0.0)
     profile["fuel"].setdefault("uranium", 0.0)       # LEU-3
     profile["fuel"].setdefault("uranium_leu5", 0.0)   # LEU-5
     profile["fuel"].setdefault("uranium_heu20", 0.0)  # HEU-20
@@ -793,6 +850,7 @@ def _ensure_profile_fields(profile):
     profile.setdefault("last_event_at", 0.0)
     profile.setdefault("rbmk_online_refuel", False)    # Fáza 7: RBMK online refueling
     profile.setdefault("soviet_event_pending", None)   # Fáza 7: sovietský event
+    profile.setdefault("cascade_score", 0.0)           # kaskádová havária: akumulovaný risk score
     return profile
 
 
@@ -1046,37 +1104,103 @@ def _energy_tick(uname_upper):
     if "rbmk" in profile.get("plants", []) and profile.get("xenon_level", 0) >= XENON_DANGER:
         haz_mult = max(haz_mult, 2.5)
 
+    # ── Kaskádová havária (RBMK) ─────────────────────────────────────
+    has_rbmk_plant = "rbmk" in profile.get("plants", [])
+    if has_rbmk_plant and "rbmk" not in damaged_ids:
+        cs = 0.0
+        if profile.get("xenon_level", 0) >= CASCADE_FACTORS["xenon_high"]["threshold"]:
+            cs += CASCADE_FACTORS["xenon_high"]["weight"]
+        if profile.get("dispatch_pending") is not None:
+            cs += CASCADE_FACTORS["dispatch_on"]["weight"]
+        if profile.get("rbmk_online_refuel", False):
+            cs += CASCADE_FACTORS["online_refuel"]["weight"]
+        if safety < CASCADE_FACTORS["safety_low"]["threshold"]:
+            cs += CASCADE_FACTORS["safety_low"]["weight"]
+        if profile.get("proliferation_heat", 0) >= CASCADE_FACTORS["heat_high"]["threshold"]:
+            cs += CASCADE_FACTORS["heat_high"]["weight"]
+        cs *= haz_mult
+        profile["cascade_score"] = round(min(15.0, cs), 2)
+        if cs >= CASCADE_THRESHOLD:
+            active_dmg.append({
+                "plant_id": "rbmk", "damage_type": "cascade_accident",
+                "expires_at": now + CASCADE_OFFLINE_H * 3600,
+            })
+            damaged_ids.add("rbmk")
+            profile["energy"] = round(profile.get("energy", 0) * 0.20, 1)
+            profile["proliferation_heat"] = min(100.0, round(
+                profile.get("proliferation_heat", 0) + CASCADE_HEAT_DUMP, 2))
+            profile["xenon_level"] = 0.0
+            profile["rbmk_online_refuel"] = False
+            profile["cascade_score"] = 0.0
+            hazard_event = "cascade"
+
     for haz_type in ("rbmk", "breeder", "bn800"):
+        if hazard_event:
+            break
         if haz_type in profile.get("plants", []) and haz_type not in damaged_ids:
             prob = HAZARD_PROBS.get(haz_type, [0])[min(safety, 3)] * haz_mult
             if random.random() < prob:
-                active_dmg.append({
-                    "plant_id":    haz_type,
-                    "damage_type": "sodium_leak" if haz_type in ("breeder", "bn800") else "meltdown",
-                    "expires_at":  now + DAMAGE_OFFLINE_H * 3600,
-                })
-                damaged_ids.add(haz_type)
-                # Vedľajšie efekty havárie
-                profile["energy"] = round(profile.get("energy", 0) * 0.50, 1)
                 if haz_type in ("breeder", "bn800"):
+                    # Viacúrovňový sodíkový únik — náhodná závažnosť
+                    r = random.random()
+                    lvl = SODIUM_LEVELS[0]
+                    acc = 0.0
+                    for sl in SODIUM_LEVELS:
+                        acc += sl["prob_mult"]
+                        if r <= acc:
+                            lvl = sl
+                            break
+                    offline_h = lvl["offline_h"]
+                    heat_add  = lvl["heat_add"]
+                    dmg_type  = lvl["name"]
                     profile["proliferation_heat"] = min(100.0, round(
-                        profile.get("proliferation_heat", 0) + 35, 2))
+                        profile.get("proliferation_heat", 0) + heat_add, 2))
                     profile["raw_materials"]["u238"] = round(
                         profile.get("raw_materials", {}).get("u238", 0) * 0.60, 2)
+                    sodium_lvl_sk = lvl["name_sk"]
+                    sodium_lvl_en = lvl["name_en"]
+                else:
+                    offline_h = DAMAGE_OFFLINE_H
+                    dmg_type  = "meltdown"
+                    sodium_lvl_sk = sodium_lvl_en = ""
+                active_dmg.append({
+                    "plant_id":    haz_type,
+                    "damage_type": dmg_type,
+                    "expires_at":  now + offline_h * 3600,
+                })
+                damaged_ids.add(haz_type)
+                profile["energy"] = round(profile.get("energy", 0) * 0.50, 1)
                 hazard_event = haz_type
-                break  # jedna havária na tick stačí
 
     profile["damaged_plants"] = active_dmg
     if hazard_event:
-        dn_map = {"rbmk": "RBMK", "breeder": "Breeder", "bn800": "BN-800"}
+        dn_map = {"rbmk": "RBMK", "breeder": "Breeder", "bn800": "BN-800", "cascade": "RBMK"}
         dmg_name = dn_map.get(hazard_event, hazard_event)
-        profile["last_event"] = {
-            "name_sk": f"💥 HAVÁRIA — {dmg_name}!",
-            "name_en": f"💥 ACCIDENT — {dmg_name}!",
-            "desc_sk": f"Reaktor poškodený. Offline {DAMAGE_OFFLINE_H}h. Oprav ho cez /{'/energy'}.",
-            "desc_en": f"Reactor damaged. Offline {DAMAGE_OFFLINE_H}h. Repair via /energy.",
-            "type": "neg", "ts": now,
-        }
+        if hazard_event == "cascade":
+            profile["last_event"] = {
+                "name_sk": "💥 KASKÁDOVÁ HAVÁRIA — RBMK!",
+                "name_en": "💥 CASCADE ACCIDENT — RBMK!",
+                "desc_sk": f"Kombinácia faktorov spôsobila kaskádu. Offline {CASCADE_OFFLINE_H}h. Energia −80%.",
+                "desc_en": f"Combined factors caused cascade. Offline {CASCADE_OFFLINE_H}h. Energy −80%.",
+                "type": "neg", "ts": now,
+            }
+        elif hazard_event in ("breeder", "bn800"):
+            h_str = str(int(active_dmg[-1]["expires_at"] - now) // 3600) + "h"
+            profile["last_event"] = {
+                "name_sk": f"💥 {sodium_lvl_sk} — {dmg_name}!",
+                "name_en": f"💥 {sodium_lvl_en} — {dmg_name}!",
+                "desc_sk": f"Reaktor offline {h_str}. Oprav cez /energy.",
+                "desc_en": f"Reactor offline {h_str}. Repair via /energy.",
+                "type": "neg", "ts": now,
+            }
+        else:
+            profile["last_event"] = {
+                "name_sk": f"💥 HAVÁRIA — {dmg_name}!",
+                "name_en": f"💥 ACCIDENT — {dmg_name}!",
+                "desc_sk": f"Reaktor poškodený. Offline {DAMAGE_OFFLINE_H}h. Oprav ho cez /{'/energy'}.",
+                "desc_en": f"Reactor damaged. Offline {DAMAGE_OFFLINE_H}h. Repair via /energy.",
+                "type": "neg", "ts": now,
+            }
 
     profile["last_tick"] = now
 
@@ -3027,6 +3151,37 @@ def api_sync_career():
         return json.dumps(e)
     return json.dumps(career.get(key, {}))
 
+@app.route("/api/energy")
+def api_energy_status():
+    """Vráti aktuálnu energiu hráča z energetickej minihry."""
+    if not _require_session():
+        return '{"error":"unauthorized"}', 401
+    profile = _energy_tick(_uname())
+    return json.dumps({"energy": round(profile.get("energy", 0.0), 1),
+                        "max_energy": MAX_ENERGY})
+
+
+@app.route("/api/energy_use", methods=["POST"])
+def api_energy_use():
+    """Spotrebuje N energie z minihry. Vracia {ok, energy}."""
+    if not _require_session():
+        return '{"ok":false,"energy":0}', 401
+    try:
+        amount = float((request.json or {}).get("amount", 0))
+    except (ValueError, TypeError):
+        return '{"ok":false,"energy":0}', 400
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    current = float(profile.get("energy", 0.0))
+    ok = current >= amount
+    new_val = max(0.0, round(current - amount, 1)) if ok else current
+    profile["energy"] = new_val
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return json.dumps({"ok": ok, "energy": new_val})
+
+
 @app.route("/api/get_all_careers")
 def api_get_all_careers():
     """Verejný globálny leaderboard — všetky účty zoradené podľa career_cr."""
@@ -4428,6 +4583,22 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             xen_warn = f'<div style="color:#ff9900;font-size:.82em">⚠ {Lp("Výkon RBMK znížený na 55%","RBMK output reduced to 55%")}</div>'
         elif xenon_val >= XENON_WARN:
             xen_warn = f'<div style="color:#ff9900;font-size:.82em">{Lp("Xenón rastie. Zváž purge.","Xenon rising. Consider purge.")}</div>'
+        # Kaskádové skóre
+        cas_score = profile.get("cascade_score", 0.0)
+        if cas_score >= CASCADE_THRESHOLD:
+            cas_col = "#ff3a3a"
+            cas_warn = f'<div style="color:#ff3a3a;font-size:.82em">🔴 {Lp("KASKÁDOVÁ HAVÁRIA HROZÍ!","CASCADE ACCIDENT IMMINENT!")}</div>'
+        elif cas_score >= CASCADE_THRESHOLD * 0.6:
+            cas_col = "#ff9900"
+            cas_warn = f'<div style="color:#ff9900;font-size:.82em">⚠ {Lp("Kaskádové faktory sa hromadia!","Cascade factors accumulating!")}</div>'
+        else:
+            cas_col = "#2a7a45"
+            cas_warn = ""
+        xen_warn += (
+            f'<div class="row"><span class="lbl">{Lp("Kaskádové skóre","Cascade score")}</span>'
+            f'<span style="color:{cas_col}">{cas_score:.1f} / {CASCADE_THRESHOLD}</span></div>'
+            f'{cas_warn}'
+        )
         purge_btn_txt = Lp("Vypnúť PURGE","Stop PURGE") if purge_on else Lp("Spustiť XENÓN PURGE","Start XENON PURGE")
         purge_note    = Lp("(−40 E/hod, rýchle čistenie xenónu)","(−40 E/hr, fast xenon cleanup)")
         hm_html = ""
