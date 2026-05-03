@@ -644,14 +644,27 @@ def validate_pw(pw):
     return True, "OK"
 
 def load_jf(path, default=None):
-    """Načítaj zo lokálneho súboru (po startup warm-up je vždy aktuálny)."""
+    """
+    Načítaj dáta. Primárne z lokálneho súboru (cache po warm-up).
+    Ak lokálny súbor chýba alebo je prázdny → fallback na Upstash.
+    """
     try:
         p = pathlib.Path(path)
         if p.exists():
             with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if data:  # neprázdny → vráť
+                return data
     except Exception:
         pass
+    # Lokálny súbor chýba alebo je prázdny — skús Upstash
+    if _KV_URL:
+        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
+        kv_data = _kv_get(key)
+        if kv_data is not None:
+            # Obnov lokálny cache
+            _atomic_write(path, json.dumps(kv_data, ensure_ascii=False, indent=2))
+            return kv_data
     return default if default is not None else {}
 
 def save_jf(path, data):
@@ -4220,7 +4233,7 @@ def energy_build():
     save_jf(KB_CAREER, career)
 
     data = load_jf(KB_ENERGY, {})
-    data[uname]["plants"].append(plant_id)
+    data.setdefault(uname, profile)["plants"].append(plant_id)
     save_jf(KB_ENERGY, data)
 
     return redirect("/energy")
