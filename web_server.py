@@ -1,5 +1,5 @@
 """
-KOZMICKÉ BANE v4.8 — Web Server
+KOZMICKÉ BANE v5.0 — Web Server
 Spustenie: python web_server.py
            alebo cez game_login_system.py → [2] Web
 """
@@ -334,6 +334,25 @@ MOX_U238_PER_ROD  = 3.0    # t U-238 na 1 MOX rod
 MOX_ENERGY_MULT   = 1.35   # MOX efektivita oproti LEU-3
 DISPOSAL_CR       = 400    # CR na likvidáciu 1 spent fuel rodu
 
+# ── Jadrová vetva — Fáza 7: BN-800, RBMK online refueling, WG-Pu ───────────
+WG_PU_PER_HR_BN800      = 0.05    # zbraňové Pu/hod z BN-800
+WG_PU_PER_HR_RBMK_OL    = 0.05    # zbraňové Pu/hod z RBMK online refuelingu
+WG_PU_HEAT_PER_UNIT     = 50.0    # proliferačná horúčava za predaj 1 WG-Pu
+WG_PU_SELL_CR           = 25000   # CR za predaj 1 WG-Pu (čierny trh)
+ONLINE_REFUEL_HEAT_HR   = 5.0     # extra horúčava/hod pri RBMK online refuelingu
+SOVIET_EVENT_PROB       = 0.04    # šanca sovietskeho eventu na tick
+SOVIET_OPTS = [
+    {"id": "accept",  "cr": 20000, "wg_pu": 5.0, "heat": 40, "hazard_mult": 4.0, "hours": 8,
+     "label_sk": "Prijať — tajný reaktor (+20 000 CR, +5 WG-Pu, riziko ×4 na 8h)",
+     "label_en": "Accept — secret reactor (+20,000 CR, +5 WG-Pu, risk ×4 for 8h)"},
+    {"id": "partial", "cr":  5000, "wg_pu": 1.0, "heat": 15, "hazard_mult": 2.0, "hours": 4,
+     "label_sk": "Čiastočne — minimálna spolupráca (+5 000 CR, +1 WG-Pu, riziko ×2 na 4h)",
+     "label_en": "Partial — minimal cooperation (+5,000 CR, +1 WG-Pu, risk ×2 for 4h)"},
+    {"id": "refuse",  "cr":     0, "wg_pu": 0.0, "heat":  0, "hazard_mult": 1.0, "hours": 0,
+     "label_sk": "Odmietnuť — bez odmeny, bez rizika",
+     "label_en": "Refuse — no reward, no risk"},
+]
+
 # ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
 # feed_per_rod = t surového uránu na 1 palivový článok
 # energy_mult  = koľkonásobok energie oproti štandardu dáva každý článok
@@ -382,6 +401,21 @@ PLANT_TYPES["breeder"] = {
     "pu_per_hr": 0.30,           # plutónia za hodinu
     "max_count": 1,
 }
+
+PLANT_TYPES["bn800"] = {
+    "id": "bn800", "icon": "⚡☢",
+    "name_sk": "BN-800 (pokročilý breeder)", "name_en": "BN-800 (advanced breeder)",
+    "desc_sk": "Spotrebuje 3 t U-238/hod. Vyrába Pu-239 + WG-Pu + 180 E/hod. Vyžaduje Breeder.",
+    "desc_en": "Consumes 3 t U-238/hr. Breeds Pu-239 + WG-Pu + 180 E/hr. Requires Breeder.",
+    "build_cost": 200000,
+    "fuel_type": "u238_breed",
+    "fuel_per_hr": 3.0,
+    "energy_per_hr": 180,
+    "pu_per_hr": 0.50,
+    "max_count": 1,
+}
+HAZARD_PROBS["bn800"] = [0.03, 0.012, 0.004, 0.001]
+REPAIR_COSTS["bn800"] = 25000
 
 PLANT_TYPES["fusion"] = {
     "id": "fusion", "icon": "🌟",
@@ -734,6 +768,7 @@ def _ensure_profile_fields(profile):
     profile["fuel"].setdefault("uranium_heu20", 0.0)  # HEU-20
     profile["fuel"].setdefault("pu239", 0.0)          # plutónium
     profile["fuel"].setdefault("helium", 0.0)
+    profile["fuel"].setdefault("wg_pu", 0.0)          # zbraňové plutónium (WG-Pu)
     profile["raw_materials"].setdefault("u238", 0.0)   # ochudobnený urán
     profile.setdefault("proliferation_heat", 0.0)      # 0.0–100.0
     profile.setdefault("safety_level", 0)
@@ -756,6 +791,8 @@ def _ensure_profile_fields(profile):
     profile.setdefault("active_events", [])
     profile.setdefault("last_event", None)
     profile.setdefault("last_event_at", 0.0)
+    profile.setdefault("rbmk_online_refuel", False)    # Fáza 7: RBMK online refueling
+    profile.setdefault("soviet_event_pending", None)   # Fáza 7: sovietský event
     return profile
 
 
@@ -880,7 +917,7 @@ def _energy_tick(uname_upper):
                                           SPENT_FUEL_RATE * spent_produced, 3)
                 profile["raw_materials"] = raw
         elif pt["fuel_type"] == "u238_breed":
-            # Breeder reaktor — spotrebuje U-238, vyrobí Pu-239 + energiu
+            # Breeder / BN-800 — spotrebuje U-238, vyrobí Pu-239 + energiu
             raw = profile.get("raw_materials", {})
             u238_avail = raw.get("u238", 0.0)
             if u238_avail > 0:
@@ -893,6 +930,13 @@ def _energy_tick(uname_upper):
                 # Proliferačná horúčava rastie s produkciou Pu
                 heat = profile.get("proliferation_heat", 0.0)
                 profile["proliferation_heat"] = min(100.0, round(heat + pu_produced * 8, 2))
+                # BN-800: produkuje tiež zbraňové plutónium
+                if plant_id == "bn800":
+                    wg_produced = round(WG_PU_PER_HR_BN800 * hrs, 3)
+                    fuel["wg_pu"] = round(fuel.get("wg_pu", 0.0) + wg_produced, 3)
+                    # WG-Pu produkcia zvyšuje proliferačnú horúčavu viac
+                    profile["proliferation_heat"] = min(100.0, round(
+                        profile["proliferation_heat"] + wg_produced * WG_PU_HEAT_PER_UNIT * 0.3, 2))
         else:
             avail = fuel.get(pt["fuel_type"], 0.0)
             if avail <= 0:
@@ -963,10 +1007,23 @@ def _energy_tick(uname_upper):
     profile["energy"] = round(min(energy, MAX_ENERGY), 1)
     profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
 
+    # ── RBMK online refueling — generuje WG-Pu + extra horúčava ────
+    if has_rbmk_running and profile.get("rbmk_online_refuel", False):
+        wg_ol = round(WG_PU_PER_HR_RBMK_OL * elapsed_hrs, 3)
+        fuel["wg_pu"] = round(fuel.get("wg_pu", 0.0) + wg_ol, 3)
+        heat_ol = profile.get("proliferation_heat", 0.0)
+        profile["proliferation_heat"] = min(100.0, round(
+            heat_ol + ONLINE_REFUEL_HEAT_HR * elapsed_hrs, 2))
+
     # Dispatch pressure event
     has_pending = profile.get("dispatch_pending") is not None
     if has_rbmk_running and not has_pending and random.random() < DISPATCH_PROB:
         profile["dispatch_pending"] = {"ts": now}
+
+    # Soviet event (tajný sovietský reaktor) — len ak má RBMK a žiadny aktívny
+    has_soviet = profile.get("soviet_event_pending") is not None
+    if has_rbmk_running and not has_soviet and random.random() < SOVIET_EVENT_PROB:
+        profile["soviet_event_pending"] = {"ts": now}
 
     # Proliferačná horúčava — prirodzený pokles 1.5 bodu/hod
     heat = profile.get("proliferation_heat", 0.0)
@@ -989,19 +1046,19 @@ def _energy_tick(uname_upper):
     if "rbmk" in profile.get("plants", []) and profile.get("xenon_level", 0) >= XENON_DANGER:
         haz_mult = max(haz_mult, 2.5)
 
-    for haz_type in ("rbmk", "breeder"):
+    for haz_type in ("rbmk", "breeder", "bn800"):
         if haz_type in profile.get("plants", []) and haz_type not in damaged_ids:
             prob = HAZARD_PROBS.get(haz_type, [0])[min(safety, 3)] * haz_mult
             if random.random() < prob:
                 active_dmg.append({
                     "plant_id":    haz_type,
-                    "damage_type": "sodium_leak" if haz_type == "breeder" else "meltdown",
+                    "damage_type": "sodium_leak" if haz_type in ("breeder", "bn800") else "meltdown",
                     "expires_at":  now + DAMAGE_OFFLINE_H * 3600,
                 })
                 damaged_ids.add(haz_type)
                 # Vedľajšie efekty havárie
                 profile["energy"] = round(profile.get("energy", 0) * 0.50, 1)
-                if haz_type == "breeder":
+                if haz_type in ("breeder", "bn800"):
                     profile["proliferation_heat"] = min(100.0, round(
                         profile.get("proliferation_heat", 0) + 35, 2))
                     profile["raw_materials"]["u238"] = round(
@@ -1011,7 +1068,8 @@ def _energy_tick(uname_upper):
 
     profile["damaged_plants"] = active_dmg
     if hazard_event:
-        dmg_name = "RBMK" if hazard_event == "rbmk" else "Breeder"
+        dn_map = {"rbmk": "RBMK", "breeder": "Breeder", "bn800": "BN-800"}
+        dmg_name = dn_map.get(hazard_event, hazard_event)
         profile["last_event"] = {
             "name_sk": f"💥 HAVÁRIA — {dmg_name}!",
             "name_en": f"💥 ACCIDENT — {dmg_name}!",
@@ -4023,9 +4081,10 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
     # ── Proliferačná horúčava ─────────────────────────────────────
     p_heat = profile.get("proliferation_heat", 0.0)
     pu239_stock = fuel.get("pu239", 0.0)
+    wg_pu_stock = fuel.get("wg_pu", 0.0)
     heat_col = "#ff3a3a" if p_heat >= 80 else "#ff9900" if p_heat >= 50 else "#2a7a45"
     heat_html = ""
-    if pu239_stock > 0 or p_heat > 0:
+    if pu239_stock > 0 or wg_pu_stock > 0 or p_heat > 0:
         heat_warn = ""
         if p_heat >= 80:
             heat_warn = (f'<div style="color:#ff3a3a;font-size:.82em">'
@@ -4035,11 +4094,34 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             heat_warn = (f'<div style="color:#ff9900;font-size:.82em">'
                          f'&#9888; {Lp("Medzinárodný dohľad — predaj energie za 90% ceny","International monitoring — energy sells at 90% price")}'
                          f'</div>')
+        wg_row = ""
+        if wg_pu_stock > 0:
+            wg_can_sell = int(wg_pu_stock)
+            wg_sell_form = ""
+            if wg_can_sell >= 1:
+                wg_sell_form = (
+                    f'<form method="POST" action="/energy/wg_sell" '
+                    f'style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">'
+                    f'<input type="number" name="qty" value="1" min="1" max="{wg_can_sell}" '
+                    f'style="width:55px;background:#000;border:1px solid #ff3a3a;color:#ffcfcf;'
+                    f'font-family:inherit;font-size:.9em;padding:2px 4px">'
+                    f'<button class="btn-buy" style="border-color:#ff3a3a;color:#ff3a3a">'
+                    f'&#9760; {Lp("Predaj WG-Pu","Sell WG-Pu")} +{WG_PU_SELL_CR:,} CR/{Lp("ks","ea")}'
+                    f'</button>'
+                    f'<span style="color:#7a0000;font-size:.82em">heat+{WG_PU_HEAT_PER_UNIT:.0f}/{Lp("ks","ea")}</span>'
+                    f'</form>'
+                )
+            wg_row = (
+                f'<div class="row"><span class="lbl">☣ WG-Pu239</span>'
+                f'<span style="color:#ff3a3a">{wg_pu_stock:.3f} {Lp("ks","units")}</span></div>'
+                f'{wg_sell_form}'
+            )
         heat_html = (
             f'<div class="card" style="border-color:{heat_col}44">'
             f'<div class="card-title" style="color:{heat_col}">&#9762; {Lp("JADROVÉ MATERIÁLY","NUCLEAR MATERIALS")}</div>'
             f'<div class="row"><span class="lbl">☣ Pu-239</span>'
             f'<span class="val">{pu239_stock:.2f} {Lp("ks","rods")}</span></div>'
+            f'{wg_row}'
             f'<div class="row"><span class="lbl">{Lp("Proliferačná horúčava","Proliferation heat")}</span>'
             f'<span style="color:{heat_col}">{p_heat:.1f}% '
             f'{"🔴" if p_heat>=80 else "🟠" if p_heat>=50 else "🟢"}</span></div>'
@@ -4106,16 +4188,25 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             )
 
     # ── Elektrárne na kúpu
+    _PLANT_PREREQS = {"bn800": "breeder"}  # bn800 vyžaduje breeder
     buy_plants_html = ""
     for pid, pt in PLANT_TYPES.items():
         name = Lp(pt["name_sk"], pt["name_en"])
         desc = Lp(pt["desc_sk"], pt["desc_en"])
         cnt  = plant_counts.get(pid, 0)
+        prereq = _PLANT_PREREQS.get(pid)
+        missing_prereq = prereq and prereq not in profile.get("plants", [])
         can_afford = cr >= pt["build_cost"]
         at_max     = cnt >= pt["max_count"]
-        disabled   = "disabled" if (not can_afford or at_max) else ""
+        disabled   = "disabled" if (not can_afford or at_max or missing_prereq) else ""
         note       = f'({Lp("max","max")} {pt["max_count"]})' if at_max else ""
-        warn       = f'<span class="warn"> — {Lp("nedostatok CR","not enough CR")}</span>' if (not can_afford and not at_max) else ""
+        if missing_prereq:
+            prereq_name = Lp(PLANT_TYPES[prereq]["name_sk"], PLANT_TYPES[prereq]["name_en"])
+            warn = f'<span class="warn"> — {Lp("vyžaduje","requires")} {prereq_name}</span>'
+        elif not can_afford and not at_max:
+            warn = f'<span class="warn"> — {Lp("nedostatok CR","not enough CR")}</span>'
+        else:
+            warn = ""
         buy_plants_html += (
             f'<div class="plant-row">'
             f'<div><span style="color:#cfffcf">{pt["icon"]} {name}</span>'
@@ -4243,7 +4334,8 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
     damaged_now = [d for d in profile.get("damaged_plants", []) if d["expires_at"] > now]
     has_rbmk    = "rbmk" in profile.get("plants", [])
     has_breeder = "breeder" in profile.get("plants", [])
-    show_safety = has_rbmk or has_breeder or safety_lvl > 0
+    has_bn800   = "bn800" in profile.get("plants", [])
+    show_safety = has_rbmk or has_breeder or has_bn800 or safety_lvl > 0
 
     # ── Dispatch pressure ────────────────────────────────────────
     dispatch_html = ""
@@ -4266,6 +4358,52 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
             f'{Lp("Sieťový dispečer žiada dodatočný výkon. Rozhodni sa:","Grid operator demands extra output. Choose:")}'
             f'</div>'
             f'{opts_html}'
+            f'</div>'
+        )
+
+    # ── Soviet event ─────────────────────────────────────────────
+    soviet_html = ""
+    if profile.get("soviet_event_pending"):
+        s_opts_html = ""
+        for o in SOVIET_OPTS:
+            label = Lp(o["label_sk"], o["label_en"])
+            s_color = "#ff3a3a" if o["id"] == "accept" else "#2a7a45" if o["id"] == "refuse" else "#ff9900"
+            s_opts_html += (
+                f'<form method="POST" action="/energy/soviet_event" style="margin:3px 0">'
+                f'<input type="hidden" name="choice" value="{o["id"]}">'
+                f'<button class="btn-buy" style="width:100%;text-align:left;'
+                f'border-color:{s_color};color:{s_color}">'
+                f'{label}</button></form>'
+            )
+        soviet_html = (
+            f'<div class="card" style="border-color:#ff3a3a88;background:#0d0000">'
+            f'<div class="card-title" style="color:#ff3a3a">'
+            f'☢ {Lp("UTAJENÁ SOVIETSKÁ ELEKTRÁREŇ","SECRET SOVIET PLANT")}</div>'
+            f'<div style="color:#ffcfcf;font-size:.9em;margin-bottom:8px">'
+            f'{Lp("Neidentifikovaná jadrová elektráreň žiada koodinovaný výkon. Riziko je reálne.","Unidentified nuclear facility requests coordinated output. The risk is real.")}'
+            f'</div>'
+            f'{s_opts_html}'
+            f'</div>'
+        )
+
+    # ── RBMK online refueling ─────────────────────────────────────
+    rbmk_ol_html = ""
+    if has_rbmk:
+        ol_on = profile.get("rbmk_online_refuel", False)
+        ol_col = "#ff3a3a" if ol_on else "#ff9900"
+        ol_btn_txt = Lp("Vypnúť online refueling", "Disable online refueling") if ol_on else Lp("Zapnúť RBMK online refueling", "Enable RBMK online refueling")
+        wg_rate = WG_PU_PER_HR_RBMK_OL
+        rbmk_ol_html = (
+            f'<div class="card" style="border-color:{ol_col}44;background:#0d0500">'
+            f'<div class="card-title" style="color:{ol_col}">⚙☢ {Lp("RBMK — ONLINE PALIVOVÁ VÝMENA","RBMK — ONLINE FUEL REPLACEMENT")}</div>'
+            f'<div style="color:#ffcfcf;font-size:.85em;margin-bottom:6px">'
+            f'{Lp(f"RBMK nevypína pri výmene paliva — produkuje +{wg_rate}/hod WG-Pu a zvyšuje proliferačnú horúčavu +{ONLINE_REFUEL_HEAT_HR}/hod.",f"RBMK stays online during fuel swap — generates +{wg_rate}/hr WG-Pu and raises proliferation heat +{ONLINE_REFUEL_HEAT_HR}/hr.")}'
+            f'</div>'
+            f'<div class="row"><span class="lbl">{Lp("Stav","Status")}</span>'
+            f'<span style="color:{ol_col}">{"🟢 " + Lp("AKTÍVNY","ACTIVE") if ol_on else "⚫ " + Lp("NEAKTÍVNY","INACTIVE")}</span></div>'
+            f'<form method="POST" action="/energy/rbmk_online" style="margin-top:6px">'
+            f'<button class="btn-buy" style="border-color:{ol_col};color:{ol_col};width:100%">'
+            f'{"⚙ " + ol_btn_txt}</button></form>'
             f'</div>'
         )
 
@@ -4433,7 +4571,9 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 <div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.6 &nbsp;|&nbsp; &#946;</div>
 {last_ev_html}
 {active_ev_html}
+{soviet_html}
 {dispatch_html}
+{rbmk_ol_html}
 {xenon_html}
 {_hazard_html}
 {spent_html}
@@ -4511,6 +4651,11 @@ def energy_build():
     profile = _energy_tick(uname)
 
     cnt = Counter(profile.get("plants", [])).get(plant_id, 0)
+
+    _prereqs = {"bn800": "breeder"}
+    prereq = _prereqs.get(plant_id)
+    if prereq and prereq not in profile.get("plants", []):
+        return redirect("/energy")
 
     if cr < pt["build_cost"] or cnt >= pt["max_count"]:
         return redirect("/energy")
@@ -4836,6 +4981,95 @@ def energy_spent_fuel():
     save_jf(KB_CAREER, career)
     data = load_jf(KB_ENERGY, {})
     data.setdefault(uname, profile)
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+# ── Jadrová vetva — Fáza 7 routes ──────────────────────────────────────────
+
+@app.route("/energy/rbmk_online", methods=["POST"])
+def energy_rbmk_online():
+    """Prepni RBMK online refueling mód (generuje WG-Pu)."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    if "rbmk" not in profile.get("plants", []):
+        return redirect("/energy")
+    profile["rbmk_online_refuel"] = not profile.get("rbmk_online_refuel", False)
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/soviet_event", methods=["POST"])
+def energy_soviet_event():
+    """Odpoveď na sovietský event."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    choice  = request.form.get("choice", "refuse")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    opt     = next((o for o in SOVIET_OPTS if o["id"] == choice), SOVIET_OPTS[2])
+
+    profile["soviet_event_pending"] = None
+
+    if opt["cr"] or opt["wg_pu"]:
+        career = load_jf(KB_CAREER, {})
+        entry  = career.get(uname, {})
+        entry["career_cr"] = entry.get("career_cr", 0) + opt["cr"]
+        career[uname] = entry
+        save_jf(KB_CAREER, career)
+
+    if opt["wg_pu"] > 0:
+        profile.setdefault("fuel", {})["wg_pu"] = round(
+            profile["fuel"].get("wg_pu", 0.0) + opt["wg_pu"], 3)
+    if opt["heat"] > 0:
+        profile["proliferation_heat"] = min(100.0, round(
+            profile.get("proliferation_heat", 0) + opt["heat"], 2))
+    if opt["hazard_mult"] > 1.0 and opt["hours"] > 0:
+        exp = time.time() + opt["hours"] * 3600
+        profile["hazard_mult_expires"] = exp
+        profile["hazard_mult_val"]     = max(profile.get("hazard_mult_val", 1.0), opt["hazard_mult"])
+
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/wg_sell", methods=["POST"])
+def energy_wg_sell():
+    """Predaj WG-Pu na čiernom trhu."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    try:
+        qty = max(1, int(request.form.get("qty", 1)))
+    except ValueError:
+        return redirect("/energy")
+
+    wg_avail = profile.get("fuel", {}).get("wg_pu", 0.0)
+    qty = min(qty, int(wg_avail))
+    if qty <= 0:
+        return redirect("/energy")
+
+    cr_gain = qty * WG_PU_SELL_CR
+    heat_gain = qty * WG_PU_HEAT_PER_UNIT
+    profile["fuel"]["wg_pu"] = round(wg_avail - qty, 3)
+    profile["proliferation_heat"] = min(100.0, round(
+        profile.get("proliferation_heat", 0) + heat_gain, 2))
+
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    entry["career_cr"] = entry.get("career_cr", 0) + cr_gain
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    data = load_jf(KB_ENERGY, {})
     data[uname] = profile
     save_jf(KB_ENERGY, data)
     return redirect("/energy")
