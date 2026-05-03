@@ -292,9 +292,35 @@ SAFETY_UPGRADES = [
 ]
 
 REPAIR_COSTS = {
-    "rbmk":    8000,   # CR na opravu poškodeného RBMK
-    "breeder": 20000,  # CR na opravu poškodeného breederu
+    "rbmk":    8000,
+    "breeder": 20000,
 }
+DAMAGE_OFFLINE_H = 10
+
+# ── Jadrová vetva — Fáza 5: Xenón + Dispatch ────────────────────────────────
+# Xenón-135 sa hromadí pri prevádzke RBMK — pri vysokých hodnotách znižuje výkon
+# a zvyšuje riziko havárie (ako pri Černobyle)
+XENON_RATE_RUN  =  3.0   # xenón/hod keď RBMK beží
+XENON_RATE_IDLE =  0.5   # xenón/hod keď RBMK je nečinný
+XENON_DECAY     =  1.5   # prirodzený pokles/hod
+XENON_PURGE_RATE = 18.0  # xenón/hod počas aktívneho purge (draho palivo)
+XENON_WARN      =  60    # od tejto hodnoty varuj hráča
+XENON_REDUCE    =  75    # od tejto hodnoty RBMK výkon × 0.55
+XENON_DANGER    =  88    # od tejto hodnoty hazard pravdepodobnosť × 2.5
+
+# Dispatch pressure — dispečing volá a žiada výkon
+DISPATCH_PROB   = 0.12   # šanca dispatch eventu na tick (ak má RBMK a žiadny aktívny)
+DISPATCH_OPTS   = [
+    {"id": "accept",  "cr": 8000,  "hazard_mult": 3.0, "hours": 4,
+     "label_sk": "Prijať kontrakt (+8000 CR, riziko ×3 na 4h)",
+     "label_en": "Accept contract (+8000 CR, risk ×3 for 4h)"},
+    {"id": "partial", "cr": 2500,  "hazard_mult": 1.5, "hours": 2,
+     "label_sk": "Čiastočne (+2500 CR, riziko ×1.5 na 2h)",
+     "label_en": "Partial (+2500 CR, risk ×1.5 for 2h)"},
+    {"id": "refuse",  "cr": -1000, "hazard_mult": 1.0, "hours": 0,
+     "label_sk": "Odmietnuť (−1000 CR, žiadne riziko)",
+     "label_en": "Refuse (−1000 CR, no extra risk)"},
+]
 DAMAGE_OFFLINE_H = 10  # hodín offline po havárii
 
 # ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
@@ -699,8 +725,14 @@ def _ensure_profile_fields(profile):
     profile["fuel"].setdefault("helium", 0.0)
     profile["raw_materials"].setdefault("u238", 0.0)   # ochudobnený urán
     profile.setdefault("proliferation_heat", 0.0)      # 0.0–100.0
-    profile.setdefault("safety_level", 0)             # 0–3
-    profile.setdefault("damaged_plants", [])          # [{plant_id, damage_type, expires_at}]
+    profile.setdefault("safety_level", 0)
+    profile.setdefault("damaged_plants", [])
+    profile.setdefault("xenon_level", 0.0)            # 0–100, RBMK xenón-135
+    profile.setdefault("xenon_purge", False)          # aktívny purge (spaľuje palivo 2×)
+    profile.setdefault("dispatch_pending", None)      # čakajúca dispatch ponuka
+    profile.setdefault("hazard_mult_expires", 0.0)    # timestamp kedy expiruje zvýšené riziko
+    profile.setdefault("hazard_mult_val", 1.0)        # aktuálny multiplikátor rizika
+    profile.setdefault("kalkar_converted", False)     # easter egg flag
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
@@ -855,6 +887,40 @@ def _energy_tick(uname_upper):
         raw[key] = round(raw.get(key, 0.0) + mt["rate_per_hr"] * elapsed_hrs, 2)
     profile["raw_materials"] = raw
 
+    # ── Xenón-135 (RBMK) ────────────────────────────────────────
+    has_rbmk_running = (
+        "rbmk" in profile.get("plants", []) and
+        "rbmk" not in {d["plant_id"] for d in profile.get("damaged_plants", [])}
+    )
+    xenon = profile.get("xenon_level", 0.0)
+    purge = profile.get("xenon_purge", False)
+    if has_rbmk_running:
+        if purge:
+            xenon = max(0.0, xenon - XENON_PURGE_RATE * elapsed_hrs)
+            # Purge spaľuje palivo 2× rýchlejšie — reducujeme energiu ako náklad
+            energy = max(0.0, energy - 40 * elapsed_hrs)
+        else:
+            xenon = min(100.0, xenon + XENON_RATE_RUN * elapsed_hrs)
+    else:
+        xenon = max(0.0, xenon - XENON_DECAY * elapsed_hrs +
+                   XENON_RATE_IDLE * elapsed_hrs if "rbmk" in profile.get("plants", []) else
+                   xenon - XENON_DECAY * elapsed_hrs)
+    profile["xenon_level"] = round(xenon, 2)
+
+    # Xenón redukuje výkon RBMK (aplikované spätne na energiu)
+    if has_rbmk_running and xenon >= XENON_REDUCE and not purge:
+        rbmk_pt = PLANT_TYPES.get("rbmk", {})
+        base_output = rbmk_pt.get("energy_per_hr", 300) * elapsed_hrs
+        energy = max(0.0, energy - base_output * 0.45)  # odober 45% výkonu
+
+    profile["energy"] = round(min(energy, MAX_ENERGY), 1)
+    profile["fuel"] = {k: round(v, 2) for k, v in fuel.items()}
+
+    # Dispatch pressure event
+    has_pending = profile.get("dispatch_pending") is not None
+    if has_rbmk_running and not has_pending and random.random() < DISPATCH_PROB:
+        profile["dispatch_pending"] = {"ts": now}
+
     # Proliferačná horúčava — prirodzený pokles 1.5 bodu/hod
     heat = profile.get("proliferation_heat", 0.0)
     profile["proliferation_heat"] = max(0.0, round(heat - 1.5 * elapsed_hrs, 2))
@@ -868,9 +934,17 @@ def _energy_tick(uname_upper):
     damaged_ids = {d["plant_id"] for d in active_dmg}
     hazard_event = None
 
+    # Hazard multiplikátor (dispatch, xenón)
+    haz_mult = profile.get("hazard_mult_val", 1.0)
+    if profile.get("hazard_mult_expires", 0) <= now:
+        haz_mult = 1.0
+        profile["hazard_mult_val"] = 1.0
+    if "rbmk" in profile.get("plants", []) and profile.get("xenon_level", 0) >= XENON_DANGER:
+        haz_mult = max(haz_mult, 2.5)
+
     for haz_type in ("rbmk", "breeder"):
         if haz_type in profile.get("plants", []) and haz_type not in damaged_ids:
-            prob = HAZARD_PROBS.get(haz_type, [0])[min(safety, 3)]
+            prob = HAZARD_PROBS.get(haz_type, [0])[min(safety, 3)] * haz_mult
             if random.random() < prob:
                 active_dmg.append({
                     "plant_id":    haz_type,
@@ -4061,6 +4135,86 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
     has_breeder = "breeder" in profile.get("plants", [])
     show_safety = has_rbmk or has_breeder or safety_lvl > 0
 
+    # ── Dispatch pressure ────────────────────────────────────────
+    dispatch_html = ""
+    if profile.get("dispatch_pending"):
+        opts_html = ""
+        for o in DISPATCH_OPTS:
+            label = Lp(o["label_sk"], o["label_en"])
+            opts_html += (
+                f'<form method="POST" action="/energy/dispatch" style="margin:3px 0">'
+                f'<input type="hidden" name="choice" value="{o["id"]}">'
+                f'<button class="btn-buy" style="width:100%;text-align:left;'
+                f'{"border-color:#ff9900;color:#ff9900" if o["id"]=="accept" else "border-color:#2a7a45;color:#2a7a45" if o["id"]=="refuse" else ""}">'
+                f'{label}</button></form>'
+            )
+        dispatch_html = (
+            f'<div class="card" style="border-color:#ff990088;background:#0d0900">'
+            f'<div class="card-title" style="color:#ff9900">'
+            f'📞 {Lp("DISPEČING — POŽIADAVKA NA VÝKON","DISPATCH — POWER DEMAND")}</div>'
+            f'<div style="color:#cfffcf;font-size:.9em;margin-bottom:8px">'
+            f'{Lp("Sieťový dispečer žiada dodatočný výkon. Rozhodni sa:","Grid operator demands extra output. Choose:")}'
+            f'</div>'
+            f'{opts_html}'
+            f'</div>'
+        )
+
+    # ── Xenón + Kalkar ───────────────────────────────────────────
+    xenon_html = ""
+    xenon_val  = profile.get("xenon_level", 0.0)
+    purge_on   = profile.get("xenon_purge", False)
+    hm_val     = profile.get("hazard_mult_val", 1.0)
+    hm_exp     = profile.get("hazard_mult_expires", 0.0)
+    kalkar_ok  = (
+        "rbmk" in profile.get("plants", []) and
+        xenon_val == 0.0 and
+        "rbmk" not in {d["plant_id"] for d in profile.get("damaged_plants", [])} and
+        not profile.get("kalkar_converted", False)
+    )
+    if "rbmk" in profile.get("plants", []):
+        xen_col  = "#ff3a3a" if xenon_val >= XENON_DANGER else "#ff9900" if xenon_val >= XENON_WARN else "#39ff6a"
+        xen_warn = ""
+        if xenon_val >= XENON_DANGER:
+            xen_warn = f'<div style="color:#ff3a3a;font-size:.82em">⚠ {Lp("KRITICKÁ HLADINA — riziko havárie ×2.5!","CRITICAL — accident risk ×2.5!")}</div>'
+        elif xenon_val >= XENON_REDUCE:
+            xen_warn = f'<div style="color:#ff9900;font-size:.82em">⚠ {Lp("Výkon RBMK znížený na 55%","RBMK output reduced to 55%")}</div>'
+        elif xenon_val >= XENON_WARN:
+            xen_warn = f'<div style="color:#ff9900;font-size:.82em">{Lp("Xenón rastie. Zváž purge.","Xenon rising. Consider purge.")}</div>'
+        purge_btn_txt = Lp("Vypnúť PURGE","Stop PURGE") if purge_on else Lp("Spustiť XENÓN PURGE","Start XENON PURGE")
+        purge_note    = Lp("(−40 E/hod, rýchle čistenie xenónu)","(−40 E/hr, fast xenon cleanup)")
+        hm_html = ""
+        if hm_val > 1.0 and hm_exp > now:
+            secs_hm = max(0, int(hm_exp - now))
+            hm_html = (f'<div style="color:#ff3a3a;font-size:.82em">'
+                       f'⚡ {Lp("Riziko havárie","Accident risk")} ×{hm_val:.1f} '
+                       f'({secs_hm//3600}h {(secs_hm%3600)//60:02d}m {Lp("zostatok","left")})'
+                       f'</div>')
+        kalkar_btn = ""
+        if kalkar_ok:
+            kalkar_btn = (
+                f'<form method="POST" action="/energy/kalkar" style="margin-top:8px">'
+                f'<button class="btn-buy" style="border-color:#ff88ff;color:#ff88ff;width:100%">'
+                f'🎢 {Lp("KALKAR — Konvertuj na zábavný park (+50 000 CR)","KALKAR — Convert to theme park (+50,000 CR)")}'
+                f'</button></form>'
+            )
+        xenon_html = (
+            f'<div class="card" style="border-color:{xen_col}44">'
+            f'<div class="card-title" style="color:{xen_col}">☢ {Lp("RBMK — XENÓN-135","RBMK — XENON-135")}</div>'
+            f'<div class="row"><span class="lbl">Xe-135</span>'
+            f'<span style="color:{xen_col}">{xenon_val:.1f} / 100</span></div>'
+            f'<div style="background:#0a0a0a;height:8px;border:1px solid {xen_col}33;margin:4px 0">'
+            f'<div style="height:100%;width:{xenon_val:.0f}%;background:{xen_col};transition:width .3s"></div>'
+            f'</div>'
+            f'{xen_warn}{hm_html}'
+            f'<form method="POST" action="/energy/xenon_purge" style="margin-top:6px">'
+            f'<button class="btn-buy" style="border-color:{"#39ff6a" if purge_on else "#ff9900"};'
+            f'color:{"#39ff6a" if purge_on else "#ff9900"}">'
+            f'{"⚙ "+purge_btn_txt}</button></form>'
+            f'<div style="color:#2a7a45;font-size:.82em;margin-top:2px">{purge_note}</div>'
+            f'{kalkar_btn}'
+            f'</div>'
+        )
+
     _hazard_html = ""
     if show_safety:
         # Poškodené reaktory
@@ -4169,6 +4323,8 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 <div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.6 &nbsp;|&nbsp; &#946;</div>
 {last_ev_html}
 {active_ev_html}
+{dispatch_html}
+{xenon_html}
 {_hazard_html}
 {heat_html}
 
@@ -4410,6 +4566,91 @@ def energy_repair():
     data[uname] = profile
     save_jf(KB_ENERGY, data)
     return redirect("/energy")
+
+
+# ── Jadrová vetva — Fáza 5: Xenón + Dispatch + Kalkar ───────────────────────
+
+@app.route("/energy/xenon_purge", methods=["POST"])
+def energy_xenon_purge():
+    """Toggle xenón purge mód pre RBMK."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    if "rbmk" not in profile.get("plants", []):
+        return redirect("/energy")
+    profile["xenon_purge"] = not profile.get("xenon_purge", False)
+    data = load_jf(KB_ENERGY, {})
+    data.setdefault(uname, profile)["xenon_purge"] = profile["xenon_purge"]
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/dispatch", methods=["POST"])
+def energy_dispatch():
+    """Odpoveď na dispatch pressure ponuku."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    choice = request.form.get("choice", "refuse")
+    opt    = next((o for o in DISPATCH_OPTS if o["id"] == choice), DISPATCH_OPTS[2])
+    uname  = _uname()
+    profile = _energy_tick(uname)
+    if not profile.get("dispatch_pending"):
+        return redirect("/energy")
+
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    cr_change = opt["cr"]
+    entry["career_cr"] = max(0, entry.get("career_cr", 0) + cr_change)
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    if opt["hazard_mult"] > 1.0:
+        now_t = time.time()
+        profile["hazard_mult_val"]     = opt["hazard_mult"]
+        profile["hazard_mult_expires"] = now_t + opt["hours"] * 3600
+
+    profile["dispatch_pending"] = None
+    data = load_jf(KB_ENERGY, {})
+    data.setdefault(uname, profile).update({
+        "dispatch_pending":    None,
+        "hazard_mult_val":     profile.get("hazard_mult_val", 1.0),
+        "hazard_mult_expires": profile.get("hazard_mult_expires", 0.0),
+    })
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
+
+
+@app.route("/energy/kalkar", methods=["POST"])
+def energy_kalkar():
+    """Kalkar easter egg — konvertuj nevyužitý RBMK na zábavný park."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    plants  = profile.get("plants", [])
+    # Podmienka: má RBMK, xenón = 0 (nikdy neprebehol), nie je poškodený
+    has_rbmk   = "rbmk" in plants
+    xenon_zero = profile.get("xenon_level", 0.0) == 0.0
+    not_damaged = "rbmk" not in {d["plant_id"] for d in profile.get("damaged_plants", [])}
+    already_done = profile.get("kalkar_converted", False)
+    if not (has_rbmk and xenon_zero and not_damaged and not already_done):
+        return redirect("/energy")
+
+    # Odober RBMK, daj bonus CR a set flag
+    plants.remove("rbmk")
+    profile["plants"]           = plants
+    profile["kalkar_converted"] = True
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    entry["career_cr"] = entry.get("career_cr", 0) + 50000
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+    data = load_jf(KB_ENERGY, {})
+    data.setdefault(uname, profile)["plants"]           = plants
+    data[uname]["kalkar_converted"] = True
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy?kalkar=1")
 
 
 # ── Fáza 2 jadrovej vetvy — obohacovacia minihra ────────────────────────────
