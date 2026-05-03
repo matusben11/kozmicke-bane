@@ -321,7 +321,18 @@ DISPATCH_OPTS   = [
      "label_sk": "Odmietnuť (−1000 CR, žiadne riziko)",
      "label_en": "Refuse (−1000 CR, no extra risk)"},
 ]
-DAMAGE_OFFLINE_H = 10  # hodín offline po havárii
+DAMAGE_OFFLINE_H = 10
+
+# ── Jadrová vetva — Fáza 6: Spent fuel + Palivový cyklus ────────────────────
+SPENT_FUEL_RATE   = 0.15   # vyhorených článkov/hod na jadrový/RBMK reaktor
+SPENT_FUEL_MAX    = 20     # max kapacita — pri prekročení: regulatory shutdown
+PUREX_RATIO       = 5      # 5 spent fuel rods → 1 Pu-239
+PUREX_HEAT        = 18     # proliferačná horúčava za každý Pu rod z PUREX
+PUREX_CR_PER_ROD  = 3000   # CR za reprocesing 1 Pu rodu
+MOX_PU_PER_ROD    = 0.5    # Pu-239 na 1 MOX rod
+MOX_U238_PER_ROD  = 3.0    # t U-238 na 1 MOX rod
+MOX_ENERGY_MULT   = 1.35   # MOX efektivita oproti LEU-3
+DISPOSAL_CR       = 400    # CR na likvidáciu 1 spent fuel rodu
 
 # ── Fáza 2 — obohacovanie minihra ───────────────────────────────────────────
 # feed_per_rod = t surového uránu na 1 palivový článok
@@ -732,7 +743,9 @@ def _ensure_profile_fields(profile):
     profile.setdefault("dispatch_pending", None)      # čakajúca dispatch ponuka
     profile.setdefault("hazard_mult_expires", 0.0)    # timestamp kedy expiruje zvýšené riziko
     profile.setdefault("hazard_mult_val", 1.0)        # aktuálny multiplikátor rizika
-    profile.setdefault("kalkar_converted", False)     # easter egg flag
+    profile.setdefault("kalkar_converted", False)
+    profile["raw_materials"].setdefault("spent_fuel", 0.0)  # vyhorené palivové články
+    profile["fuel"].setdefault("mox", 0.0)                  # MOX palivové články
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
@@ -835,12 +848,20 @@ def _energy_tick(uname_upper):
         if pt["fuel_type"] is None:
             energy += pt["energy_per_hr"] * elapsed_hrs * solar_mult
         elif pt["fuel_type"] == "uranium":
-            # Jadrové elektrárne — Pu-239 má prednosť, potom najlepší U-stupeň
-            pu_avail = fuel.get("pu239", 0.0)
+            # Jadrové elektrárne — poradie: Pu-239, MOX, HEU-20, LEU-5, LEU-3
+            spent_produced = 0.0
+            pu_avail  = fuel.get("pu239", 0.0)
+            mox_avail = fuel.get("mox", 0.0)
             if pu_avail > 0:
                 hrs = min(elapsed_hrs, pu_avail / pt["fuel_per_hr"])
-                energy += pt["energy_per_hr"] * hrs * 1.8  # Pu-239 mult
+                energy += pt["energy_per_hr"] * hrs * 1.8
                 fuel["pu239"] = max(0.0, pu_avail - hrs * pt["fuel_per_hr"])
+                spent_produced = hrs * pt["fuel_per_hr"]
+            elif mox_avail > 0:
+                hrs = min(elapsed_hrs, mox_avail / pt["fuel_per_hr"])
+                energy += pt["energy_per_hr"] * hrs * MOX_ENERGY_MULT
+                fuel["mox"] = max(0.0, mox_avail - hrs * pt["fuel_per_hr"])
+                spent_produced = hrs * pt["fuel_per_hr"]
             else:
                 for gid in _NUCLEAR_GRADE_ORDER:
                     g = _GRADE_BY_ID[gid]
@@ -850,7 +871,14 @@ def _energy_tick(uname_upper):
                     hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
                     energy += pt["energy_per_hr"] * hrs * g["energy_mult"]
                     fuel[g["fuel_key"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
+                    spent_produced = hrs * pt["fuel_per_hr"]
                     break
+            # Generuj vyhorené palivo
+            if spent_produced > 0:
+                raw = profile.get("raw_materials", {})
+                raw["spent_fuel"] = round(raw.get("spent_fuel", 0.0) +
+                                          SPENT_FUEL_RATE * spent_produced, 3)
+                profile["raw_materials"] = raw
         elif pt["fuel_type"] == "u238_breed":
             # Breeder reaktor — spotrebuje U-238, vyrobí Pu-239 + energiu
             raw = profile.get("raw_materials", {})
@@ -886,6 +914,25 @@ def _energy_tick(uname_upper):
         key = mt["produces"]
         raw[key] = round(raw.get(key, 0.0) + mt["rate_per_hr"] * elapsed_hrs, 2)
     profile["raw_materials"] = raw
+
+    # ── Regulatory shutdown (spent fuel) ────────────────────────
+    spent = profile.get("raw_materials", {}).get("spent_fuel", 0.0)
+    if spent > SPENT_FUEL_MAX:
+        nuclear_types = {"nuclear", "rbmk"}
+        damaged_ids_sf = {d["plant_id"] for d in profile.get("damaged_plants", [])}
+        for ntype in nuclear_types:
+            if ntype in profile.get("plants", []) and ntype not in damaged_ids_sf:
+                profile.setdefault("damaged_plants", []).append({
+                    "plant_id": ntype, "damage_type": "regulatory_shutdown",
+                    "expires_at": now + 6 * 3600,
+                })
+        profile["last_event"] = {
+            "name_sk": "🔒 REGULAČNÝ SHUTDOWN — Príliš veľa vyhorelého paliva!",
+            "name_en": "🔒 REGULATORY SHUTDOWN — Too much spent fuel!",
+            "desc_sk": "Jadrové elektrárne odstavené na 6h. Zlikviduj alebo reprocesuj palivo.",
+            "desc_en": "Nuclear plants shutdown for 6h. Dispose or reprocess spent fuel.",
+            "type": "neg", "ts": now,
+        }
 
     # ── Xenón-135 (RBMK) ────────────────────────────────────────
     has_rbmk_running = (
@@ -3910,7 +3957,70 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
   font-size:.85em;line-height:18px;color:#000;mix-blend-mode:difference;}
 </style>"""
 
-    # ── Proliferačná horúčava
+    # ── Vyhorené palivo ──────────────────────────────────────────
+    spent_f    = profile.get("raw_materials", {}).get("spent_fuel", 0.0)
+    mox_stock  = fuel.get("mox", 0.0)
+    has_nuclear = any(p in profile.get("plants", []) for p in ("nuclear", "rbmk"))
+    spent_html = ""
+    if has_nuclear or spent_f > 0 or mox_stock > 0:
+        warn_sf = ""
+        sf_col  = "#ff3a3a" if spent_f >= SPENT_FUEL_MAX else "#ff9900" if spent_f >= SPENT_FUEL_MAX * 0.7 else "#2a7a45"
+        if spent_f >= SPENT_FUEL_MAX:
+            warn_sf = f'<div style="color:#ff3a3a;font-size:.82em">🔒 {Lp("REGULATORY SHUTDOWN aktívny!","REGULATORY SHUTDOWN active!")}</div>'
+        elif spent_f >= SPENT_FUEL_MAX * 0.7:
+            warn_sf = f'<div style="color:#ff9900;font-size:.82em">⚠ {Lp("Kapacita spent fuel sa blíži limitu!","Spent fuel approaching capacity!")}</div>'
+        int_spent = int(spent_f)
+        purex_rods_out = int_spent // PUREX_RATIO
+        pu_avail_mox = fuel.get("pu239", 0.0)
+        u238_avail_mox = profile.get("raw_materials", {}).get("u238", 0.0)
+        max_mox = min(int_spent, int(u238_avail_mox / MOX_U238_PER_ROD), int(pu_avail_mox / MOX_PU_PER_ROD))
+        cr_dispose = int_spent * DISPOSAL_CR
+        cr_purex   = purex_rods_out * PUREX_CR_PER_ROD
+
+        def sf_form(action, qty_max, btn_label, btn_col, extra_note="", disabled=False):
+            d = "disabled" if disabled or qty_max < 1 else ""
+            return (
+                f'<form method="POST" action="/energy/spent_fuel" '
+                f'style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">'
+                f'<input type="hidden" name="action" value="{action}">'
+                f'<input type="number" name="qty" value="{min(qty_max,5)}" min="1" max="{qty_max}" '
+                f'style="width:60px;background:#000;border:1px solid #2a7a45;color:#cfffcf;'
+                f'font-family:inherit;font-size:.9em;padding:2px 4px">'
+                f'<button class="btn-buy" style="border-color:{btn_col};color:{btn_col}" {d}>'
+                f'{btn_label}</button>'
+                f'{"<span style=color:#2a7a45;font-size:.82em>" + extra_note + "</span>" if extra_note else ""}'
+                f'</form>'
+            )
+
+        lbl_spent   = Lp("Vyhorene clanky", "Spent rods")
+        lbl_fuel    = Lp("palivo", "fuel")
+        lbl_ks      = Lp("ks", "rods")
+        lbl_title   = Lp("VYHORENE PALIVO", "SPENT FUEL")
+        note_disp   = "-" + str(DISPOSAL_CR) + " CR/" + lbl_ks
+        note_purex  = "+" + str(purex_rods_out) + " Pu-239 | heat+" + str(purex_rods_out * PUREX_HEAT)
+        note_mox    = "potreb. " + str(MOX_PU_PER_ROD) + "/ks Pu + " + str(MOX_U238_PER_ROD) + "t U-238"
+        lbl_dispose = Lp("Likvidovat", "Dispose")
+        lbl_purex   = "PUREX ->" + str(purex_rods_out) + " Pu"
+        lbl_mox_btn = "MOX ->" + str(max_mox) + " rod"
+        form_dispose = sf_form("dispose", int_spent, lbl_dispose, "#7a7a7a",
+                                note_disp, cr >= cr_dispose) if int_spent > 0 else ""
+        form_purex   = sf_form("purex", int_spent, lbl_purex, "#ff44aa",
+                                note_purex, purex_rods_out >= 1 and cr >= cr_purex
+                                ) if purex_rods_out >= 1 else ""
+        form_mox     = sf_form("mox", max_mox, lbl_mox_btn, "#99ddff",
+                                note_mox, max_mox >= 1) if max_mox >= 1 else ""
+        spent_html = (
+            f'<div class="card" style="border-color:{sf_col}44">'
+            f'<div class="card-title" style="color:{sf_col}">&#9762; {lbl_title}</div>'
+            f'<div class="row"><span class="lbl">{lbl_spent}</span>'
+            f'<span style="color:{sf_col}">{spent_f:.1f} / {SPENT_FUEL_MAX}</span></div>'
+            f'<div class="row"><span class="lbl">MOX {lbl_fuel}</span>'
+            f'<span class="val">{mox_stock:.1f} {lbl_ks}</span></div>'
+            f'{warn_sf}{form_dispose}{form_purex}{form_mox}'
+            f'</div>'
+        )
+
+    # ── Proliferačná horúčava ─────────────────────────────────────
     p_heat = profile.get("proliferation_heat", 0.0)
     pu239_stock = fuel.get("pu239", 0.0)
     heat_col = "#ff3a3a" if p_heat >= 80 else "#ff9900" if p_heat >= 50 else "#2a7a45"
@@ -4326,6 +4436,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 {dispatch_html}
 {xenon_html}
 {_hazard_html}
+{spent_html}
 {heat_html}
 
 <div class="card">
@@ -4651,6 +4762,83 @@ def energy_kalkar():
     data[uname]["kalkar_converted"] = True
     save_jf(KB_ENERGY, data)
     return redirect("/energy?kalkar=1")
+
+
+# ── Jadrová vetva — Fáza 6: Spent fuel management ──────────────────────────
+
+@app.route("/energy/spent_fuel", methods=["POST"])
+def energy_spent_fuel():
+    """Správa vyhorených palivových článkov: disposal / PUREX / MOX."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    action   = request.form.get("action", "")
+    uname    = _uname()
+    profile  = _energy_tick(uname)
+    raw      = profile.get("raw_materials", {})
+    spent    = raw.get("spent_fuel", 0.0)
+    career   = load_jf(KB_CAREER, {})
+    entry    = career.get(uname, {})
+    cr       = entry.get("career_cr", 0)
+
+    try:
+        qty = max(1, int(request.form.get("qty", 1)))
+    except ValueError:
+        return redirect("/energy")
+
+    qty = min(qty, int(spent))
+    if qty <= 0:
+        return redirect("/energy")
+
+    if action == "dispose":
+        cost = qty * DISPOSAL_CR
+        if cr < cost:
+            return redirect("/energy")
+        entry["career_cr"] = cr - cost
+        raw["spent_fuel"]  = round(spent - qty, 3)
+        # Malý heat nárast za disposal
+        profile["proliferation_heat"] = min(100.0, round(
+            profile.get("proliferation_heat", 0) + qty * 0.5, 2))
+
+    elif action == "purex":
+        rods_out = qty // PUREX_RATIO
+        if rods_out < 1:
+            return redirect("/energy")
+        actual_qty = rods_out * PUREX_RATIO
+        cost = rods_out * PUREX_CR_PER_ROD
+        if cr < cost:
+            return redirect("/energy")
+        entry["career_cr"]   = cr - cost
+        raw["spent_fuel"]    = round(spent - actual_qty, 3)
+        profile.setdefault("fuel", {})
+        profile["fuel"]["pu239"] = round(profile["fuel"].get("pu239", 0) + rods_out, 3)
+        profile["proliferation_heat"] = min(100.0, round(
+            profile.get("proliferation_heat", 0) + rods_out * PUREX_HEAT, 2))
+
+    elif action == "mox":
+        u238_avail = raw.get("u238", 0.0)
+        pu_avail   = profile.get("fuel", {}).get("pu239", 0.0)
+        max_by_spent = qty
+        max_by_u238  = int(u238_avail / MOX_U238_PER_ROD)
+        max_by_pu    = int(pu_avail   / MOX_PU_PER_ROD)
+        mox_rods = min(max_by_spent, max_by_u238, max_by_pu)
+        if mox_rods < 1:
+            return redirect("/energy")
+        raw["spent_fuel"]     = round(spent - mox_rods, 3)
+        raw["u238"]           = round(u238_avail - mox_rods * MOX_U238_PER_ROD, 2)
+        profile["fuel"]["pu239"] = round(pu_avail - mox_rods * MOX_PU_PER_ROD, 3)
+        profile["fuel"]["mox"]   = round(profile["fuel"].get("mox", 0) + mox_rods, 3)
+        qty = mox_rods
+    else:
+        return redirect("/energy")
+
+    profile["raw_materials"] = raw
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+    data = load_jf(KB_ENERGY, {})
+    data.setdefault(uname, profile)
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
+    return redirect("/energy")
 
 
 # ── Fáza 2 jadrovej vetvy — obohacovacia minihra ────────────────────────────
