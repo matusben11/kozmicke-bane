@@ -504,7 +504,7 @@ FUEL_SHOP = [
     },
 ]
 
-MAX_ENERGY        = 1000  # maximálna kapacita zásobníka energie
+MAX_ENERGY        = 150000  # maximálna kapacita zásobníka energie
 BANKRUPT_GRACE_H  = 8     # hodín mŕtvej firmy pred auto-bankrotom
 BANKRUPT_SHARE    = 0.60  # podiel výťažku aukcie pre bankrotujúceho hráča
 BANKRUPT_DUR_H    = 2     # trvanie bankrotovej aukcie (hodiny)
