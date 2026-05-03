@@ -295,6 +295,19 @@ _GRADE_BY_KEY = {g["fuel_key"]: g for g in ENRICHMENT_GRADES}
 # Poradie tried pre jadrové elektrárne: najlepší stupeň sa spotrebuje prvý
 _NUCLEAR_GRADE_ORDER = ["heu20", "leu5", "leu3"]
 
+PLANT_TYPES["breeder"] = {
+    "id": "breeder", "icon": "♻☢",
+    "name_sk": "Breeder reaktor", "name_en": "Breeder reactor",
+    "desc_sk": "Spotrebuje 2 t U-238/hod. Vyrába Pu-239 + 120 energie/hod.",
+    "desc_en": "Consumes 2 t U-238/hr. Breeds Pu-239 + 120 energy/hr.",
+    "build_cost": 120000,
+    "fuel_type": "u238_breed",   # špeciálny typ — spracovaný nižšie v tiku
+    "fuel_per_hr": 2.0,
+    "energy_per_hr": 120,
+    "pu_per_hr": 0.30,           # plutónia za hodinu
+    "max_count": 1,
+}
+
 PLANT_TYPES["fusion"] = {
     "id": "fusion", "icon": "🌟",
     "name_sk": "Fúzny reaktor", "name_en": "Fusion reactor",
@@ -448,6 +461,16 @@ NPC_MARKET = [
         "note_sk": "Endgame komodita. Vzácnejšia ako zlato.",
         "note_en": "Endgame commodity. Rarer than gold.",
     },
+    {
+        "id": "pu239", "icon": "☣",
+        "name_sk": "Plutónium-239", "name_en": "Plutonium-239",
+        "unit_sk": "ks", "unit_en": "rods",
+        "npc_buys": 8000, "npc_sells": None,
+        "min_qty": 1, "step": 1,
+        "source": "fuel_pu239",
+        "note_sk": "NPC kupuje. Vysoká proliferačná horúčava pri predaji.",
+        "note_en": "NPC buys. High proliferation heat when selling.",
+    },
 ]
 
 # ── Fáza 4 — dynamický trh ──────────────────────────────────────────────────
@@ -461,7 +484,8 @@ MARKET_DYN = {
     "uranium": {"liq": 20,  "rev": 0.15,                "min_s": 600, "max_s": 4000},
     "oil":     {"liq": 100, "rev": 0.20, "min_b": 15,  "max_b": 250, "min_s": 20,  "max_s": 300},
     "gold":    {"liq": 25,  "rev": 0.10, "min_b": 150, "max_b": 3000, "min_s": 160, "max_s": 3200},
-    "platinum":{"liq": 12,  "rev": 0.08, "min_b": 400, "max_b": 8000, "min_s": 450, "max_s": 9000},
+    "platinum":{"liq": 12,  "rev": 0.08, "min_b": 400,  "max_b": 8000,  "min_s": 450,  "max_s": 9000},
+    "pu239":   {"liq": 5,   "rev": 0.05, "min_b": 3000, "max_b": 25000},
 }
 
 # ── Fáza 5a — Komoditné aukcie ──────────────────────────────────────────────
@@ -618,10 +642,12 @@ def _ensure_profile_fields(profile):
     profile.setdefault("fuel", {})
     profile["fuel"].setdefault("coal", 0.0)
     profile["fuel"].setdefault("uranium", 0.0)       # LEU-3
-    profile["fuel"].setdefault("uranium_leu5", 0.0)  # LEU-5
-    profile["fuel"].setdefault("uranium_heu20", 0.0) # HEU-20
+    profile["fuel"].setdefault("uranium_leu5", 0.0)   # LEU-5
+    profile["fuel"].setdefault("uranium_heu20", 0.0)  # HEU-20
+    profile["fuel"].setdefault("pu239", 0.0)          # plutónium
     profile["fuel"].setdefault("helium", 0.0)
-    profile["raw_materials"].setdefault("u238", 0.0)  # ochudobnený urán
+    profile["raw_materials"].setdefault("u238", 0.0)   # ochudobnený urán
+    profile.setdefault("proliferation_heat", 0.0)      # 0.0–100.0
     profile.setdefault("commodities", {})
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
@@ -719,16 +745,36 @@ def _energy_tick(uname_upper):
         if pt["fuel_type"] is None:
             energy += pt["energy_per_hr"] * elapsed_hrs * solar_mult
         elif pt["fuel_type"] == "uranium":
-            # Jadrové elektrárne — spotrebuj najlepší dostupný stupeň
-            for gid in _NUCLEAR_GRADE_ORDER:
-                g = _GRADE_BY_ID[gid]
-                avail = fuel.get(g["fuel_key"], 0.0)
-                if avail <= 0:
-                    continue
-                hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
-                energy += pt["energy_per_hr"] * hrs * g["energy_mult"]
-                fuel[g["fuel_key"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
-                break
+            # Jadrové elektrárne — Pu-239 má prednosť, potom najlepší U-stupeň
+            pu_avail = fuel.get("pu239", 0.0)
+            if pu_avail > 0:
+                hrs = min(elapsed_hrs, pu_avail / pt["fuel_per_hr"])
+                energy += pt["energy_per_hr"] * hrs * 1.8  # Pu-239 mult
+                fuel["pu239"] = max(0.0, pu_avail - hrs * pt["fuel_per_hr"])
+            else:
+                for gid in _NUCLEAR_GRADE_ORDER:
+                    g = _GRADE_BY_ID[gid]
+                    avail = fuel.get(g["fuel_key"], 0.0)
+                    if avail <= 0:
+                        continue
+                    hrs = min(elapsed_hrs, avail / pt["fuel_per_hr"])
+                    energy += pt["energy_per_hr"] * hrs * g["energy_mult"]
+                    fuel[g["fuel_key"]] = max(0.0, avail - hrs * pt["fuel_per_hr"])
+                    break
+        elif pt["fuel_type"] == "u238_breed":
+            # Breeder reaktor — spotrebuje U-238, vyrobí Pu-239 + energiu
+            raw = profile.get("raw_materials", {})
+            u238_avail = raw.get("u238", 0.0)
+            if u238_avail > 0:
+                hrs = min(elapsed_hrs, u238_avail / pt["fuel_per_hr"])
+                energy += pt["energy_per_hr"] * hrs
+                pu_produced = round(pt["pu_per_hr"] * hrs, 3)
+                fuel["pu239"] = round(fuel.get("pu239", 0.0) + pu_produced, 3)
+                raw["u238"] = round(u238_avail - hrs * pt["fuel_per_hr"], 2)
+                profile["raw_materials"] = raw
+                # Proliferačná horúčava rastie s produkciou Pu
+                heat = profile.get("proliferation_heat", 0.0)
+                profile["proliferation_heat"] = min(100.0, round(heat + pu_produced * 8, 2))
         else:
             avail = fuel.get(pt["fuel_type"], 0.0)
             if avail <= 0:
@@ -750,6 +796,11 @@ def _energy_tick(uname_upper):
         key = mt["produces"]
         raw[key] = round(raw.get(key, 0.0) + mt["rate_per_hr"] * elapsed_hrs, 2)
     profile["raw_materials"] = raw
+
+    # Proliferačná horúčava — prirodzený pokles 1.5 bodu/hod
+    heat = profile.get("proliferation_heat", 0.0)
+    profile["proliferation_heat"] = max(0.0, round(heat - 1.5 * elapsed_hrs, 2))
+
     profile["last_tick"] = now
 
     # ── Event trigger ────────────────────────────────────────────
@@ -3680,6 +3731,33 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
   font-size:.85em;line-height:18px;color:#000;mix-blend-mode:difference;}
 </style>"""
 
+    # ── Proliferačná horúčava
+    p_heat = profile.get("proliferation_heat", 0.0)
+    pu239_stock = fuel.get("pu239", 0.0)
+    heat_col = "#ff3a3a" if p_heat >= 80 else "#ff9900" if p_heat >= 50 else "#2a7a45"
+    heat_html = ""
+    if pu239_stock > 0 or p_heat > 0:
+        heat_warn = ""
+        if p_heat >= 80:
+            heat_warn = (f'<div style="color:#ff3a3a;font-size:.82em">'
+                         f'&#9888; {Lp("SANKCIE AKTÍVNE — predaj energie za 75% ceny","SANCTIONS ACTIVE — energy sells at 75% price")}'
+                         f'</div>')
+        elif p_heat >= 50:
+            heat_warn = (f'<div style="color:#ff9900;font-size:.82em">'
+                         f'&#9888; {Lp("Medzinárodný dohľad — predaj energie za 90% ceny","International monitoring — energy sells at 90% price")}'
+                         f'</div>')
+        heat_html = (
+            f'<div class="card" style="border-color:{heat_col}44">'
+            f'<div class="card-title" style="color:{heat_col}">&#9762; {Lp("JADROVÉ MATERIÁLY","NUCLEAR MATERIALS")}</div>'
+            f'<div class="row"><span class="lbl">☣ Pu-239</span>'
+            f'<span class="val">{pu239_stock:.2f} {Lp("ks","rods")}</span></div>'
+            f'<div class="row"><span class="lbl">{Lp("Proliferačná horúčava","Proliferation heat")}</span>'
+            f'<span style="color:{heat_col}">{p_heat:.1f}% '
+            f'{"🔴" if p_heat>=80 else "🟠" if p_heat>=50 else "🟢"}</span></div>'
+            f'{heat_warn}'
+            f'</div>'
+        )
+
     # ── Energy bar
     bar_pct = min(100, round(energy / MAX_ENERGY * 100))
     bar_html = (
@@ -3907,6 +3985,7 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
 <div class="sub">PILOT: {session['username'].upper()} &nbsp;|&nbsp; BETA v0.6 &nbsp;|&nbsp; &#946;</div>
 {last_ev_html}
 {active_ev_html}
+{heat_html}
 
 <div class="card">
   <div class="card-title">&#9889; {Lp("ENERGIA — ZÁSOBNÍK","ENERGY STORAGE")}</div>
@@ -4528,6 +4607,13 @@ def market_sell():
     for ae in profile.get("active_events", []):
         if ae["effect"] == "sell_bonus" and ae["expires_at"] > now_t:
             sell_mult = max(sell_mult, ae["value"])
+    # Proliferačná horúčava zníži cenu pre energiu
+    if item_id == "energy":
+        p_heat = profile.get("proliferation_heat", 0.0)
+        if p_heat >= 80:
+            sell_mult *= 0.75
+        elif p_heat >= 50:
+            sell_mult *= 0.90
     earnings = round(qty * price_b * sell_mult)
     _set_commodity_stock(profile, item["source"], stock - qty)
 
@@ -4542,6 +4628,15 @@ def market_sell():
     save_jf(KB_CAREER, career)
 
     _apply_price_impact(item_id, qty, "sell")
+
+    # Predaj Pu-239 zvyšuje proliferačnú horúčavu
+    if item_id == "pu239":
+        edata = load_jf(KB_ENERGY, {})
+        ep = edata.get(uname, {})
+        ep["proliferation_heat"] = min(100.0, round(
+            ep.get("proliferation_heat", 0.0) + qty * 12, 2))
+        edata[uname] = ep
+        save_jf(KB_ENERGY, edata)
 
     lang = session.get("lang", "sk")
     unit = item["unit_sk"] if lang != "en" else item["unit_en"]
