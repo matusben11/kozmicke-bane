@@ -4335,10 +4335,19 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
                     status   = f'<span class="idle">⏸ {Lp("NEČINNÁ — bez paliva","IDLE — no fuel")}</span>'
                     rate_str = "+0 E/hod"
                 fuel_str = f'<span style="color:#2a7a45;font-size:.85em"> — {fuel_name}: {fstock:.1f} {unit}</span>'
+            refund = round(pt["build_cost"] * 0.20)
             plants_html += (
                 f'<div class="plant-row">'
                 f'<span>{pt["icon"]} {name} ×{cnt}{fuel_str}</span>'
-                f'<span>{status} &nbsp; <span class="val">{rate_str}</span></span>'
+                f'<span style="display:flex;align-items:center;gap:6px">'
+                f'{status} &nbsp; <span class="val">{rate_str}</span>'
+                f'<form method="POST" action="/energy/demolish" style="display:inline;margin:0">'
+                f'<input type="hidden" name="plant_id" value="{pid}">'
+                f'<button class="btn-buy" style="border-color:#ff3a3a44;color:#ff6a6a;font-size:.78em;padding:1px 6px" '
+                f'title="{Lp("Zbúrať 1 kus","Demolish 1")} (+{refund:,} CR)">'
+                f'🗑 {refund:,}</button>'
+                f'</form>'
+                f'</span>'
                 f'</div>'
             )
 
@@ -4839,6 +4848,46 @@ def energy_build():
     data.setdefault(uname, profile)["plants"].append(plant_id)
     save_jf(KB_ENERGY, data)
 
+    return redirect("/energy")
+
+
+@app.route("/energy/demolish", methods=["POST"])
+def energy_demolish():
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    plant_id = request.form.get("plant_id", "").strip()
+    if plant_id not in PLANT_TYPES:
+        return redirect("/energy")
+
+    uname   = _uname()
+    profile = _energy_tick(uname)
+    plants  = profile.get("plants", [])
+
+    if plant_id not in plants:
+        return redirect("/energy")
+
+    # Odober jednu inštanciu
+    plants.remove(plant_id)
+
+    # Ak odstraňujeme posledný breeder a bn800 existuje, zbúraj aj bn800
+    _prereqs_reverse = {"breeder": "bn800"}
+    dep_plant = _prereqs_reverse.get(plant_id)
+    if dep_plant and plant_id not in plants and dep_plant in plants:
+        plants.remove(dep_plant)
+
+    # Refund 20 % stavebnej ceny
+    pt     = PLANT_TYPES[plant_id]
+    refund = round(pt["build_cost"] * 0.20)
+    career = load_jf(KB_CAREER, {})
+    entry  = career.get(uname, {})
+    entry["career_cr"] = entry.get("career_cr", 0) + refund
+    career[uname] = entry
+    save_jf(KB_CAREER, career)
+
+    profile["plants"] = plants
+    data = load_jf(KB_ENERGY, {})
+    data[uname] = profile
+    save_jf(KB_ENERGY, data)
     return redirect("/energy")
 
 
