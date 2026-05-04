@@ -275,7 +275,7 @@ const T = {
     'pol_title': '💎 LEŠTIACA STANICA',
     'pol_nano': ' — Nano Leštička ×3',
     'pol_basic': ' — Leštička ×2',
-    'pol_hint': 'Leštenie zvyšuje predajnú hodnotu. ★=×2  ★★=×3 (vyžaduje Nano Leštičku)',
+    'pol_hint': 'Leštenie zvyšuje predajnú hodnotu. Min. 5 ks. ★=×2  ★★=×3 (30% šanca zlyhania nano)',
     'pol_empty': 'prázdne',
     'pol_max': 'MAX',
     'pol_raw': 'RAW',
@@ -314,6 +314,9 @@ const T = {
     'pol_value': '   Nová hodnota: {val} CR/ks (×{mult})  |  −{cost} CR',
     'pol_profit': '   Predaj pre {mult}× zisk!',
     'pol_no_cr': '✗ Chýba {n} CR na leštenie.',
+    'pol_need_qty': '✗ Minimum {n} ks na leštenie',
+    'pol_nano_fail': '💥 NANO ZLYHALO: {sym} {name}  |  −{cost} CR',
+    'pol_nano_fail2': '   Materiál sa roztavil. Skús znova.',
     // depth
     'depth_descend': '▼ ZOSTUP NA {name} [L{n}]  — hĺbka {m}m',
     'depth_descend_warn': '  Vzácnejšie minerály, vyššia HP škoda. Buď opatrný.',
@@ -628,7 +631,7 @@ const T = {
     'pol_title': '💎 POLISHING STATION',
     'pol_nano': ' — Nano Polisher ×3',
     'pol_basic': ' — Polisher ×2',
-    'pol_hint': 'Polishing increases sale value. ★=×2  ★★=×3 (requires Nano Polisher)',
+    'pol_hint': 'Polishing increases sale value. Min. 5 pcs. ★=×2  ★★=×3 (30% nano fail chance)',
     'pol_empty': 'empty',
     'pol_max': 'MAX',
     'pol_raw': 'RAW',
@@ -667,6 +670,9 @@ const T = {
     'pol_value': '   New value: {val} CR/pc (×{mult})  |  −{cost} CR',
     'pol_profit': '   Sell for {mult}× profit!',
     'pol_no_cr': '✗ Missing {n} CR for polishing.',
+    'pol_need_qty': '✗ Minimum {n} pcs required',
+    'pol_nano_fail': '💥 NANO FAILED: {sym} {name}  |  −{cost} CR',
+    'pol_nano_fail2': '   Material melted. Try again.',
     // depth
     'depth_descend': '▼ DESCENDING TO {name} [L{n}]  — depth {m}m',
     'depth_descend_warn': '  Rarer minerals, higher HP damage. Be careful.',
@@ -1882,20 +1888,24 @@ function shopBuy(id){const u=UPGRADES.find(x=>x.id===id);
 // ══════════════════════════════════════════════════════════════
 function aPol(){
   const hasN2=hU('polisher2'),maxLv=hasN2?2:1;
-  const pCost=(m,lv)=>lv===0?Math.round(m.v*.6):Math.round(m.v*1.8);
+  const pCost=(m,lv)=>lv===0?Math.round(m.v*POL_COST_BASE):Math.round(m.v*POL_COST_NANO);
   const lbl=[t('pol_raw'),t('pol_polished'),t('pol_nano_done')];const lclr=['var(--ad)','#ffe066','#ff88ff'];
   let html='';
   for(const m of MINERALS){const s=G.inv[m.id]||{qty:0,pl:0};
-    const empty=s.qty<=0,atMax=s.pl>=maxLv,cost=empty?0:pCost(m,s.pl),afford=G.credits>=cost;
+    const notEnough=s.qty<POL_MIN_QTY&&s.pl<maxLv;
+    const empty=s.qty<=0,atMax=s.pl>=maxLv,cost=notEnough?0:pCost(m,s.pl),afford=G.credits>=cost;
+    const isNano=s.pl===1;
     const nm=m.v*(s.pl===0?2:3);
-    html+=`<div class="pi${empty?' mt0':''}" onclick="${empty||atMax?'':afford?`doPol('${m.id}')`:(`showPolErr(${cost})`)}">
-      <span style="display:flex;align-items:center;gap:.45rem">
+    const failNote=isNano&&!atMax&&!notEnough?`<span style="color:#ff6a6a;font-size:.8rem"> ⚠${Math.round(POL_FAIL_NANO*100)}% zlyhanie</span>`:'';
+    const cantPol=empty||atMax||notEnough;
+    html+=`<div class="pi${empty?' mt0':''}" onclick="${cantPol?'':afford?`doPol('${m.id}')`:(`showPolErr(${cost})`)}">
+      <span style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap">
         <span style="color:${m.col}">${m.sym}</span><strong>${m.name}</strong>
         <span class="pg" style="color:${lclr[s.pl]}">${lbl[s.pl]}</span>
         <span style="color:var(--ad);font-size:.85rem">qty:${s.qty}</span>
+        ${failNote}
       </span>
-      <span style="font-size:.88rem">${atMax?`<span style="color:var(--g)">${t('pol_max')}</span>`:empty?`<span style="opacity:.28">${t('pol_empty')}</span>`:
-        `<span style="color:${afford?'var(--a)':'var(--r)'}">${cost} CR → ${nm} CR/ks</span>`}</span></div>`;}
+      <span style="font-size:.88rem">${atMax?`<span style="color:var(--g)">${t('pol_max')}</span>`:empty?`<span style="opacity:.28">${t('pol_empty')}</span>`:notEnough?`<span style="color:var(--r);font-size:.82rem">${t('pol_need_qty',{n:POL_MIN_QTY})}</span>`:`<span style="color:${afford?'var(--a)':'var(--r)'}">${cost} CR → ${nm} CR/ks</span>`}</span></div>`;}
   setScr(`<div class="panel" style="min-width:720px;max-height:92vh;overflow-y:auto;">
     ${corners()}
     <div class="st">${t('pol_title')}${hasN2?t('pol_nano'):t('pol_basic')}  · ${G.credits} CR</div>
@@ -1905,11 +1915,25 @@ function aPol(){
   </div>`);
   document.onkeydown=e=>{if(e.key==='Escape'){sFX('click');rG([]);}};}
 
-function doPol(id){const m=MINERALS.find(x=>x.id===id);const s=G.inv[id];
-  const hasN=hU('polisher2'),maxLv=hasN?2:1;if(s.qty<=0||s.pl>=maxLv)return;
-  const cost=s.pl===0?Math.round(m.v*.6):Math.round(m.v*1.8);
-  if(G.credits<cost){sFX('danger');return;}
-  G.credits-=cost;s.pl++;G.stats.polished++;
+const POL_MIN_QTY   = 5;    // minimálny počet kusov pre leštenie
+const POL_COST_BASE = 3.0;  // násobok hodnoty pre základné leštenie
+const POL_COST_NANO = 8.0;  // násobok hodnoty pre nano leštenie
+const POL_FAIL_NANO = 0.30; // šanca zlyhania nano leštenia
+
+function doPol(id){
+  const m=MINERALS.find(x=>x.id===id);const s=G.inv[id];
+  const hasN=hU('polisher2'),maxLv=hasN?2:1;
+  if(s.qty<POL_MIN_QTY||s.pl>=maxLv)return;
+  const isNano=s.pl===1;
+  const cost=isNano?Math.round(m.v*POL_COST_NANO):Math.round(m.v*POL_COST_BASE);
+  if(G.credits<cost){sFX('danger');rG([{txt:t('pol_no_cr',{n:cost-G.credits}),cls:'ldng'}]);return;}
+  G.credits-=cost;G.stats.polished++;
+  // Nano má šancu zlyhania
+  if(isNano&&Math.random()<POL_FAIL_NANO){
+    sFX('danger');flash('rgba(255,60,60,.18)');
+    rG([{txt:t('pol_nano_fail',{sym:m.sym,name:m.name,cost}),cls:'ldng'},
+        {txt:t('pol_nano_fail2'),cls:'lwarn'}]);return;}
+  s.pl++;
   sFX('polish');flash('rgba(255,224,102,.17)');
   const lb=s.pl>1?t('pol_nano_lbl'):t('pol_polished'),mult=s.pl>1?3:2;
   rG([{txt:t('pol_done',{sym:m.sym,name:m.name,lbl:lb}),cls:'lpol'},
