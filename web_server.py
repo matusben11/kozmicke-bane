@@ -227,18 +227,23 @@ BETA_FEATURES = [
 # ── Medzigalaktická rada — krajiny, roly, zbrane ────────────────────────────
 
 COUNTRY_ROLES = [
-    {"id": "president",     "name_sk": "Prezident",            "name_en": "President",           "power": 10, "icon": "👑"},
-    {"id": "pm",            "name_sk": "Predseda vlády",       "name_en": "Prime Minister",       "power": 9,  "icon": "🏛"},
-    {"id": "def_minister",  "name_sk": "Minister obrany",      "name_en": "Minister of Defense",  "power": 8,  "icon": "⚔"},
-    {"id": "fin_minister",  "name_sk": "Minister financií",    "name_en": "Minister of Finance",  "power": 7,  "icon": "💰"},
-    {"id": "foreign_min",   "name_sk": "Minister zahraničia",  "name_en": "Foreign Minister",     "power": 7,  "icon": "🌐"},
-    {"id": "general",       "name_sk": "Generál",              "name_en": "General",              "power": 6,  "icon": "🎖"},
-    {"id": "spy_chief",     "name_sk": "Šéf rozviedky",        "name_en": "Intelligence Chief",   "power": 6,  "icon": "🕵"},
-    {"id": "senator",       "name_sk": "Senátor",              "name_en": "Senator",              "power": 3,  "icon": "📜"},
-    {"id": "ambassador",    "name_sk": "Veľvyslanec",          "name_en": "Ambassador",           "power": 4,  "icon": "🤝"},
-    {"id": "council_rep",   "name_sk": "Zástupca v Rade",      "name_en": "Council Representative","power": 5, "icon": "🏢"},
+    {"id": "president",     "name_sk": "Prezident",              "name_en": "President",              "power": 10, "icon": "👑"},
+    {"id": "pm",            "name_sk": "Predseda vlády",         "name_en": "Prime Minister",         "power": 9,  "icon": "🏛"},
+    {"id": "def_minister",  "name_sk": "Minister obrany",        "name_en": "Minister of Defense",    "power": 8,  "icon": "⚔"},
+    {"id": "fin_minister",  "name_sk": "Minister financií",      "name_en": "Minister of Finance",    "power": 7,  "icon": "💰"},
+    {"id": "foreign_min",   "name_sk": "Minister zahraničia",    "name_en": "Foreign Minister",       "power": 7,  "icon": "🌐"},
+    {"id": "general",       "name_sk": "Generál",                "name_en": "General",                "power": 6,  "icon": "🎖"},
+    {"id": "spy_chief",     "name_sk": "Šéf rozviedky",          "name_en": "Intelligence Chief",     "power": 6,  "icon": "🕵"},
+    {"id": "senator",       "name_sk": "Senátor",                "name_en": "Senator",                "power": 3,  "icon": "📜"},
+    {"id": "ambassador",    "name_sk": "Veľvyslanec",            "name_en": "Ambassador",             "power": 4,  "icon": "🤝"},
+    {"id": "council_rep",   "name_sk": "Zástupca v Rade",        "name_en": "Council Representative", "power": 5,  "icon": "🏢"},
+    {"id": "council_seat",  "name_sk": "Člen Rady — Ženeva",     "name_en": "Council Member — Geneva","power": 8,  "icon": "🕊",
+     "neutral_only": True},  # iba pre Švajčiarsko
 ]
 ROLE_BY_ID = {r["id"]: r for r in COUNTRY_ROLES}
+
+# Švajčiarsko = neutrálne sídlo Rady — nikdy nemôže byť vo vojne
+COUNCIL_HQ_COUNTRY = "switzerland"
 
 COUNTRIES = [
     # Severná Amerika
@@ -395,22 +400,40 @@ def _get_council_data():
 
 def _council_members(cdata):
     """
-    Vráti dict {username: {"country": cid, "role": rid, "is_permanent": bool}}
+    Vráti dict {username: {"country": cid, "role": rid, "is_permanent": bool, "is_geneva": bool}}
     pre všetkých hráčov s relevantnou rolou v Rade.
+    Geneva seats (council_seat v Švajčiarsku) sú neutrálni mediátori.
     """
     members = {}
-    council_roles = {"president", "pm", "def_minister", "council_rep", "foreign_min"}
+    council_roles = {"president", "pm", "def_minister", "council_rep", "foreign_min", "council_seat"}
     for cid, cd in cdata.items():
-        is_perm = cid in COUNCIL_PERMANENT
+        is_perm   = cid in COUNCIL_PERMANENT
+        is_geneva = cid == COUNCIL_HQ_COUNTRY
         for rid, users in cd.get("roles", {}).items():
             if rid not in council_roles:
                 continue
+            if rid == "council_seat" and not is_geneva:
+                continue  # council_seat platí iba pre Švajčiarsko
             if isinstance(users, str):
                 users = [users] if users else []
             for u in users:
                 if u and u not in members:
-                    members[u] = {"country": cid, "role": rid, "is_permanent": is_perm}
+                    members[u] = {
+                        "country": cid, "role": rid,
+                        "is_permanent": is_perm,
+                        "is_geneva": is_geneva,
+                    }
     return members
+
+def _player_countries(uname, cdata):
+    """Vráti zoznam (cid, rid) — všetky krajiny kde má hráč nejakú rolu."""
+    result = []
+    for cid, cd in cdata.items():
+        for rid, users in cd.get("roles", {}).items():
+            ul = users if isinstance(users, list) else ([users] if users else [])
+            if uname in ul:
+                result.append((cid, rid))
+    return result
 
 def _resolve_resolution(res, cdata):
     """Aplikuj schválenú rezolúciu na krajinu."""
@@ -7251,7 +7274,10 @@ def countries_page():
 <title>Krajiny — KB</title>{_COUNTRIES_CSS}</head><body>
 <a href="/lobby" class="btn-back">← Lobby</a>
 <h1>🌍 MEDZIGALAKTICKÁ RADA</h1>
-<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; Krajiny: {len(COUNTRIES)} &nbsp;|&nbsp; ★ = stály člen Rady bezpečnosti</div>
+<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; Krajiny: {len(COUNTRIES)} &nbsp;|&nbsp; ★ = stály člen RB
+  &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 Rada bezpečnosti</a>
+  &nbsp;|&nbsp; <a href="/countries/transfer" style="color:#ff9900">↔ Presun materiálov</a>
+</div>
 {my_roles_html}
 <div style="max-width:900px;margin:0 auto">
 <table class="ctable">
@@ -7314,6 +7340,112 @@ def country_detail(cid):
 <table class="ctable"><thead>
 <tr><th>Rola</th><th>Sila</th><th>Hráč(i)</th></tr>
 </thead><tbody>{rows}</tbody></table>
+</div>
+</body></html>"""
+
+
+@app.route("/countries/transfer", methods=["GET", "POST"])
+def countries_transfer():
+    """Presun materiálov (zbrane) medzi krajinami ktoré hráč vlastní."""
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname = session["username"]
+    cdata = _get_country_data()
+    my_pairs = _player_countries(uname, cdata)  # [(cid, rid), ...]
+    my_cids  = list(dict.fromkeys(cid for cid, _ in my_pairs))  # unikátne krajiny
+
+    msg = ""
+    if request.method == "POST":
+        src  = request.form.get("src", "")
+        dst  = request.form.get("dst", "")
+        mat  = request.form.get("material", "")
+        try:
+            qty = int(request.form.get("qty", 0))
+        except ValueError:
+            qty = 0
+
+        valid_mats = {"warheads", "missiles", "conventional", "cyber"}
+        if src in my_cids and dst in my_cids and src != dst and mat in valid_mats and qty > 0:
+            src_w = cdata[src]["weapons"]
+            dst_w = cdata[dst]["weapons"]
+
+            # Jadrové hlavice — cieľová krajina musí mať schválenie
+            if mat == "warheads" and not dst_w.get("nuclear_approved"):
+                msg = "❌ Cieľová krajina nemá schválenie Rady na jadrové zbrane!"
+            elif src_w.get(mat, 0) < qty:
+                msg = f"❌ Nedostatok: {src_w.get(mat, 0)} < {qty}"
+            else:
+                src_w[mat] = src_w.get(mat, 0) - qty
+                dst_w[mat] = dst_w.get(mat, 0) + qty
+                cdata[src]["weapons"] = src_w
+                cdata[dst]["weapons"] = dst_w
+                save_jf(KB_COUNTRIES, cdata)
+                src_name = COUNTRY_BY_ID.get(src, {}).get("name", src)
+                dst_name = COUNTRY_BY_ID.get(dst, {}).get("name", dst)
+                mat_name = WEAPON_TYPES.get(mat, {}).get("name_sk", mat)
+                msg = f"✅ Presun: {qty}× {mat_name} | {src_name} → {dst_name}"
+
+    # Zostavenie formulára
+    if len(my_cids) < 2:
+        return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Presun materiálov</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← Krajiny</a>
+<h1>↔ Presun materiálov</h1>
+<div class="card"><div style="color:#ff9900">
+Musíš mať rolu aspoň v 2 krajinách aby si mohol presúvať materiály.</div></div>
+</body></html>"""
+
+    c_opts = lambda exclude="": "".join(
+        f'<option value="{cid}">{COUNTRY_BY_ID.get(cid,{}).get("flag","")} {COUNTRY_BY_ID.get(cid,{}).get("name",cid)}</option>'
+        for cid in my_cids if cid != exclude
+    )
+
+    # Prehľad arzenálov mojich krajín
+    arsenal_rows = ""
+    for cid in my_cids:
+        c  = COUNTRY_BY_ID.get(cid, {})
+        w  = cdata[cid].get("weapons", {})
+        nuc_ok = "✅" if w.get("nuclear_approved") else "❌"
+        arsenal_rows += (
+            f'<div style="border:1px solid #1a3a1a;padding:6px 10px;margin-bottom:6px;background:#020d02">'
+            f'<span style="color:#cfffcf">{c.get("flag","")} {c.get("name",cid)}</span>'
+            f' &nbsp; ☢{nuc_ok} hlavice:{w.get("warheads",0)} '
+            f'🚀{w.get("missiles",0)} 🪖{w.get("conventional",0):,}tis. 💻{w.get("cyber",0)}</div>'
+        )
+
+    msg_html = f'<div style="color:{"#39ff6a" if msg.startswith("✅") else "#ff3a3a"};margin-bottom:8px">{msg}</div>' if msg else ""
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Presun materiálov — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← Krajiny</a>
+<h1>↔ Presun materiálov medzi krajinami</h1>
+<div class="sub">Môžeš presúvať iba medzi krajinami kde máš rolu.</div>
+{msg_html}
+<div class="card">
+  <div class="card-title">🏦 Tvoj arzenál</div>
+  {arsenal_rows}
+</div>
+<div class="card" style="border-color:#ff990044">
+  <div class="card-title" style="color:#ff9900">↔ Nový presun</div>
+  <form method="POST" style="display:grid;gap:8px;max-width:500px">
+    <div class="row"><span class="lbl">Zo:</span>
+      <select name="src">{c_opts()}</select></div>
+    <div class="row"><span class="lbl">Do:</span>
+      <select name="dst">{c_opts()}</select></div>
+    <div class="row"><span class="lbl">Materiál:</span>
+      <select name="material">
+        <option value="warheads">☢ Jadrové hlavice</option>
+        <option value="missiles">🚀 Balistické rakety</option>
+        <option value="conventional">🪖 Konvenčné sily (tis.)</option>
+        <option value="cyber">💻 Kybernetické zbrane</option>
+      </select></div>
+    <div class="row"><span class="lbl">Počet:</span>
+      <input type="number" name="qty" value="1" min="1" style="width:80px"></div>
+    <button type="submit" class="b" style="margin-top:4px">↔ Presunúť</button>
+  </form>
+  <div style="color:#2a7a45;font-size:.82em;margin-top:8px">
+    ⚠ Jadrové hlavice možno presunúť len do krajiny so schválením Rady bezpečnosti.
+  </div>
 </div>
 </body></html>"""
 
@@ -7415,17 +7547,41 @@ def council_page():
     open_html   = "".join(_res_html(r) for r in open_res) or '<div style="color:#2a7a45">Žiadne otvorené rezolúcie.</div>'
     closed_html = "".join(_res_html(r) for r in reversed(closed_res)) or '<div style="color:#2a7a45">—</div>'
 
+    # Geneva mediátori
+    geneva_members = {u: m for u, m in members.items() if m.get("is_geneva")}
+    geneva_html = ""
+    if geneva_members:
+        gtags = " ".join(
+            f'<span class="role-tag council">🕊 {u}</span>'
+            for u in geneva_members
+        )
+        geneva_html = (
+            f'<div class="card" style="border-color:#38d1ff44;background:#00080d">'
+            f'<div class="card-title" style="color:#38d1ff">🇨🇭 SÍDLO RADY — ŽENEVA (neutrálne)</div>'
+            f'<div style="color:#2a7a45;font-size:.85rem;margin-bottom:6px">'
+            f'Neutrálni mediátori môžu navrhovať akékoľvek rezolúcie a hlasovať bez stranníctva. '
+            f'Švajčiarsko je chránené — nikdy sa nemôže stať cieľom vojenskej akcie.'
+            f'</div>{gtags}</div>'
+        )
+
     # Formulár na novú rezolúciu (len pre členov Rady)
     new_res_html = ""
     if me:
         c_opts = "".join(f'<option value="{c["id"]}">{c["flag"]} {c["name"]}</option>' for c in COUNTRIES)
         t_opts = "".join(f'<option value="{tid}">{v["icon"]} {v["name_sk"]}</option>' for tid,v in RES_TYPES.items())
+        role_label = ROLE_BY_ID.get(me.get("role",""), {}).get("name_sk", me.get("role",""))
+        badges = ""
+        if me.get("is_permanent"):
+            badges += '&nbsp;<span style="color:#ff88ff">★ Stály člen — VETO</span>'
+        if me.get("is_geneva"):
+            badges += '&nbsp;<span style="color:#38d1ff">🕊 Neutrálny mediátor</span>'
         new_res_html = f"""
         <div class="card" style="border-color:#ff990044">
         <div class="card-title" style="color:#ff9900">📋 Podať novú rezolúciu</div>
         <div style="color:#2a7a45;font-size:.85rem;margin-bottom:6px">
-          Podáš ako: {me.get("country","").upper()} — {me.get("role","")}
-          {"&nbsp; <span style=color:#ff88ff>★ Stály člen</span>" if me.get("is_permanent") else ""}
+          {COUNTRY_BY_ID.get(me.get("country",""),{}).get("flag","")}
+          {COUNTRY_BY_ID.get(me.get("country",""),{}).get("name","").upper()} — {role_label}
+          {badges}
         </div>
         <form method="POST" action="/council/propose" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <select name="target_country" style="min-width:160px">{c_opts}</select>
@@ -7462,9 +7618,8 @@ def council_page():
 <title>Rada bezpečnosti — KB</title>{_COUNTRIES_CSS}</head><body>
 <a href="/countries" class="btn-back">← Krajiny</a>
 <h1>🏛 MEDZIGALAKTICKÁ RADA BEZPEČNOSTI</h1>
-<div class="sub">
-  Stáli členovia: {perm_html}
-</div>
+<div class="sub" style="margin-bottom:6px">Stáli členovia: {perm_html}</div>
+{geneva_html}
 {alert_html}
 {new_res_html}
 <div class="card">
@@ -7475,6 +7630,7 @@ def council_page():
   <div class="card-title" style="color:#2a7a45">📁 UZAVRETÉ REZOLÚCIE (posledných 10)</div>
   {closed_html}
 </div>
+<p><a href="/countries/transfer" style="color:#ff9900">↔ Presun materiálov medzi krajinami →</a></p>
 </body></html>"""
 
 
@@ -7492,6 +7648,9 @@ def council_propose():
     target  = request.form.get("target_country", "").strip()
     rtype   = request.form.get("res_type", "").strip()
     if target not in COUNTRY_BY_ID or rtype not in RES_TYPES:
+        return redirect("/council")
+    # Švajčiarsko je neutrálne — nemôže byť cieľom vojenskej akcie ani nukleárneho zákazu
+    if target == COUNCIL_HQ_COUNTRY and rtype in ("war_auth", "nuclear_ban", "sanctions", "embargo"):
         return redirect("/council")
 
     cncl = _get_council_data()
