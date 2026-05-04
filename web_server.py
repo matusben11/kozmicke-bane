@@ -35,6 +35,7 @@ KB_ENERGY     = DATA_DIR / "kb_energy.json"
 KB_MARKET     = DATA_DIR / "kb_market.json"
 KB_AUCTIONS   = DATA_DIR / "kb_auctions.json"
 KB_COUNTRIES  = DATA_DIR / "kb_countries.json"
+KB_COUNCIL    = DATA_DIR / "kb_council.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -80,6 +81,7 @@ _KV_KEYS = {
     KB_MARKET:    "kb_market",
     KB_AUCTIONS:  "kb_auctions",
     KB_COUNTRIES: "kb_countries",
+    KB_COUNCIL:   "kb_council",
 }
 
 
@@ -301,8 +303,65 @@ COUNTRY_BY_ID = {c["id"]: c for c in COUNTRIES}
 # Rola v Medzigalaktickej rade bezpečnosti (stály člen = veto právo)
 COUNCIL_PERMANENT = {"usa", "russia", "china", "uk", "france"}
 
+# Zbrane — typy
+WEAPON_TYPES = {
+    "conventional": {"name_sk": "Konvenčné sily",   "name_en": "Conventional forces", "icon": "🪖"},
+    "nuclear":      {"name_sk": "Jadrové hlavice",   "name_en": "Nuclear warheads",     "icon": "☢"},
+    "missiles":     {"name_sk": "Balistické rakety", "name_en": "Ballistic missiles",   "icon": "🚀"},
+    "cyber":        {"name_sk": "Kybernetické zbrane","name_en": "Cyber weapons",        "icon": "💻"},
+}
+
+# Rezolúcie Rady bezpečnosti
+RES_TYPES = {
+    "nuclear_approve": {
+        "name_sk": "Schváliť jadrový program",
+        "name_en": "Approve nuclear program",
+        "icon": "☢", "needs_veto_check": True,
+        "desc_sk": "Krajina smie legálne vlastniť jadrové zbrane.",
+        "desc_en": "Country may legally possess nuclear weapons.",
+    },
+    "nuclear_ban": {
+        "name_sk": "Zakázať jadrový program",
+        "name_en": "Ban nuclear program",
+        "icon": "🚫☢", "needs_veto_check": True,
+        "desc_sk": "Krajina musí odovzdať jadrové zbrane. Odmietnutie = sankcie.",
+        "desc_en": "Country must surrender nuclear weapons. Refusal = sanctions.",
+    },
+    "sanctions": {
+        "name_sk": "Ekonomické sankcie",
+        "name_en": "Economic sanctions",
+        "icon": "📉", "needs_veto_check": True,
+        "desc_sk": "Obmedzenie obchodu a finančného styku.",
+        "desc_en": "Restriction of trade and financial contacts.",
+    },
+    "embargo": {
+        "name_sk": "Zbrojné embargo",
+        "name_en": "Arms embargo",
+        "icon": "🚫🪖", "needs_veto_check": True,
+        "desc_sk": "Zákaz dovozu a vývozu zbraní.",
+        "desc_en": "Ban on arms import and export.",
+    },
+    "war_auth": {
+        "name_sk": "Autorizovať vojenskú akciu",
+        "name_en": "Authorize military action",
+        "icon": "⚔", "needs_veto_check": True,
+        "desc_sk": "Rada povolí vojenskú intervenciu inej krajine.",
+        "desc_en": "Council authorizes military intervention.",
+    },
+    "ceasefire": {
+        "name_sk": "Požadovať prímerie",
+        "name_en": "Demand ceasefire",
+        "icon": "🕊", "needs_veto_check": False,
+        "desc_sk": "Všetky bojujúce strany musia zastaviť paľbu.",
+        "desc_en": "All belligerents must cease fire.",
+    },
+}
+
+RES_VOTE_HOURS  = 48    # rezolúcia platí 48 hodín na hlasovanie
+RES_QUOTA       = 3     # potrebný počet hlasov ZA (okrem stálych členov)
+NUCLEAR_HEAT_THRESHOLD = 60  # heat nad touto hranicou = automatické upozornenie Rade
+
 def _countries_allowed():
-    """Vráti True ak má hráč prístup k systému krajín."""
     if "username" not in session:
         return False
     u = load_users().get(session["username"], {})
@@ -311,11 +370,78 @@ def _countries_allowed():
     return any(f["id"] == "countries" and f.get("public") for f in BETA_FEATURES)
 
 def _get_country_data():
-    """Načíta kb_countries.json — {country_id: {roles: {role_id: username}, war: [], ...}}"""
+    """Načíta kb_countries.json — {country_id: {roles, at_war, sanctions, weapons}}"""
     data = load_jf(KB_COUNTRIES, {})
     for c in COUNTRIES:
-        data.setdefault(c["id"], {"roles": {}, "at_war": [], "sanctions": []})
+        cd = data.setdefault(c["id"], {})
+        cd.setdefault("roles", {})
+        cd.setdefault("at_war", [])
+        cd.setdefault("sanctions", [])
+        cd.setdefault("weapons", {
+            "nuclear_approved": c["id"] in COUNCIL_PERMANENT,
+            "warheads": 0,
+            "missiles": 0,
+            "conventional": 0,
+            "cyber": 0,
+        })
     return data
+
+def _get_council_data():
+    """Načíta kb_council.json — {resolutions: [...], alerts: [...]}"""
+    data = load_jf(KB_COUNCIL, {})
+    data.setdefault("resolutions", [])
+    data.setdefault("alerts", [])
+    return data
+
+def _council_members(cdata):
+    """
+    Vráti dict {username: {"country": cid, "role": rid, "is_permanent": bool}}
+    pre všetkých hráčov s relevantnou rolou v Rade.
+    """
+    members = {}
+    council_roles = {"president", "pm", "def_minister", "council_rep", "foreign_min"}
+    for cid, cd in cdata.items():
+        is_perm = cid in COUNCIL_PERMANENT
+        for rid, users in cd.get("roles", {}).items():
+            if rid not in council_roles:
+                continue
+            if isinstance(users, str):
+                users = [users] if users else []
+            for u in users:
+                if u and u not in members:
+                    members[u] = {"country": cid, "role": rid, "is_permanent": is_perm}
+    return members
+
+def _resolve_resolution(res, cdata):
+    """Aplikuj schválenú rezolúciu na krajinu."""
+    cid    = res.get("target_country")
+    rtype  = res.get("type")
+    cd     = cdata.get(cid, {})
+    w      = cd.setdefault("weapons", {})
+
+    if rtype == "nuclear_approve":
+        w["nuclear_approved"] = True
+    elif rtype == "nuclear_ban":
+        w["nuclear_approved"] = False
+        w["warheads"] = 0
+    elif rtype == "sanctions":
+        target_c = res.get("target_country")
+        proposer_c = res.get("proposed_by_country")
+        if proposer_c and target_c:
+            cd.setdefault("sanctions", [])
+            if proposer_c not in cd["sanctions"]:
+                cd["sanctions"].append(proposer_c)
+    elif rtype == "embargo":
+        cd.setdefault("sanctions", [])
+        if "ISGC_embargo" not in cd["sanctions"]:
+            cd["sanctions"].append("ISGC_embargo")
+    elif rtype == "war_auth":
+        pass  # vojenská akcia — len notifikácia
+    elif rtype == "ceasefire":
+        cd["at_war"] = []
+
+    cdata[cid] = cd
+    return cdata
 
 PLANT_TYPES = {
     "solar": {
@@ -7179,12 +7305,328 @@ def country_detail(cid):
 <h1>{c["flag"]} {c["name"]}</h1>
 <div class="sub">{c["region"]} {"&nbsp;|&nbsp; ★ Stály člen RB" if perm else ""}</div>
 {status_html}
+<div style="display:flex;gap:8px;margin-bottom:10px">
+  <a href="/countries/{cid}/weapons" style="display:inline-block;background:#0d0000;border:1px solid #ff3a3a44;color:#ff9900;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Zbraňový arzenál</a>
+  <a href="/council" style="display:inline-block;background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:4px 12px;font-family:inherit;font-size:.95rem">🏛 Rada bezpečnosti</a>
+</div>
 <div class="card">
 <div class="card-title">🏛 Obsadenie rolí</div>
 <table class="ctable"><thead>
 <tr><th>Rola</th><th>Sila</th><th>Hráč(i)</th></tr>
 </thead><tbody>{rows}</tbody></table>
 </div>
+</body></html>"""
+
+
+@app.route("/council")
+def council_page():
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname  = session["username"]
+    cdata  = _get_country_data()
+    cncl   = _get_council_data()
+    members = _council_members(cdata)
+    me     = members.get(uname, {})
+    now    = time.time()
+
+    # ── Vypočítaj výsledky otvorených rezolúcií
+    changed = False
+    for res in cncl["resolutions"]:
+        if res["status"] != "open":
+            continue
+        if res["expires_at"] < now:
+            # Uzavri hlasovanie
+            for_v = res["votes_for"]
+            against_v = res["votes_against"]
+            vetoed = res.get("vetoed_by")
+            if vetoed:
+                res["status"] = "vetoed"
+            elif len(for_v) >= RES_QUOTA and len(against_v) == 0:
+                res["status"] = "passed"
+                cdata = _resolve_resolution(res, cdata)
+                save_jf(KB_COUNTRIES, cdata)
+            else:
+                res["status"] = "rejected"
+            changed = True
+    if changed:
+        save_jf(KB_COUNCIL, cncl)
+
+    # ── Upozornenia z energetickej minihry (high proliferation heat)
+    energy_data = load_jf(KB_ENERGY, {})
+    heat_alerts = []
+    for eu, ep in energy_data.items():
+        heat = ep.get("proliferation_heat", 0)
+        wg   = ep.get("fuel", {}).get("wg_pu", 0)
+        if heat >= NUCLEAR_HEAT_THRESHOLD or wg > 0:
+            # Nájdi krajinu hráča
+            player_country = None
+            for cid, cd in cdata.items():
+                for users in cd.get("roles", {}).values():
+                    ul = users if isinstance(users, list) else ([users] if users else [])
+                    if eu.lower() in [u.lower() for u in ul]:
+                        player_country = cid
+                        break
+                if player_country:
+                    break
+            heat_alerts.append({
+                "player": eu, "heat": round(heat, 1),
+                "wg_pu": round(wg, 3), "country": player_country
+            })
+
+    # ── HTML zostavenie
+    open_res   = [r for r in cncl["resolutions"] if r["status"] == "open"]
+    closed_res = [r for r in cncl["resolutions"] if r["status"] != "open"][-10:]
+
+    def _res_html(res):
+        rt   = RES_TYPES.get(res["type"], {})
+        tc   = COUNTRY_BY_ID.get(res["target_country"], {})
+        exp  = max(0, int(res["expires_at"] - now))
+        th, tr2 = divmod(exp, 3600); tm, _ = divmod(tr2, 60)
+        time_str = f"{th}h {tm:02d}m" if res["status"] == "open" else ""
+        for_v = res["votes_for"]; against_v = res["votes_against"]
+        vetoed = res.get("vetoed_by", "")
+        col = {"open":"#ff9900","passed":"#39ff6a","rejected":"#ff3a3a","vetoed":"#ff88ff"}.get(res["status"],"#888")
+        status_lbl = {"open":"🗳 OTVORENÉ","passed":"✅ SCHVÁLENÉ","rejected":"❌ ZAMIETNUTÉ","vetoed":"🚫 VETO"}.get(res["status"],res["status"])
+        can_vote = res["status"] == "open" and me and uname not in for_v and uname not in against_v
+        can_veto = res["status"] == "open" and me.get("is_permanent") and not vetoed
+        vote_html = ""
+        if can_vote or can_veto:
+            vote_html = (
+                f'<form method="POST" action="/council/vote" style="display:inline">'
+                f'<input type="hidden" name="res_id" value="{res["id"]}">'
+                f'<button name="vote" value="for" class="b">✅ ZA</button> '
+                f'<button name="vote" value="against" class="b red">❌ PROTI</button>'
+                f'{" <button name=vote value=veto class=b style=border-color:#ff88ff;color:#ff88ff>🚫 VETO</button>" if can_veto else ""}'
+                f'</form>')
+        return (
+            f'<div style="border:1px solid {col}44;background:#050505;padding:8px 12px;margin-bottom:6px">'
+            f'<div style="display:flex;justify-content:space-between;flex-wrap:wrap">'
+            f'<span style="color:{col}">{rt.get("icon","")} {rt.get("name_sk","")}</span>'
+            f'<span style="color:#888;font-size:.85rem">{status_lbl} {time_str}</span></div>'
+            f'<div style="color:#cfffcf;margin:3px 0">{tc.get("flag","")} {tc.get("name",res["target_country"])}</div>'
+            f'<div style="font-size:.85rem;color:#2a7a45">{rt.get("desc_sk","")}</div>'
+            f'<div style="font-size:.82rem;margin-top:4px">'
+            f'ZA: <span style="color:#39ff6a">{", ".join(for_v) or "—"}</span> &nbsp; '
+            f'PROTI: <span style="color:#ff3a3a">{", ".join(against_v) or "—"}</span>'
+            f'{" &nbsp; VETO: <span style=color:#ff88ff>" + vetoed + "</span>" if vetoed else ""}'
+            f'</div>{vote_html}</div>'
+        )
+
+    open_html   = "".join(_res_html(r) for r in open_res) or '<div style="color:#2a7a45">Žiadne otvorené rezolúcie.</div>'
+    closed_html = "".join(_res_html(r) for r in reversed(closed_res)) or '<div style="color:#2a7a45">—</div>'
+
+    # Formulár na novú rezolúciu (len pre členov Rady)
+    new_res_html = ""
+    if me:
+        c_opts = "".join(f'<option value="{c["id"]}">{c["flag"]} {c["name"]}</option>' for c in COUNTRIES)
+        t_opts = "".join(f'<option value="{tid}">{v["icon"]} {v["name_sk"]}</option>' for tid,v in RES_TYPES.items())
+        new_res_html = f"""
+        <div class="card" style="border-color:#ff990044">
+        <div class="card-title" style="color:#ff9900">📋 Podať novú rezolúciu</div>
+        <div style="color:#2a7a45;font-size:.85rem;margin-bottom:6px">
+          Podáš ako: {me.get("country","").upper()} — {me.get("role","")}
+          {"&nbsp; <span style=color:#ff88ff>★ Stály člen</span>" if me.get("is_permanent") else ""}
+        </div>
+        <form method="POST" action="/council/propose" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select name="target_country" style="min-width:160px">{c_opts}</select>
+          <select name="res_type" style="min-width:200px">{t_opts}</select>
+          <button type="submit" class="b">📋 Podať rezolúciu</button>
+        </form></div>"""
+
+    # Upozornenia z energetickej minihry
+    alert_html = ""
+    if heat_alerts:
+        rows_a = ""
+        for a in sorted(heat_alerts, key=lambda x: -x["heat"]):
+            c_name = COUNTRY_BY_ID.get(a["country"], {}).get("name", "—") if a["country"] else "—"
+            rows_a += (f'<div style="display:flex;gap:12px;padding:3px 0;border-bottom:1px solid #1a0000;font-size:.9rem">'
+                      f'<span style="color:#ff9900;min-width:120px">{a["player"]}</span>'
+                      f'<span style="color:#ff3a3a">heat: {a["heat"]}%</span>'
+                      f'<span style="color:#ff88ff">WG-Pu: {a["wg_pu"]}</span>'
+                      f'<span style="color:#888">{c_name}</span></div>')
+        alert_html = (f'<div class="card" style="border-color:#ff3a3a44">'
+                     f'<div class="card-title" style="color:#ff3a3a">⚠ JADROVÉ UPOZORNENIA — energetická minihra</div>'
+                     f'{rows_a}</div>')
+
+    # Zbraňový prehľad stálych členov
+    perm_html = ""
+    for cid in COUNCIL_PERMANENT:
+        c  = COUNTRY_BY_ID.get(cid, {})
+        cd = cdata.get(cid, {})
+        w  = cd.get("weapons", {})
+        nuc_ok = "✅" if w.get("nuclear_approved") else "❌"
+        perm_html += (f'<span style="margin-right:16px">{c.get("flag","")} {c.get("name",cid)}: '
+                     f'☢{nuc_ok} {w.get("warheads",0)} hlavíc 🚀{w.get("missiles",0)}</span>')
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Rada bezpečnosti — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← Krajiny</a>
+<h1>🏛 MEDZIGALAKTICKÁ RADA BEZPEČNOSTI</h1>
+<div class="sub">
+  Stáli členovia: {perm_html}
+</div>
+{alert_html}
+{new_res_html}
+<div class="card">
+  <div class="card-title">🗳 OTVORENÉ REZOLÚCIE</div>
+  {open_html}
+</div>
+<div class="card" style="border-color:#2a7a4544">
+  <div class="card-title" style="color:#2a7a45">📁 UZAVRETÉ REZOLÚCIE (posledných 10)</div>
+  {closed_html}
+</div>
+</body></html>"""
+
+
+@app.route("/council/propose", methods=["POST"])
+def council_propose():
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname   = session["username"]
+    cdata   = _get_country_data()
+    members = _council_members(cdata)
+    me      = members.get(uname)
+    if not me:
+        return redirect("/council")
+
+    target  = request.form.get("target_country", "").strip()
+    rtype   = request.form.get("res_type", "").strip()
+    if target not in COUNTRY_BY_ID or rtype not in RES_TYPES:
+        return redirect("/council")
+
+    cncl = _get_council_data()
+    now  = time.time()
+    res_id = f"res_{int(now)}_{uname[:4]}"
+    cncl["resolutions"].append({
+        "id":              res_id,
+        "type":            rtype,
+        "target_country":  target,
+        "proposed_by":     uname,
+        "proposed_by_country": me["country"],
+        "proposed_at":     now,
+        "votes_for":       [uname],
+        "votes_against":   [],
+        "vetoed_by":       None,
+        "status":          "open",
+        "expires_at":      now + RES_VOTE_HOURS * 3600,
+    })
+    save_jf(KB_COUNCIL, cncl)
+    return redirect("/council")
+
+
+@app.route("/council/vote", methods=["POST"])
+def council_vote():
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname   = session["username"]
+    cdata   = _get_country_data()
+    members = _council_members(cdata)
+    me      = members.get(uname)
+    if not me:
+        return redirect("/council")
+
+    res_id = request.form.get("res_id", "")
+    vote   = request.form.get("vote", "")
+    cncl   = _get_council_data()
+
+    for res in cncl["resolutions"]:
+        if res["id"] != res_id or res["status"] != "open":
+            continue
+        if uname in res["votes_for"] or uname in res["votes_against"]:
+            break
+        if vote == "veto" and me.get("is_permanent"):
+            res["vetoed_by"] = uname
+            res["status"]    = "vetoed"
+        elif vote == "for":
+            res["votes_for"].append(uname)
+        elif vote == "against":
+            res["votes_against"].append(uname)
+        break
+
+    save_jf(KB_COUNCIL, cncl)
+    return redirect("/council")
+
+
+@app.route("/countries/<cid>/weapons", methods=["GET", "POST"])
+def country_weapons(cid):
+    """Správa zbraní krajiny — len owner alebo hráč s rolou v danej krajine."""
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    c = COUNTRY_BY_ID.get(cid)
+    if not c:
+        return redirect("/countries")
+    uname  = session["username"]
+    cdata  = _get_country_data()
+    cd     = cdata.get(cid, {})
+    w      = cd.setdefault("weapons", {"nuclear_approved": False, "warheads": 0,
+                                        "missiles": 0, "conventional": 0, "cyber": 0})
+
+    # Kto môže editovať: owner alebo hráč s rolou v krajine
+    is_owner = session.get("owner") is True
+    roles    = cd.get("roles", {})
+    has_role = any(
+        uname in (v if isinstance(v, list) else ([v] if v else []))
+        for v in roles.values()
+    )
+    can_edit = is_owner or has_role
+
+    if request.method == "POST" and can_edit:
+        try:
+            w["warheads"]     = max(0, int(request.form.get("warheads", 0)))
+            w["missiles"]     = max(0, int(request.form.get("missiles", 0)))
+            w["conventional"] = max(0, int(request.form.get("conventional", 0)))
+            w["cyber"]        = max(0, int(request.form.get("cyber", 0)))
+        except ValueError:
+            pass
+        # Jadrové zbrane bez schválenia → upozornenie Rade
+        cncl = _get_council_data()
+        if w["warheads"] > 0 and not w.get("nuclear_approved"):
+            alert_msg = f"🚨 {c['name']} vlastní {w['warheads']} jadrových hlavíc bez schválenia Rady!"
+            cncl.setdefault("alerts", []).append({
+                "ts": time.time(), "msg": alert_msg, "country": cid
+            })
+            save_jf(KB_COUNCIL, cncl)
+        cd["weapons"] = w
+        cdata[cid]   = cd
+        save_jf(KB_COUNTRIES, cdata)
+        return redirect(f"/countries/{cid}/weapons")
+
+    nuc_ok   = w.get("nuclear_approved", False)
+    nuc_col  = "#39ff6a" if nuc_ok else "#ff3a3a"
+    nuc_lbl  = "✅ SCHVÁLENÝ Radou bezpečnosti" if nuc_ok else "❌ NESCHVÁLENÝ — porušenie medzinárodného práva"
+    edit_fields = ""
+    if can_edit:
+        edit_fields = f"""
+        <form method="POST" style="margin-top:10px">
+          <div class="row"><span class="lbl">🪖 Konvenčné sily (tis.)</span>
+            <input type="number" name="conventional" value="{w.get('conventional',0)}" min="0" style="width:90px"></div>
+          <div class="row"><span class="lbl">☢ Jadrové hlavice</span>
+            <input type="number" name="warheads" value="{w.get('warheads',0)}" min="0" style="width:90px"></div>
+          <div class="row"><span class="lbl">🚀 Balistické rakety</span>
+            <input type="number" name="missiles" value="{w.get('missiles',0)}" min="0" style="width:90px"></div>
+          <div class="row"><span class="lbl">💻 Kybernetické zbrane</span>
+            <input type="number" name="cyber" value="{w.get('cyber',0)}" min="0" style="width:90px"></div>
+          <button type="submit" class="b" style="margin-top:8px">💾 Uložiť zbrane</button>
+        </form>"""
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>{c['name']} — Zbrane</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries/{cid}" class="btn-back">← {c['name']}</a>
+<h1>{c['flag']} {c['name']} — Zbraňový arzenál</h1>
+<div class="card">
+  <div class="card-title">☢ Jadrový status</div>
+  <div style="color:{nuc_col};margin-bottom:8px">{nuc_lbl}</div>
+  <div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get('warheads',0)}</span></div>
+  <div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get('missiles',0)}</span></div>
+  <div class="row"><span class="lbl">🪖 Konvenčné sily</span><span class="val">{w.get('conventional',0):,} tis.</span></div>
+  <div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get('cyber',0)}</span></div>
+  {edit_fields}
+</div>
+<p>
+  <a href="/council" style="color:#ff88ff">🏛 Rada bezpečnosti →</a>
+  &nbsp;|&nbsp;
+  <a href="/countries/{cid}" style="color:#39ff6a">← Späť na krajinu</a>
+</p>
 </body></html>"""
 
 
