@@ -31,9 +31,10 @@ DATA_FILE = DATA_DIR / "game_users.json"
 KB_CAREER = DATA_DIR / "kb_career.json"
 KB_SAVES  = DATA_DIR / "kb_saves.json"
 KB_LB     = DATA_DIR / "kb_leaderboard.json"
-KB_ENERGY   = DATA_DIR / "kb_energy.json"
-KB_MARKET   = DATA_DIR / "kb_market.json"
-KB_AUCTIONS = DATA_DIR / "kb_auctions.json"
+KB_ENERGY     = DATA_DIR / "kb_energy.json"
+KB_MARKET     = DATA_DIR / "kb_market.json"
+KB_AUCTIONS   = DATA_DIR / "kb_auctions.json"
+KB_COUNTRIES  = DATA_DIR / "kb_countries.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -76,8 +77,9 @@ _KV_KEYS = {
     KB_SAVES:    "kb_saves",
     KB_LB:       "kb_leaderboard",
     KB_ENERGY:   "kb_energy",
-    KB_MARKET:   "kb_market",
-    KB_AUCTIONS: "kb_auctions",
+    KB_MARKET:    "kb_market",
+    KB_AUCTIONS:  "kb_auctions",
+    KB_COUNTRIES: "kb_countries",
 }
 
 
@@ -201,6 +203,14 @@ BETA_FEATURES = [
         "desc_en": "Access to planet Omega-VII from the start of a new game",
     },
     {
+        "id": "countries",
+        "public": False,
+        "name_sk": "Medzigalaktická rada — krajiny a roly",
+        "desc_sk": "Systém krajín, rolí a medzigalaktickej rady bezpečnosti",
+        "name_en": "Intergalactic Council — countries and roles",
+        "desc_en": "Country system, roles and intergalactic security council",
+    },
+    {
         "id": "energy_minigame",
         "public": True,
         "name_sk": "Energetická minihra",
@@ -211,6 +221,101 @@ BETA_FEATURES = [
 ]
 
 # ── Energetická minihra — konštanty ─────────────────────────────────────────
+
+# ── Medzigalaktická rada — krajiny, roly, zbrane ────────────────────────────
+
+COUNTRY_ROLES = [
+    {"id": "president",     "name_sk": "Prezident",            "name_en": "President",           "power": 10, "icon": "👑"},
+    {"id": "pm",            "name_sk": "Predseda vlády",       "name_en": "Prime Minister",       "power": 9,  "icon": "🏛"},
+    {"id": "def_minister",  "name_sk": "Minister obrany",      "name_en": "Minister of Defense",  "power": 8,  "icon": "⚔"},
+    {"id": "fin_minister",  "name_sk": "Minister financií",    "name_en": "Minister of Finance",  "power": 7,  "icon": "💰"},
+    {"id": "foreign_min",   "name_sk": "Minister zahraničia",  "name_en": "Foreign Minister",     "power": 7,  "icon": "🌐"},
+    {"id": "general",       "name_sk": "Generál",              "name_en": "General",              "power": 6,  "icon": "🎖"},
+    {"id": "spy_chief",     "name_sk": "Šéf rozviedky",        "name_en": "Intelligence Chief",   "power": 6,  "icon": "🕵"},
+    {"id": "senator",       "name_sk": "Senátor",              "name_en": "Senator",              "power": 3,  "icon": "📜"},
+    {"id": "ambassador",    "name_sk": "Veľvyslanec",          "name_en": "Ambassador",           "power": 4,  "icon": "🤝"},
+    {"id": "council_rep",   "name_sk": "Zástupca v Rade",      "name_en": "Council Representative","power": 5, "icon": "🏢"},
+]
+ROLE_BY_ID = {r["id"]: r for r in COUNTRY_ROLES}
+
+COUNTRIES = [
+    # Severná Amerika
+    {"id": "usa",    "name": "United States",    "flag": "🇺🇸", "region": "North America"},
+    {"id": "canada", "name": "Canada",           "flag": "🇨🇦", "region": "North America"},
+    {"id": "mexico", "name": "Mexico",           "flag": "🇲🇽", "region": "North America"},
+    # Európa
+    {"id": "uk",     "name": "United Kingdom",   "flag": "🇬🇧", "region": "Europe"},
+    {"id": "france", "name": "France",           "flag": "🇫🇷", "region": "Europe"},
+    {"id": "germany","name": "Germany",          "flag": "🇩🇪", "region": "Europe"},
+    {"id": "russia", "name": "Russia",           "flag": "🇷🇺", "region": "Europe"},
+    {"id": "italy",  "name": "Italy",            "flag": "🇮🇹", "region": "Europe"},
+    {"id": "spain",  "name": "Spain",            "flag": "🇪🇸", "region": "Europe"},
+    {"id": "poland", "name": "Poland",           "flag": "🇵🇱", "region": "Europe"},
+    {"id": "ukraine","name": "Ukraine",          "flag": "🇺🇦", "region": "Europe"},
+    {"id": "czechia","name": "Czech Republic",   "flag": "🇨🇿", "region": "Europe"},
+    {"id": "slovakia","name":"Slovakia",         "flag": "🇸🇰", "region": "Europe"},
+    {"id": "hungary","name": "Hungary",          "flag": "🇭🇺", "region": "Europe"},
+    {"id": "sweden", "name": "Sweden",           "flag": "🇸🇪", "region": "Europe"},
+    {"id": "norway", "name": "Norway",           "flag": "🇳🇴", "region": "Europe"},
+    {"id": "finland","name": "Finland",          "flag": "🇫🇮", "region": "Europe"},
+    {"id": "switzerland","name":"Switzerland",   "flag": "🇨🇭", "region": "Europe"},
+    {"id": "austria","name": "Austria",          "flag": "🇦🇹", "region": "Europe"},
+    {"id": "netherlands","name":"Netherlands",   "flag": "🇳🇱", "region": "Europe"},
+    {"id": "belgium","name": "Belgium",          "flag": "🇧🇪", "region": "Europe"},
+    {"id": "portugal","name":"Portugal",         "flag": "🇵🇹", "region": "Europe"},
+    {"id": "greece", "name": "Greece",           "flag": "🇬🇷", "region": "Europe"},
+    {"id": "romania","name": "Romania",          "flag": "🇷🇴", "region": "Europe"},
+    {"id": "serbia", "name": "Serbia",           "flag": "🇷🇸", "region": "Europe"},
+    {"id": "croatia","name": "Croatia",          "flag": "🇭🇷", "region": "Europe"},
+    # Ázia
+    {"id": "china",  "name": "China",            "flag": "🇨🇳", "region": "Asia"},
+    {"id": "japan",  "name": "Japan",            "flag": "🇯🇵", "region": "Asia"},
+    {"id": "india",  "name": "India",            "flag": "🇮🇳", "region": "Asia"},
+    {"id": "skorea", "name": "South Korea",      "flag": "🇰🇷", "region": "Asia"},
+    {"id": "nkorea", "name": "North Korea",      "flag": "🇰🇵", "region": "Asia"},
+    {"id": "iran",   "name": "Iran",             "flag": "🇮🇷", "region": "Asia"},
+    {"id": "turkey", "name": "Turkey",           "flag": "🇹🇷", "region": "Asia"},
+    {"id": "israel", "name": "Israel",           "flag": "🇮🇱", "region": "Asia"},
+    {"id": "saudi",  "name": "Saudi Arabia",     "flag": "🇸🇦", "region": "Asia"},
+    {"id": "pakistan","name":"Pakistan",         "flag": "🇵🇰", "region": "Asia"},
+    {"id": "vietnam","name": "Vietnam",          "flag": "🇻🇳", "region": "Asia"},
+    {"id": "thailand","name":"Thailand",         "flag": "🇹🇭", "region": "Asia"},
+    {"id": "indonesia","name":"Indonesia",       "flag": "🇮🇩", "region": "Asia"},
+    # Afrika
+    {"id": "nigeria","name": "Nigeria",          "flag": "🇳🇬", "region": "Africa"},
+    {"id": "egypt",  "name": "Egypt",            "flag": "🇪🇬", "region": "Africa"},
+    {"id": "safrica","name": "South Africa",     "flag": "🇿🇦", "region": "Africa"},
+    {"id": "ethiopia","name":"Ethiopia",         "flag": "🇪🇹", "region": "Africa"},
+    {"id": "kenya",  "name": "Kenya",            "flag": "🇰🇪", "region": "Africa"},
+    # Južná Amerika
+    {"id": "brazil", "name": "Brazil",           "flag": "🇧🇷", "region": "South America"},
+    {"id": "argentina","name":"Argentina",       "flag": "🇦🇷", "region": "South America"},
+    {"id": "colombia","name":"Colombia",         "flag": "🇨🇴", "region": "South America"},
+    {"id": "chile",  "name": "Chile",            "flag": "🇨🇱", "region": "South America"},
+    # Oceánia
+    {"id": "australia","name":"Australia",       "flag": "🇦🇺", "region": "Oceania"},
+    {"id": "nzealand","name":"New Zealand",      "flag": "🇳🇿", "region": "Oceania"},
+]
+COUNTRY_BY_ID = {c["id"]: c for c in COUNTRIES}
+
+# Rola v Medzigalaktickej rade bezpečnosti (stály člen = veto právo)
+COUNCIL_PERMANENT = {"usa", "russia", "china", "uk", "france"}
+
+def _countries_allowed():
+    """Vráti True ak má hráč prístup k systému krajín."""
+    if "username" not in session:
+        return False
+    u = load_users().get(session["username"], {})
+    if u.get("is_tester"):
+        return True
+    return any(f["id"] == "countries" and f.get("public") for f in BETA_FEATURES)
+
+def _get_country_data():
+    """Načíta kb_countries.json — {country_id: {roles: {role_id: username}, war: [], ...}}"""
+    data = load_jf(KB_COUNTRIES, {})
+    for c in COUNTRIES:
+        data.setdefault(c["id"], {"roles": {}, "at_war": [], "sanctions": []})
+    return data
 
 PLANT_TYPES = {
     "solar": {
@@ -2482,6 +2587,17 @@ def render_lobby(pilot):
                  f'&#9889; {L("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}{_beta_tag}'
                  f'</a></div>')
 
+    # ── Krajiny (tester only pre teraz)
+    _countries_public = next((f for f in BETA_FEATURES if f["id"] == "countries"), {}).get("public", False)
+    if u_data.get("is_tester") is True or _countries_public:
+        html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
+        html += (f'<a href="/countries" style="display:block;background:#010808;border:1px solid #38d1ff;'
+                 f'color:#38d1ff;font-family:\'VT323\',monospace;font-size:1.15em;padding:9px 14px;'
+                 f'text-align:center;text-decoration:none;letter-spacing:.06em">'
+                 f'🌍 {L("MEDZIGALAKTICKÁ RADA","INTERGALACTIC COUNCIL")}'
+                 f' &nbsp;<span style="font-size:.75em;opacity:.6">[BETA]</span>'
+                 f'</a></div>')
+
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
         html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
@@ -3723,6 +3839,21 @@ input[type=number],input[type=text],select{{outline:none}}</style>
   </tr>
   {rows}
 </table>
+
+<h2>🌍 KRAJINY — PRIDELENIE ROLÍ</h2>
+<p style="font-size:.82rem;color:#888">Každý hráč môže mať viacero rolí v rôznych krajinách.</p>
+<form method="POST" action="/owner/assign_role" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+  <select name="cid" style="font-size:.85rem;min-width:160px">
+    {''.join(f'<option value="{c["id"]}">{c["flag"]} {c["name"]}</option>' for c in COUNTRIES)}
+  </select>
+  <select name="rid" style="font-size:.85rem;min-width:180px">
+    {''.join(f'<option value="{r["id"]}">{r["icon"]} {r["name_sk"]}</option>' for r in COUNTRY_ROLES)}
+  </select>
+  <input type="text" name="uname" placeholder="username" style="width:120px;font-size:.85rem">
+  <button type="submit" name="action" value="add" class="btn" style="color:#39ff6a;border-color:#39ff6a">+ Prideliť</button>
+  <button type="submit" name="action" value="remove" class="btn btn-r">− Odobrať</button>
+</form>
+<p><a href="/countries" style="color:#39ff6a;font-size:.9rem">🌍 Zobraziť stránku krajín</a></p>
 </body></html>"""
 
 @app.route("/owner/reset_pw", methods=["POST"])
@@ -6891,6 +7022,200 @@ def api_message_admin():
                           f'{L("Správa od","Message from")} {sender}: {text}',
                           from_role=sender)
     return redirect("/lobby")
+
+
+# ── Medzigalaktická rada — krajiny, roly ───────────────────────────────────
+
+_COUNTRIES_CSS = """
+<style>
+body{background:#000;color:#cfffcf;font-family:'VT323',monospace;font-size:1.05rem;margin:0;padding:12px}
+a{color:#39ff6a;text-decoration:none}.btn-back{display:inline-block;margin-bottom:10px;
+  color:#39ff6a;border:1px solid #39ff6a44;padding:3px 10px;font-family:inherit;font-size:1rem}
+.card{border:1px solid #1a3a1a;background:#020d02;max-width:900px;margin:0 auto 10px;padding:10px 14px}
+.card-title{color:#39ff6a;letter-spacing:.1em;font-size:1.1rem;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #0a1a0a;font-size:.95rem}
+.lbl{color:#2a7a45}.val{color:#cfffcf}
+.ctable{width:100%;border-collapse:collapse;max-width:900px;margin:0 auto}
+.ctable th{color:#39ff6a;border-bottom:1px solid #1a3a1a;padding:4px 8px;text-align:left;font-size:.9rem;letter-spacing:.08em}
+.ctable td{padding:4px 8px;border-bottom:1px solid #0a1a0a;font-size:.95rem;vertical-align:top}
+.ctable tr:hover td{background:#0a1a0a}
+.region{color:#39ff6a55;font-size:.8rem}
+.role-tag{display:inline-block;background:#0a1a0a;border:1px solid #1a3a1a;
+  color:#cfffcf;padding:1px 6px;font-size:.82rem;margin:1px 2px 1px 0}
+.role-tag.high{border-color:#ff990044;color:#ff9900}
+.role-tag.council{border-color:#ff88ff44;color:#ff88ff}
+.war-badge{color:#ff3a3a;font-size:.85rem}
+.perm{color:#ff88ff}
+h1{color:#39ff6a;letter-spacing:.15em;font-size:1.4rem;margin:6px 0 4px}
+.sub{color:#2a7a45;font-size:.85rem;margin-bottom:10px}
+input,select{background:#000;border:1px solid #2a7a45;color:#cfffcf;font-family:inherit;
+  font-size:.9rem;padding:2px 5px}
+button.b{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;
+  font-family:inherit;font-size:.9rem;padding:2px 8px;cursor:pointer}
+button.b:hover{background:#0a1a0a}
+button.b.red{border-color:#ff3a3a;color:#ff3a3a;background:#0d0000}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+"""
+
+@app.route("/countries")
+def countries_page():
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    cdata = _get_country_data()
+    uname = session["username"]
+    lang  = session.get("lang", "sk")
+
+    # Moje roly
+    my_roles = []
+    for cid, cd in cdata.items():
+        for rid, ru in cd.get("roles", {}).items():
+            if isinstance(ru, list):
+                if uname.lower() in [x.lower() for x in ru]:
+                    my_roles.append((cid, rid))
+            elif ru.lower() == uname.lower():
+                my_roles.append((cid, rid))
+
+    # Zoskup krajiny podľa regiónu
+    by_region = {}
+    for c in COUNTRIES:
+        by_region.setdefault(c["region"], []).append(c)
+
+    rows = ""
+    for region, clist in by_region.items():
+        rows += f'<tr><td colspan="4" style="color:#2a7a45;font-size:.8rem;padding:6px 8px 2px;letter-spacing:.1em">{region.upper()}</td></tr>'
+        for c in clist:
+            cd    = cdata.get(c["id"], {})
+            roles = cd.get("roles", {})
+            perm  = "★" if c["id"] in COUNCIL_PERMANENT else ""
+            # Zobraziť obsadené roly
+            role_tags = ""
+            for rid, ru in roles.items():
+                r = ROLE_BY_ID.get(rid)
+                if not r:
+                    continue
+                users = ru if isinstance(ru, list) else [ru]
+                for u in users:
+                    if not u:
+                        continue
+                    cls = "high" if r["power"] >= 8 else ""
+                    role_tags += f'<span class="role-tag {cls}">{r["icon"]} {r["name_sk"] if lang!="en" else r["name_en"]}: {u}</span>'
+            war = "⚔ " + ", ".join(cd.get("at_war", [])) if cd.get("at_war") else ""
+            rows += (
+                f'<tr onclick="location.href=\'/countries/{c["id"]}\'" style="cursor:pointer">'
+                f'<td>{c["flag"]} <a href="/countries/{c["id"]}" style="color:#cfffcf">{c["name"]}</a>'
+                f' <span class="perm">{perm}</span></td>'
+                f'<td><span class="region">{c["region"]}</span></td>'
+                f'<td style="max-width:320px">{role_tags or "<span style=color:#2a7a45;font-size:.82rem>—</span>"}</td>'
+                f'<td><span class="war-badge">{war}</span></td>'
+                f'</tr>'
+            )
+
+    my_roles_html = ""
+    if my_roles:
+        tags = ""
+        for cid, rid in my_roles:
+            c = COUNTRY_BY_ID.get(cid, {})
+            r = ROLE_BY_ID.get(rid, {})
+            tags += f'<span class="role-tag high">{c.get("flag","")} {c.get("name",cid)} — {r.get("icon","")} {r.get("name_sk" if lang!="en" else "name_en", rid)}</span> '
+        my_roles_html = f'<div class="card" style="border-color:#ff990044;margin-bottom:10px"><div class="card-title" style="color:#ff9900">👤 Moje roly</div>{tags}</div>'
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Krajiny — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/lobby" class="btn-back">← Lobby</a>
+<h1>🌍 MEDZIGALAKTICKÁ RADA</h1>
+<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; Krajiny: {len(COUNTRIES)} &nbsp;|&nbsp; ★ = stály člen Rady bezpečnosti</div>
+{my_roles_html}
+<div style="max-width:900px;margin:0 auto">
+<table class="ctable">
+<thead><tr><th>Krajina</th><th>Región</th><th>Obsadené roly</th><th>Stav</th></tr></thead>
+<tbody>{rows}</tbody>
+</table></div>
+</body></html>"""
+
+
+@app.route("/countries/<cid>")
+def country_detail(cid):
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    c = COUNTRY_BY_ID.get(cid)
+    if not c:
+        return redirect("/countries")
+    cdata = _get_country_data()
+    cd    = cdata.get(cid, {"roles": {}, "at_war": [], "sanctions": []})
+    uname = session["username"]
+    lang  = session.get("lang", "sk")
+    perm  = cid in COUNCIL_PERMANENT
+
+    rows = ""
+    for role in COUNTRY_ROLES:
+        rid   = role["id"]
+        users = cd["roles"].get(rid, [])
+        if isinstance(users, str):
+            users = [users] if users else []
+        ulist = ", ".join(users) if users else "—"
+        cls   = "high" if role["power"] >= 8 else ""
+        rows += (
+            f'<tr><td>{role["icon"]} <span class="role-tag {cls}">'
+            f'{role["name_sk"] if lang!="en" else role["name_en"]}</span></td>'
+            f'<td style="color:#ff9900">{role["power"]}/10</td>'
+            f'<td>{ulist}</td></tr>'
+        )
+
+    at_war = cd.get("at_war", [])
+    sanctions = cd.get("sanctions", [])
+    status_html = ""
+    if at_war:
+        status_html += f'<div style="color:#ff3a3a;margin:4px 0">⚔ Vo vojne s: {", ".join(at_war)}</div>'
+    if sanctions:
+        status_html += f'<div style="color:#ff9900;margin:4px 0">🚫 Sankcie od: {", ".join(sanctions)}</div>'
+    if perm:
+        status_html += f'<div style="color:#ff88ff;margin:4px 0">★ Stály člen Rady bezpečnosti — má právo VETA</div>'
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>{c["name"]} — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← Späť</a>
+<h1>{c["flag"]} {c["name"]}</h1>
+<div class="sub">{c["region"]} {"&nbsp;|&nbsp; ★ Stály člen RB" if perm else ""}</div>
+{status_html}
+<div class="card">
+<div class="card-title">🏛 Obsadenie rolí</div>
+<table class="ctable"><thead>
+<tr><th>Rola</th><th>Sila</th><th>Hráč(i)</th></tr>
+</thead><tbody>{rows}</tbody></table>
+</div>
+</body></html>"""
+
+
+@app.route("/owner/assign_role", methods=["POST"])
+def owner_assign_role():
+    """Owner prideľuje / odoberá rolu hráčovi v krajine."""
+    if not _owner_check():
+        return redirect("/owner")
+    cid    = request.form.get("cid", "").strip()
+    rid    = request.form.get("rid", "").strip()
+    uname  = request.form.get("uname", "").strip()
+    action = request.form.get("action", "add")  # add / remove
+
+    if cid not in COUNTRY_BY_ID or rid not in ROLE_BY_ID:
+        return redirect("/owner/panel")
+
+    cdata = _get_country_data()
+    cd    = cdata.setdefault(cid, {"roles": {}, "at_war": [], "sanctions": []})
+    users = cd["roles"].get(rid, [])
+    if isinstance(users, str):
+        users = [users] if users else []
+
+    if action == "add" and uname and uname not in users:
+        users.append(uname)
+    elif action == "remove" and uname in users:
+        users.remove(uname)
+
+    cd["roles"][rid] = users
+    cdata[cid] = cd
+    save_jf(KB_COUNTRIES, cdata)
+    return redirect("/owner/panel")
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────
