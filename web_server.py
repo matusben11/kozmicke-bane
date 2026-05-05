@@ -4038,7 +4038,18 @@ input[type=number],input[type=text],select{{outline:none}}</style>
   <button type="submit" name="action" value="add" class="btn" style="color:#39ff6a;border-color:#39ff6a">+ Prideliť</button>
   <button type="submit" name="action" value="remove" class="btn btn-r">− Odobrať</button>
 </form>
-<p><a href="/countries" style="color:#39ff6a;font-size:.9rem">🌍 Zobraziť stránku krajín</a></p>
+<h2>☢ JADROVÝ PROGRAM — schválenie krajín</h2>
+<p style="font-size:.82rem;color:#888">Stáli členovia (USA/RU/CN/UK/FR) majú schválenie automaticky pri štarte.</p>
+<form method="POST" action="/owner/nuclear_approve" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+  <select name="cid" style="font-size:.85rem;min-width:160px">
+    {''.join(f'<option value="{c["id"]}">{c["flag"]} {c["name"]}</option>' for c in COUNTRIES)}
+  </select>
+  <button type="submit" name="approved" value="1" class="btn" style="color:#39ff6a;border-color:#39ff6a">✅ Schváliť</button>
+  <button type="submit" name="approved" value="0" class="btn btn-r">❌ Zrušiť schválenie</button>
+</form>
+<p><a href="/countries" style="color:#39ff6a;font-size:.9rem">🌍 Zobraziť stránku krajín</a>
+  &nbsp;|&nbsp; <a href="/countries/pu_market" style="color:#ff9900;font-size:.9rem">🔬 Trh Pu</a>
+  &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff;font-size:.9rem">🏛 Rada</a></p>
 </body></html>"""
 
 @app.route("/owner/reset_pw", methods=["POST"])
@@ -7936,64 +7947,163 @@ def country_weapons(cid):
     )
     can_edit = is_owner or has_role
 
+    msg = ""
     if request.method == "POST" and can_edit:
-        try:
-            w["warheads"]     = max(0, int(request.form.get("warheads", 0)))
-            w["missiles"]     = max(0, int(request.form.get("missiles", 0)))
-            w["conventional"] = max(0, int(request.form.get("conventional", 0)))
-            w["cyber"]        = max(0, int(request.form.get("cyber", 0)))
-        except ValueError:
-            pass
-        # Jadrové zbrane bez schválenia → upozornenie Rade
-        cncl = _get_council_data()
-        if w["warheads"] > 0 and not w.get("nuclear_approved"):
-            alert_msg = f"🚨 {c['name']} vlastní {w['warheads']} jadrových hlavíc bez schválenia Rady!"
+        action = request.form.get("action", "update")
+
+        if action == "build_warhead":
+            pu_type = request.form.get("pu_type", "wg_pu")
+            try:
+                qty = max(1, int(request.form.get("qty", 1)))
+            except ValueError:
+                qty = 1
+            if not w.get("nuclear_approved"):
+                msg = "NESCHVALENE"
+            else:
+                eu    = uname.upper()
+                edata = load_jf(KB_ENERGY, {})
+                ep    = edata.get(eu, {})
+                fuel  = ep.get("fuel", {})
+                cost_pu = qty * 1.0 if pu_type == "wg_pu" else qty * 5.0
+                avail   = fuel.get(pu_type, 0.0)
+                pu_label = "WG-Pu" if pu_type == "wg_pu" else "Pu-239"
+                if avail < cost_pu:
+                    msg = f"NEDOSTATOK:{pu_label}:{avail:.2f}"
+                else:
+                    fuel[pu_type] = round(avail - cost_pu, 3)
+                    ep["fuel"] = fuel
+                    heat_add = qty * (30 if pu_type == "wg_pu" else 10)
+                    ep["proliferation_heat"] = min(100.0, round(
+                        ep.get("proliferation_heat", 0) + heat_add, 2))
+                    edata[eu] = ep
+                    save_jf(KB_ENERGY, edata)
+                    w["warheads"] = w.get("warheads", 0) + qty
+                    msg = f"OK:{qty}:{pu_label}:{heat_add}"
+        else:
+            try:
+                w["missiles"]     = max(0, int(request.form.get("missiles", 0)))
+                w["conventional"] = max(0, int(request.form.get("conventional", 0)))
+                w["cyber"]        = max(0, int(request.form.get("cyber", 0)))
+            except ValueError:
+                pass
+
+        if w.get("warheads", 0) > 0 and not w.get("nuclear_approved"):
+            cncl = _get_council_data()
             cncl.setdefault("alerts", []).append({
-                "ts": time.time(), "msg": alert_msg, "country": cid
+                "ts": time.time(),
+                "msg": f"ALERT:{c['name']}:{w['warheads']}",
+                "country": cid,
             })
             save_jf(KB_COUNCIL, cncl)
         cd["weapons"] = w
-        cdata[cid]   = cd
+        cdata[cid]    = cd
         save_jf(KB_COUNTRIES, cdata)
-        return redirect(f"/countries/{cid}/weapons")
+        return redirect(f"/countries/{cid}/weapons?msg={msg}")
 
-    nuc_ok   = w.get("nuclear_approved", False)
-    nuc_col  = "#39ff6a" if nuc_ok else "#ff3a3a"
-    nuc_lbl  = "✅ SCHVÁLENÝ Radou bezpečnosti" if nuc_ok else "❌ NESCHVÁLENÝ — porušenie medzinárodného práva"
-    edit_fields = ""
+    # Čítaj správu z query stringu
+    raw_msg = request.args.get("msg", "")
+    msg_html = ""
+    if raw_msg.startswith("OK:"):
+        parts = raw_msg.split(":")
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Vyrobených {parts[1]} hlavíc (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
+    elif raw_msg == "NESCHVALENE":
+        msg_html = '<div style="color:#ff3a3a;margin-bottom:8px">❌ Krajina nemá schválenie Rady na jadrové zbrane!</div>'
+    elif raw_msg.startswith("NEDOSTATOK:"):
+        parts = raw_msg.split(":")
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Nedostatok {parts[1]}: {parts[2]}</div>'
+
+    nuc_ok  = w.get("nuclear_approved", False)
+    nuc_col = "#39ff6a" if nuc_ok else "#ff3a3a"
+    nuc_lbl = "✅ SCHVÁLENÝ Radou bezpečnosti" if nuc_ok else "❌ NESCHVÁLENÝ — porušenie medzinárodného práva"
+
+    # Pu zásoby hráča z minihry
+    eu    = uname.upper()
+    edata = load_jf(KB_ENERGY, {})
+    ep    = edata.get(eu, {})
+    fuel  = ep.get("fuel", {})
+    pu239_avail = fuel.get("pu239", 0.0)
+    wg_avail    = fuel.get("wg_pu", 0.0)
+
+    build_html = ""
+    if can_edit and nuc_ok:
+        build_html = (
+            f'<div class="card" style="border-color:#ff440044;margin-top:6px">'
+            f'<div class="card-title" style="color:#ff9900">☢ Výroba jadrových hlavíc</div>'
+            f'<div class="row"><span class="lbl">WG-Pu (zásoby)</span>'
+            f'<span style="color:#ff3a3a">{wg_avail:.3f} ks'
+            f' <small style="color:#555">(1 WG-Pu = 1 hlavica, +30 heat)</small></span></div>'
+            f'<div class="row"><span class="lbl">Pu-239 (zásoby)</span>'
+            f'<span style="color:#ff9900">{pu239_avail:.2f} ks'
+            f' <small style="color:#555">(5 Pu-239 = 1 hlavica, +10 heat)</small></span></div>'
+            f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">'
+            f'<input type="hidden" name="action" value="build_warhead">'
+            f'<select name="pu_type" style="min-width:120px">'
+            f'<option value="wg_pu">☢ WG-Pu (1:1)</option>'
+            f'<option value="pu239">Pu-239 (5:1)</option></select>'
+            f'<input type="number" name="qty" value="1" min="1" style="width:60px">'
+            f'<button type="submit" class="b" style="border-color:#ff3a3a;color:#ff3a3a">☢ Vyrobiť</button>'
+            f'</form>'
+            f'<div style="color:#2a7a45;font-size:.82rem;margin-top:4px">'
+            f'Plutónium: Energetická minihra alebo'
+            f' <a href="/countries/pu_market" style="color:#ff9900">Trh Pu →</a>'
+            f'</div></div>'
+        )
+    elif can_edit:
+        build_html = (
+            f'<div style="color:#ff9900;font-size:.9rem;margin:8px 0">'
+            f'☢ Výroba hlavíc blokovaná — krajina nemá schválenie Rady. '
+            f'<a href="/council" style="color:#ff88ff">Požiadaj Radu →</a></div>'
+        )
+
+    edit_html = ""
     if can_edit:
-        edit_fields = f"""
-        <form method="POST" style="margin-top:10px">
-          <div class="row"><span class="lbl">🪖 Konvenčné sily (tis.)</span>
-            <input type="number" name="conventional" value="{w.get('conventional',0)}" min="0" style="width:90px"></div>
-          <div class="row"><span class="lbl">☢ Jadrové hlavice</span>
-            <input type="number" name="warheads" value="{w.get('warheads',0)}" min="0" style="width:90px"></div>
-          <div class="row"><span class="lbl">🚀 Balistické rakety</span>
-            <input type="number" name="missiles" value="{w.get('missiles',0)}" min="0" style="width:90px"></div>
-          <div class="row"><span class="lbl">💻 Kybernetické zbrane</span>
-            <input type="number" name="cyber" value="{w.get('cyber',0)}" min="0" style="width:90px"></div>
-          <button type="submit" class="b" style="margin-top:8px">💾 Uložiť zbrane</button>
-        </form>"""
+        edit_html = (
+            f'<form method="POST" style="margin-top:10px">'
+            f'<input type="hidden" name="action" value="update">'
+            f'<div class="row"><span class="lbl">🪖 Konvenčné sily (tis.)</span>'
+            f'<input type="number" name="conventional" value="{w.get("conventional",0)}" min="0" style="width:90px"></div>'
+            f'<div class="row"><span class="lbl">🚀 Balistické rakety</span>'
+            f'<input type="number" name="missiles" value="{w.get("missiles",0)}" min="0" style="width:90px"></div>'
+            f'<div class="row"><span class="lbl">💻 Kybernetické zbrane</span>'
+            f'<input type="number" name="cyber" value="{w.get("cyber",0)}" min="0" style="width:90px"></div>'
+            f'<button type="submit" class="b" style="margin-top:8px">💾 Uložiť</button>'
+            f'</form>'
+        )
 
-    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>{c['name']} — Zbrane</title>{_COUNTRIES_CSS}</head><body>
-<a href="/countries/{cid}" class="btn-back">← {c['name']}</a>
-<h1>{c['flag']} {c['name']} — Zbraňový arzenál</h1>
-<div class="card">
-  <div class="card-title">☢ Jadrový status</div>
-  <div style="color:{nuc_col};margin-bottom:8px">{nuc_lbl}</div>
-  <div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get('warheads',0)}</span></div>
-  <div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get('missiles',0)}</span></div>
-  <div class="row"><span class="lbl">🪖 Konvenčné sily</span><span class="val">{w.get('conventional',0):,} tis.</span></div>
-  <div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get('cyber',0)}</span></div>
-  {edit_fields}
-</div>
-<p>
-  <a href="/council" style="color:#ff88ff">🏛 Rada bezpečnosti →</a>
-  &nbsp;|&nbsp;
-  <a href="/countries/{cid}" style="color:#39ff6a">← Späť na krajinu</a>
-</p>
-</body></html>"""
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        f'<title>{c["name"]} — Zbrane</title>{_COUNTRIES_CSS}</head><body>'
+        f'<a href="/countries/{cid}" class="btn-back">← {c["name"]}</a>'
+        f'<h1>{c["flag"]} {c["name"]} — Zbraňový arzenál</h1>'
+        f'{msg_html}'
+        f'<div class="card">'
+        f'<div class="card-title">☢ Jadrový status</div>'
+        f'<div style="color:{nuc_col};margin-bottom:6px">{nuc_lbl}</div>'
+        f'<div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get("warheads",0)}</span></div>'
+        f'<div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get("missiles",0)}</span></div>'
+        f'<div class="row"><span class="lbl">🪖 Konv. sily</span><span class="val">{w.get("conventional",0):,} tis.</span></div>'
+        f'<div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get("cyber",0)}</span></div>'
+        f'{edit_html}</div>'
+        f'{build_html}'
+        f'<p><a href="/countries/pu_market" style="color:#ff9900">🔬 Trh Pu →</a>'
+        f' &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 Rada →</a>'
+        f' &nbsp;|&nbsp; <a href="/countries/{cid}" style="color:#39ff6a">← Späť</a></p>'
+        f'</body></html>'
+    )
+
+
+@app.route("/owner/nuclear_approve", methods=["POST"])
+def owner_nuclear_approve():
+    if not _owner_check():
+        return redirect("/owner")
+    cid      = request.form.get("cid", "").strip()
+    approved = request.form.get("approved", "0") == "1"
+    if cid not in COUNTRY_BY_ID:
+        return redirect("/owner/panel")
+    cdata = _get_country_data()
+    cdata[cid].setdefault("weapons", {})["nuclear_approved"] = approved
+    save_jf(KB_COUNTRIES, cdata)
+    return redirect("/owner/panel")
 
 
 @app.route("/owner/assign_role", methods=["POST"])
@@ -8024,6 +8134,159 @@ def owner_assign_role():
     cdata[cid] = cd
     save_jf(KB_COUNTRIES, cdata)
     return redirect("/owner/panel")
+
+
+# ── Trh plutónia ─────────────────────────────────────────────────────────────
+
+@app.route("/countries/pu_market", methods=["GET", "POST"])
+def pu_market():
+    """Trh Pu — hráči predávajú Pu-239 / WG-Pu iným krajinám."""
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname = _uname()
+    msg   = ""
+
+    cncl = _get_council_data()
+    cncl.setdefault("pu_listings", [])
+    now = time.time()
+    cncl["pu_listings"] = [l for l in cncl["pu_listings"] if l.get("expires_at", 0) > now]
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "list":
+            pu_type = request.form.get("pu_type", "pu239")
+            try:
+                qty      = float(request.form.get("qty", 0))
+                price_cr = int(request.form.get("price_cr", 0))
+            except ValueError:
+                qty = price_cr = 0
+            edata = load_jf(KB_ENERGY, {})
+            ep    = edata.get(uname, {})
+            avail = ep.get("fuel", {}).get(pu_type, 0.0)
+            if qty <= 0 or price_cr <= 0:
+                msg = "CHYBA_INVALID"
+            elif avail < qty:
+                msg = f"CHYBA_QTY:{avail:.3f}"
+            else:
+                ep["fuel"][pu_type] = round(avail - qty, 3)
+                edata[uname] = ep
+                save_jf(KB_ENERGY, edata)
+                cncl["pu_listings"].append({
+                    "id": f"pu_{int(now)}_{uname[:4]}",
+                    "seller": uname, "pu_type": pu_type,
+                    "qty": qty, "price_cr": price_cr,
+                    "expires_at": now + 48 * 3600,
+                })
+                save_jf(KB_COUNCIL, cncl)
+                msg = f"OK_LIST:{qty}:{pu_type}:{price_cr}"
+
+        elif action == "buy":
+            lid     = request.form.get("lid", "")
+            listing = next((l for l in cncl["pu_listings"] if l["id"] == lid), None)
+            if not listing or listing["seller"] == uname:
+                msg = "CHYBA_BUY"
+            else:
+                career = load_jf(KB_CAREER, {})
+                my_cr  = career.get(uname, {}).get("career_cr", 0)
+                if my_cr < listing["price_cr"]:
+                    msg = f"CHYBA_CR:{my_cr}"
+                else:
+                    career[uname]["career_cr"] = my_cr - listing["price_cr"]
+                    career.setdefault(listing["seller"], {})["career_cr"] = \
+                        career[listing["seller"]].get("career_cr", 0) + listing["price_cr"]
+                    save_jf(KB_CAREER, career)
+                    edata = load_jf(KB_ENERGY, {})
+                    edata.setdefault(uname, {}).setdefault("fuel", {})[listing["pu_type"]] = round(
+                        edata[uname]["fuel"].get(listing["pu_type"], 0.0) + listing["qty"], 3)
+                    save_jf(KB_ENERGY, edata)
+                    cncl["pu_listings"] = [l for l in cncl["pu_listings"] if l["id"] != lid]
+                    save_jf(KB_COUNCIL, cncl)
+                    msg = f"OK_BUY:{listing['qty']}:{listing['pu_type']}:{listing['seller']}:{listing['price_cr']}"
+
+        elif action == "cancel":
+            lid     = request.form.get("lid", "")
+            listing = next((l for l in cncl["pu_listings"] if l["id"] == lid and l["seller"] == uname), None)
+            if listing:
+                edata = load_jf(KB_ENERGY, {})
+                edata.setdefault(uname, {}).setdefault("fuel", {})[listing["pu_type"]] = round(
+                    edata[uname]["fuel"].get(listing["pu_type"], 0.0) + listing["qty"], 3)
+                save_jf(KB_ENERGY, edata)
+                cncl["pu_listings"] = [l for l in cncl["pu_listings"] if l["id"] != lid]
+                save_jf(KB_COUNCIL, cncl)
+                msg = "OK_CANCEL"
+        return redirect(f"/countries/pu_market?msg={msg}")
+
+    # HTML
+    raw_msg = request.args.get("msg", "")
+    if raw_msg.startswith("OK_LIST:"):
+        p = raw_msg.split(":")
+        lbl = "WG-Pu" if p[2] == "wg_pu" else "Pu-239"
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Ponuka {p[1]} {lbl} za {p[3]} CR pridaná.</div>'
+    elif raw_msg.startswith("OK_BUY:"):
+        p = raw_msg.split(":")
+        lbl = "WG-Pu" if p[2] == "wg_pu" else "Pu-239"
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Kúpené {p[1]} {lbl} od {p[3]} za {p[4]} CR.</div>'
+    elif raw_msg == "OK_CANCEL":
+        msg_html = '<div style="color:#39ff6a;margin-bottom:8px">✅ Ponuka zrušená.</div>'
+    elif raw_msg.startswith("CHYBA"):
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Chyba: {raw_msg}</div>'
+    else:
+        msg_html = ""
+
+    edata    = load_jf(KB_ENERGY, {})
+    ep       = edata.get(uname, {})
+    my_pu239 = ep.get("fuel", {}).get("pu239", 0.0)
+    my_wg    = ep.get("fuel", {}).get("wg_pu", 0.0)
+    listings = cncl.get("pu_listings", [])
+
+    rows = ""
+    for l in sorted(listings, key=lambda x: x["price_cr"]):
+        lbl     = "☢ WG-Pu" if l["pu_type"] == "wg_pu" else "Pu-239"
+        col     = "#ff3a3a" if l["pu_type"] == "wg_pu" else "#ff9900"
+        is_mine = l["seller"] == uname
+        left_h  = max(0, int((l["expires_at"] - now) / 3600))
+        btns = ""
+        if not is_mine:
+            btns += (f'<form method="POST" style="display:inline">'
+                    f'<input type="hidden" name="action" value="buy">'
+                    f'<input type="hidden" name="lid" value="{l["id"]}">'
+                    f'<button class="b" style="font-size:.85rem">Kúpiť</button></form>')
+        if is_mine:
+            btns += (f'<form method="POST" style="display:inline;margin-left:4px">'
+                    f'<input type="hidden" name="action" value="cancel">'
+                    f'<input type="hidden" name="lid" value="{l["id"]}">'
+                    f'<button class="b red" style="font-size:.85rem">Zrušiť</button></form>')
+        rows += (f'<tr><td style="color:{col}">{lbl}</td><td>{l["qty"]:.3f}</td>'
+                f'<td style="color:#ff9900">{l["price_cr"]:,} CR</td>'
+                f'<td style="color:#888">{l["seller"]}</td>'
+                f'<td style="color:#555">{left_h}h</td><td>{btns}</td></tr>')
+    if not rows:
+        rows = '<tr><td colspan="6" style="color:#2a7a45">Žiadne ponuky.</td></tr>'
+
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        f'<title>Trh Pu — KB</title>{_COUNTRIES_CSS}</head><body>'
+        f'<a href="/countries" class="btn-back">← Krajiny</a>'
+        f'<h1>🔬 TRH PLUTÓNIA</h1>'
+        f'<div class="sub">Tvoje: Pu-239: <span style="color:#ff9900">{my_pu239:.2f}</span>'
+        f' &nbsp; WG-Pu: <span style="color:#ff3a3a">{my_wg:.3f}</span></div>'
+        f'{msg_html}'
+        f'<div class="card" style="border-color:#ff990044">'
+        f'<div class="card-title" style="color:#ff9900">📤 Ponúknuť Pu na predaj</div>'
+        f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+        f'<input type="hidden" name="action" value="list">'
+        f'<select name="pu_type"><option value="pu239">Pu-239</option>'
+        f'<option value="wg_pu">☢ WG-Pu</option></select>'
+        f'<input type="number" name="qty" value="1" min="0.001" step="0.001" style="width:80px">'
+        f'<input type="number" name="price_cr" value="10000" min="1" style="width:100px" placeholder="CR">'
+        f'<button type="submit" class="b">📤 Ponúknuť</button></form></div>'
+        f'<div class="card"><div class="card-title">🛒 Aktívne ponuky</div>'
+        f'<table class="ctable"><thead><tr>'
+        f'<th>Typ</th><th>Mn.</th><th>Cena</th><th>Predajca</th><th>Zostatok</th><th></th>'
+        f'</tr></thead><tbody>{rows}</tbody></table></div>'
+        f'</body></html>'
+    )
 
 
 # ── Investície ───────────────────────────────────────────────────────────────
