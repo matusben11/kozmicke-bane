@@ -34,8 +34,9 @@ KB_LB     = DATA_DIR / "kb_leaderboard.json"
 KB_ENERGY     = DATA_DIR / "kb_energy.json"
 KB_MARKET     = DATA_DIR / "kb_market.json"
 KB_AUCTIONS   = DATA_DIR / "kb_auctions.json"
-KB_COUNTRIES  = DATA_DIR / "kb_countries.json"
-KB_COUNCIL    = DATA_DIR / "kb_council.json"
+KB_COUNTRIES    = DATA_DIR / "kb_countries.json"
+KB_COUNCIL      = DATA_DIR / "kb_council.json"
+KB_INVESTMENTS  = DATA_DIR / "kb_investments.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -80,8 +81,9 @@ _KV_KEYS = {
     KB_ENERGY:   "kb_energy",
     KB_MARKET:    "kb_market",
     KB_AUCTIONS:  "kb_auctions",
-    KB_COUNTRIES: "kb_countries",
-    KB_COUNCIL:   "kb_council",
+    KB_COUNTRIES:   "kb_countries",
+    KB_COUNCIL:     "kb_council",
+    KB_INVESTMENTS: "kb_investments",
 }
 
 
@@ -364,7 +366,41 @@ RES_TYPES = {
 
 RES_VOTE_HOURS  = 48    # rezolúcia platí 48 hodín na hlasovanie
 RES_QUOTA       = 3     # potrebný počet hlasov ZA (okrem stálych členov)
-NUCLEAR_HEAT_THRESHOLD = 60  # heat nad touto hranicou = automatické upozornenie Rade
+NUCLEAR_HEAT_THRESHOLD = 60
+
+# ── Vojny ────────────────────────────────────────────────────────────────────
+WAR_ROLES = {"president", "pm", "def_minister", "general"}  # kto môže vyhlásiť vojnu
+
+# Vojenské akcie — každá spotrebuje zdroje a spôsobí škodu
+MILITARY_ACTIONS = {
+    "conventional": {
+        "name_sk": "Konvenčný útok", "name_en": "Conventional strike",
+        "icon": "🪖", "cost_field": "conventional", "cost": 10,
+        "dmg_field": "conventional", "dmg": 15, "dmg_nuclear": 0,
+    },
+    "missile": {
+        "name_sk": "Raketový útok", "name_en": "Missile strike",
+        "icon": "🚀", "cost_field": "missiles", "cost": 1,
+        "dmg_field": "conventional", "dmg": 30, "dmg_nuclear": 0,
+    },
+    "cyber": {
+        "name_sk": "Kybernetický útok", "name_en": "Cyber attack",
+        "icon": "💻", "cost_field": "cyber", "cost": 1,
+        "dmg_field": "cyber", "dmg": 2, "dmg_nuclear": 0,
+    },
+    "nuke": {
+        "name_sk": "Jadrový úder", "name_en": "Nuclear strike",
+        "icon": "☢", "cost_field": "warheads", "cost": 1,
+        "dmg_field": "conventional", "dmg": 200, "dmg_nuclear": 1,
+    },
+}
+
+# ── Investície ────────────────────────────────────────────────────────────────
+INV_DURATION_H   = 24     # investícia trvá 24 hodín
+INV_RETURN_RATE  = 1.25   # investor dostane 125 % späť (25 % výnos)
+INV_MAX_ACTIVE   = 5      # max aktívnych investícií pre jedného hráča
+INV_MIN_CR       = 500    # minimálna investícia v CR
+INV_MIN_FUEL     = 5      # minimálna investícia v palive (energie)
 
 def _countries_allowed():
     if "username" not in session:
@@ -5114,6 +5150,13 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
     text-align:center;text-decoration:none;letter-spacing:.06em">
   &#127917; {Lp("AUKCIE — dražby komoditných lotov","AUCTIONS — commodity lot bidding")}
 </a>
+<a href="/energy/invest"
+  style="display:block;width:100%;max-width:680px;margin-bottom:12px;
+    background:#0a0700;border:1px solid #ff9900;color:#ffcc44;
+    font-family:'VT323',monospace;font-size:1.1em;padding:10px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  💰 {Lp("INVESTÍCIE — vklad CR/energie do iných hráčov","INVESTMENTS — invest CR/energy in other players")}
+</a>
 
 </body></html>"""
 
@@ -7331,9 +7374,10 @@ def country_detail(cid):
 <h1>{c["flag"]} {c["name"]}</h1>
 <div class="sub">{c["region"]} {"&nbsp;|&nbsp; ★ Stály člen RB" if perm else ""}</div>
 {status_html}
-<div style="display:flex;gap:8px;margin-bottom:10px">
-  <a href="/countries/{cid}/weapons" style="display:inline-block;background:#0d0000;border:1px solid #ff3a3a44;color:#ff9900;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Zbraňový arzenál</a>
-  <a href="/council" style="display:inline-block;background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:4px 12px;font-family:inherit;font-size:.95rem">🏛 Rada bezpečnosti</a>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+  <a href="/countries/{cid}/weapons" style="display:inline-block;background:#0d0000;border:1px solid #ff3a3a44;color:#ff9900;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Arzenál</a>
+  <a href="/countries/{cid}/war" style="display:inline-block;background:#1a0000;border:1px solid #ff3a3a;color:#ff3a3a;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Vojenský stav</a>
+  <a href="/council" style="display:inline-block;background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:4px 12px;font-family:inherit;font-size:.95rem">🏛 Rada</a>
 </div>
 <div class="card">
 <div class="card-title">🏛 Obsadenie rolí</div>
@@ -7341,6 +7385,169 @@ def country_detail(cid):
 <tr><th>Rola</th><th>Sila</th><th>Hráč(i)</th></tr>
 </thead><tbody>{rows}</tbody></table>
 </div>
+</body></html>"""
+
+
+# ── Vojny ────────────────────────────────────────────────────────────────────
+
+@app.route("/countries/<cid>/war", methods=["GET", "POST"])
+def country_war(cid):
+    """Vyhlásenie vojny + prehľad vojnového stavu krajiny."""
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    c = COUNTRY_BY_ID.get(cid)
+    if not c:
+        return redirect("/countries")
+    uname = session["username"]
+    cdata = _get_country_data()
+    cd    = cdata.get(cid, {})
+
+    # Overí či má hráč vojenskú rolu v tejto krajine
+    roles  = cd.get("roles", {})
+    has_war_role = any(
+        uname in (v if isinstance(v, list) else ([v] if v else []))
+        for rid, v in roles.items() if rid in WAR_ROLES
+    )
+    is_owner = session.get("owner") is True
+
+    msg = ""
+    if request.method == "POST" and (has_war_role or is_owner):
+        action = request.form.get("action", "")
+
+        if action == "declare":
+            target = request.form.get("target", "")
+            if target in COUNTRY_BY_ID and target != cid and target != COUNCIL_HQ_COUNTRY:
+                at_war = cd.get("at_war", [])
+                if target not in at_war:
+                    # Skontroluj či má Rada autorizáciu
+                    cncl = _get_council_data()
+                    authorized = any(
+                        r["type"] == "war_auth" and r["target_country"] == target
+                        and r["status"] == "passed"
+                        for r in cncl["resolutions"]
+                    )
+                    at_war.append(target)
+                    cd["at_war"] = at_war
+                    # Aj cieľová krajina je vo vojne s nami
+                    tcd = cdata.get(target, {})
+                    tw  = tcd.setdefault("at_war", [])
+                    if cid not in tw:
+                        tw.append(cid)
+                    tcd["at_war"] = tw
+                    cdata[target] = tcd
+                    if not authorized:
+                        # Automatická sankčná rezolúcia
+                        now = time.time()
+                        cncl.setdefault("resolutions", []).append({
+                            "id": f"res_auto_{int(now)}",
+                            "type": "sanctions",
+                            "target_country": cid,
+                            "proposed_by": "ISGC_AUTO",
+                            "proposed_by_country": "switzerland",
+                            "proposed_at": now,
+                            "votes_for": [], "votes_against": [],
+                            "vetoed_by": None, "status": "open",
+                            "expires_at": now + RES_VOTE_HOURS * 3600,
+                        })
+                        save_jf(KB_COUNCIL, cncl)
+                        msg = f"⚔ Vojna vyhlásená proti {COUNTRY_BY_ID[target]['name']}! ⚠ Bez autorizácie Rady — návrh sankcií bol podaný."
+                    else:
+                        msg = f"⚔ Vojna vyhlásená proti {COUNTRY_BY_ID[target]['name']} (autorizovaná Radou)."
+
+        elif action == "ceasefire":
+            target = request.form.get("target", "")
+            if target in cd.get("at_war", []):
+                cd["at_war"] = [x for x in cd["at_war"] if x != target]
+                tcd = cdata.get(target, {})
+                tcd["at_war"] = [x for x in tcd.get("at_war", []) if x != cid]
+                cdata[target] = tcd
+                msg = f"🕊 Prímerie s {COUNTRY_BY_ID.get(target,{}).get('name',target)}."
+
+        elif action == "strike":
+            target  = request.form.get("target", "")
+            atype   = request.form.get("atype", "")
+            act     = MILITARY_ACTIONS.get(atype)
+            if act and target in cd.get("at_war", []) and target in cdata:
+                w_src = cd.setdefault("weapons", {})
+                w_dst = cdata[target].setdefault("weapons", {})
+                cost_f = act["cost_field"]
+                # Jadrový úder — iba ak má schválenie
+                if atype == "nuke" and not w_src.get("nuclear_approved"):
+                    msg = "❌ Nemáš schválenie Rady na jadrové zbrane!"
+                elif w_src.get(cost_f, 0) < act["cost"]:
+                    msg = f"❌ Nedostatok {cost_f}: {w_src.get(cost_f,0)} < {act['cost']}"
+                else:
+                    w_src[cost_f] = w_src.get(cost_f, 0) - act["cost"]
+                    dmg_f = act["dmg_field"]
+                    actual_dmg = min(act["dmg"], w_dst.get(dmg_f, 0))
+                    w_dst[dmg_f] = max(0, w_dst.get(dmg_f, 0) - act["dmg"])
+                    if act["dmg_nuclear"]:
+                        w_dst["warheads"] = max(0, w_dst.get("warheads", 0) - act["dmg_nuclear"])
+                    cd["weapons"] = w_src
+                    cdata[target]["weapons"] = w_dst
+                    tname = COUNTRY_BY_ID.get(target, {}).get("name", target)
+                    msg = f"{act['icon']} {act['name_sk']} na {tname} — škoda: {actual_dmg} {dmg_f}"
+                    # Jadrový úder → veľký heat pre útočníka
+                    if atype == "nuke":
+                        eu = uname.upper()
+                        edata = load_jf(KB_ENERGY, {})
+                        if eu in edata:
+                            edata[eu]["proliferation_heat"] = min(100.0, round(
+                                edata[eu].get("proliferation_heat", 0) + 40, 2))
+                            save_jf(KB_ENERGY, edata)
+                        msg += " ☢ +40 proliferačného heat!"
+
+        cdata[cid] = cd
+        save_jf(KB_COUNTRIES, cdata)
+
+    # Zostavenie HTML
+    at_war   = cd.get("at_war", [])
+    w        = cd.get("weapons", {})
+    msg_html = f'<div style="color:{"#39ff6a" if msg.startswith(("🕊","✅")) else "#ff3a3a" if msg.startswith("❌") else "#ff9900"};margin-bottom:8px">{msg}</div>' if msg else ""
+
+    enemy_opts = "".join(
+        f'<option value="{eid}">{COUNTRY_BY_ID[eid]["flag"]} {COUNTRY_BY_ID[eid]["name"]}</option>'
+        for eid in at_war if eid in COUNTRY_BY_ID
+    )
+    declare_opts = "".join(
+        f'<option value="{cc["id"]}">{cc["flag"]} {cc["name"]}</option>'
+        for cc in COUNTRIES if cc["id"] != cid and cc["id"] != COUNCIL_HQ_COUNTRY and cc["id"] not in at_war
+    )
+    war_html = ""
+    if at_war:
+        war_html = '<div style="color:#ff3a3a;margin-bottom:8px">⚔ Vo vojne s: ' + \
+            ", ".join(f'{COUNTRY_BY_ID.get(e,{}).get("flag","")} {COUNTRY_BY_ID.get(e,{}).get("name",e)}' for e in at_war) + '</div>'
+
+    action_opts = "".join(
+        f'<option value="{aid}">{a["icon"]} {a["name_sk"]} (−{a["cost"]} {a["cost_field"]})</option>'
+        for aid, a in MILITARY_ACTIONS.items()
+    )
+    edit_html = ""
+    if has_war_role or is_owner:
+        edit_html = f"""
+<div class="card" style="border-color:#ff3a3a44">
+  <div class="card-title" style="color:#ff3a3a">⚔ Vojenské operácie</div>
+  <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <select name="target">{declare_opts}</select>
+    <button name="action" value="declare" class="b red">⚔ Vyhlásiť vojnu</button>
+  </form>
+  {'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><select name="target">' + enemy_opts + '</select><button name="action" value="ceasefire" class="b" style="border-color:#38d1ff;color:#38d1ff">🕊 Prímerie</button></form>' if at_war else ''}
+  {'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select name="target">' + enemy_opts + '</select><select name="atype">' + action_opts + '</select><button name="action" value="strike" class="b red">🎯 Útok</button></form>' if at_war else ''}
+</div>"""
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>{c['name']} — Vojenský stav</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries/{cid}" class="btn-back">← {c['name']}</a>
+<h1>{c['flag']} {c['name']} — Vojenský stav</h1>
+{msg_html}{war_html}
+<div class="card">
+  <div class="card-title">⚔ Arzenál</div>
+  <div class="row"><span class="lbl">🪖 Konvenčné sily</span><span class="val">{w.get('conventional',0):,} tis.</span></div>
+  <div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get('missiles',0)}</span></div>
+  <div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get('warheads',0)} {"✅" if w.get("nuclear_approved") else "❌"}</span></div>
+  <div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get('cyber',0)}</span></div>
+</div>
+{edit_html}
 </body></html>"""
 
 
@@ -7817,6 +8024,193 @@ def owner_assign_role():
     cdata[cid] = cd
     save_jf(KB_COUNTRIES, cdata)
     return redirect("/owner/panel")
+
+
+# ── Investície ───────────────────────────────────────────────────────────────
+
+@app.route("/energy/invest", methods=["GET", "POST"])
+def energy_invest():
+    """Investor vloží CR alebo palivo do profilu iného hráča."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/lobby")
+    uname  = _uname()
+    career = load_jf(KB_CAREER, {})
+    my_cr  = career.get(uname, {}).get("career_cr", 0)
+    invs   = load_jf(KB_INVESTMENTS, {})
+    now    = time.time()
+    lang   = session.get("lang", "sk")
+
+    def Lp(sk, en): return en if lang == "en" else sk
+
+    msg = ""
+    if request.method == "POST":
+        target  = request.form.get("target", "").strip().upper()
+        inv_type = request.form.get("inv_type", "cr")   # cr / fuel
+        try:
+            amount = int(request.form.get("amount", 0))
+        except ValueError:
+            amount = 0
+
+        edata = load_jf(KB_ENERGY, {})
+        # Overenia
+        if target == uname:
+            msg = "❌ Nemôžeš investovať sám do seba."
+        elif target not in edata:
+            msg = "❌ Hráč nemá energetický profil."
+        elif amount < INV_MIN_CR and inv_type == "cr":
+            msg = f"❌ Minimum {INV_MIN_CR} CR."
+        elif amount < INV_MIN_FUEL and inv_type == "fuel":
+            msg = f"❌ Minimum {INV_MIN_FUEL} paliva."
+        else:
+            my_invs = [i for i in invs.get(uname, []) if i["expires_at"] > now]
+            if len(my_invs) >= INV_MAX_ACTIVE:
+                msg = f"❌ Max {INV_MAX_ACTIVE} aktívnych investícií."
+            elif inv_type == "cr" and my_cr < amount:
+                msg = "❌ Nedostatok CR."
+            elif inv_type == "fuel":
+                my_profile = _energy_tick(uname)
+                avail_fuel = my_profile.get("energy", 0.0)
+                if avail_fuel < amount:
+                    msg = f"❌ Nedostatok energie: {avail_fuel:.0f} < {amount}"
+                else:
+                    # Odober energiu
+                    my_profile["energy"] = round(avail_fuel - amount, 1)
+                    edata[uname] = my_profile
+                    save_jf(KB_ENERGY, edata)
+                    # Zapíš investíciu
+                    inv_rec = {
+                        "from": uname, "to": target,
+                        "type": "fuel", "amount": amount,
+                        "return_amount": round(amount * INV_RETURN_RATE),
+                        "created_at": now,
+                        "expires_at": now + INV_DURATION_H * 3600,
+                        "paid": False,
+                    }
+                    invs.setdefault(uname, []).append(inv_rec)
+                    save_jf(KB_INVESTMENTS, invs)
+                    msg = f"✅ Investícia {amount} energie do {target} — návrat: {inv_rec['return_amount']} o {INV_DURATION_H}h"
+            if not msg:  # CR investícia
+                career[uname]["career_cr"] = my_cr - amount
+                save_jf(KB_CAREER, career)
+                inv_rec = {
+                    "from": uname, "to": target,
+                    "type": "cr", "amount": amount,
+                    "return_amount": round(amount * INV_RETURN_RATE),
+                    "created_at": now,
+                    "expires_at": now + INV_DURATION_H * 3600,
+                    "paid": False,
+                }
+                invs.setdefault(uname, []).append(inv_rec)
+                save_jf(KB_INVESTMENTS, invs)
+                msg = f"✅ Investícia {amount:,} CR do {target} — návrat: {inv_rec['return_amount']:,} CR o {INV_DURATION_H}h"
+
+    # Načítaj aktívne investície
+    my_invs   = [i for i in invs.get(uname, []) if i["expires_at"] > now and not i["paid"]]
+    recv_invs = [i for i in invs.get(uname, []) if i.get("received_from")]   # prijatých nemáme zatiaľ
+    # Aj investície KDE som cieľom (hľadaj vo všetkých)
+    incoming  = [i for uid, ul in invs.items() if uid != uname
+                 for i in ul if i["to"] == uname and i["expires_at"] > now and not i["paid"]]
+
+    def _inv_row(i, show_collect=False):
+        left = max(0, int(i["expires_at"] - now))
+        h, r2 = divmod(left, 3600); m2, _ = divmod(r2, 60)
+        t_str = f"{h}h {m2:02d}m"
+        typ_icon = "⚡" if i["type"] == "fuel" else "💰"
+        partner  = i["to"] if i["from"] == uname else i["from"]
+        col_btn  = ""
+        if show_collect and left == 0:
+            col_btn = (f'<form method="POST" action="/energy/invest_collect" style="display:inline">'
+                      f'<input type="hidden" name="inv_id" value="{i["created_at"]}">'
+                      f'<button class="btn-buy" style="border-color:#39ff6a;color:#39ff6a;font-size:.8em">Vybrať</button></form>')
+        return (f'<div class="row"><span class="lbl">{typ_icon} {partner}</span>'
+                f'<span class="val">{i["amount"]} → {i["return_amount"]} &nbsp; ⏱{t_str}</span>'
+                f'{col_btn}</div>')
+
+    out_html = "".join(_inv_row(i, show_collect=True) for i in my_invs) or f'<div style="color:#2a7a45">—</div>'
+    in_html  = "".join(_inv_row(i) for i in incoming) or f'<div style="color:#2a7a45">—</div>'
+    msg_html = f'<div style="color:{"#39ff6a" if msg.startswith("✅") else "#ff3a3a"};margin-bottom:8px">{msg}</div>' if msg else ""
+
+    # Zoznam hráčov s profilom
+    edata   = load_jf(KB_ENERGY, {})
+    pl_opts = "".join(
+        f'<option value="{u}">{u}</option>'
+        for u in sorted(edata.keys()) if u != uname
+    )
+    my_cr = career.get(uname, {}).get("career_cr", 0)
+
+    css = """<style>
+body{background:#000;color:#cfffcf;font-family:'VT323',monospace;font-size:1.05rem;padding:12px}
+.card{border:1px solid #1a3a1a;background:#020d02;max-width:680px;margin:0 auto 10px;padding:10px 14px}
+.card-title{color:#39ff6a;font-size:1.1rem;margin-bottom:8px}
+.row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #0a1a0a}
+.lbl{color:#2a7a45}.val{color:#cfffcf}
+.btn-back{display:inline-block;margin-bottom:10px;color:#39ff6a;border:1px solid #39ff6a44;padding:3px 10px;font-family:inherit}
+.btn-buy{background:#010d01;border:1px solid #39ff6a;color:#39ff6a;font-family:inherit;padding:2px 8px;cursor:pointer}
+input,select{background:#000;border:1px solid #2a7a45;color:#cfffcf;font-family:inherit;font-size:.95rem;padding:2px 5px}
+h1{color:#39ff6a;font-size:1.3rem;margin:4px 0}
+</style><link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
+
+    return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Investície — KB</title>{css}</head><body>
+<a href="/energy" class="btn-back">← Energia</a>
+<h1>💰 INVESTÍCIE — ENERGETICKÁ MINIHRA</h1>
+<div style="color:#2a7a45;font-size:.85rem;margin-bottom:8px">
+  Investuj CR alebo energiu do iných hráčov. Návrat: ×{INV_RETURN_RATE} po {INV_DURATION_H}h.
+  Max {INV_MAX_ACTIVE} aktívnych. Tvoje CR: {my_cr:,}
+</div>
+{msg_html}
+<div class="card" style="border-color:#ff990044">
+  <div class="card-title" style="color:#ff9900">💸 Nová investícia</div>
+  <form method="POST" style="display:grid;gap:8px;max-width:400px">
+    <div class="row"><span class="lbl">Hráč:</span><select name="target">{pl_opts}</select></div>
+    <div class="row"><span class="lbl">Typ:</span>
+      <select name="inv_type">
+        <option value="cr">💰 CR (kredity)</option>
+        <option value="fuel">⚡ Energia (minihra)</option>
+      </select></div>
+    <div class="row"><span class="lbl">Suma:</span>
+      <input type="number" name="amount" value="{INV_MIN_CR}" min="1" style="width:100px"></div>
+    <button type="submit" class="btn-buy" style="margin-top:4px">💸 Investovať</button>
+  </form>
+</div>
+<div class="card">
+  <div class="card-title">📤 Moje investície (posielam)</div>{out_html}
+</div>
+<div class="card" style="border-color:#38d1ff44">
+  <div class="card-title" style="color:#38d1ff">📥 Investície do mňa (prijímam)</div>{in_html}
+</div>
+</body></html>"""
+
+
+@app.route("/energy/invest_collect", methods=["POST"])
+def energy_invest_collect():
+    """Vyber späť investíciu po vypršaní + výnos."""
+    if not _require_session() or not _energy_allowed():
+        return redirect("/")
+    uname  = _uname()
+    try:
+        inv_id = float(request.form.get("inv_id", 0))
+    except ValueError:
+        return redirect("/energy/invest")
+    invs = load_jf(KB_INVESTMENTS, {})
+    now  = time.time()
+    for i in invs.get(uname, []):
+        if abs(i["created_at"] - inv_id) < 1 and not i["paid"] and i["expires_at"] <= now:
+            i["paid"] = True
+            if i["type"] == "cr":
+                career = load_jf(KB_CAREER, {})
+                career.setdefault(uname, {})["career_cr"] = \
+                    career[uname].get("career_cr", 0) + i["return_amount"]
+                save_jf(KB_CAREER, career)
+            else:
+                edata = load_jf(KB_ENERGY, {})
+                if uname in edata:
+                    edata[uname]["energy"] = round(
+                        edata[uname].get("energy", 0) + i["return_amount"], 1)
+                    save_jf(KB_ENERGY, edata)
+            break
+    save_jf(KB_INVESTMENTS, invs)
+    return redirect("/energy/invest")
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────
