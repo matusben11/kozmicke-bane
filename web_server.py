@@ -369,7 +369,15 @@ RES_QUOTA       = 3     # potrebný počet hlasov ZA (okrem stálych členov)
 NUCLEAR_HEAT_THRESHOLD = 60
 
 # ── Vojny ────────────────────────────────────────────────────────────────────
-WAR_ROLES = {"president", "pm", "def_minister", "general"}  # kto môže vyhlásiť vojnu
+WAR_ROLES = {"president", "pm", "def_minister", "general"}
+
+# Ceny výroby zbraní (CR za 1 jednotku)
+WEAPON_BUILD_COSTS = {
+    "conventional": 500,    # 1 tis. vojakov = 500 CR
+    "missiles":     8000,   # 1 raketa = 8 000 CR
+    "cyber":        3000,   # 1 kyber jednotka = 3 000 CR
+    # warheads → len cez Pu (nie CR)
+}
 
 # Vojenské akcie — každá spotrebuje zdroje a spôsobí škodu
 MILITARY_ACTIONS = {
@@ -7979,13 +7987,31 @@ def country_weapons(cid):
                     save_jf(KB_ENERGY, edata)
                     w["warheads"] = w.get("warheads", 0) + qty
                     msg = f"OK:{qty}:{pu_label}:{heat_add}"
-        else:
-            try:
-                w["missiles"]     = max(0, int(request.form.get("missiles", 0)))
-                w["conventional"] = max(0, int(request.form.get("conventional", 0)))
-                w["cyber"]        = max(0, int(request.form.get("cyber", 0)))
-            except ValueError:
-                pass
+        elif action == "buy_weapons":
+            career = load_jf(KB_CAREER, {})
+            entry  = career.get(uname, {})
+            my_cr  = entry.get("career_cr", 0)
+            total_cost = 0
+            buys = {}
+            for wtype, unit_cost in WEAPON_BUILD_COSTS.items():
+                try:
+                    qty = max(0, int(request.form.get(f"buy_{wtype}", 0)))
+                except ValueError:
+                    qty = 0
+                if qty > 0:
+                    buys[wtype] = qty
+                    total_cost += qty * unit_cost
+            if total_cost == 0:
+                msg = "OK:nochange"
+            elif my_cr < total_cost:
+                msg = f"NEDOSTATOK_CR:{my_cr}:{total_cost}"
+            else:
+                entry["career_cr"] = my_cr - total_cost
+                career[uname] = entry
+                save_jf(KB_CAREER, career)
+                for wtype, qty in buys.items():
+                    w[wtype] = w.get(wtype, 0) + qty
+                msg = f"OK_WEAPONS:{total_cost}"
 
         if w.get("warheads", 0) > 0 and not w.get("nuclear_approved"):
             cncl = _get_council_data()
@@ -8006,11 +8032,16 @@ def country_weapons(cid):
     if raw_msg.startswith("OK:"):
         parts = raw_msg.split(":")
         msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Vyrobených {parts[1]} hlavíc (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
+    elif raw_msg.startswith("OK_WEAPONS:"):
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Zbrane nakúpené za {int(raw_msg.split(":")[1]):,} CR.</div>'
     elif raw_msg == "NESCHVALENE":
         msg_html = '<div style="color:#ff3a3a;margin-bottom:8px">❌ Krajina nemá schválenie Rady na jadrové zbrane!</div>'
     elif raw_msg.startswith("NEDOSTATOK:"):
         parts = raw_msg.split(":")
         msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Nedostatok {parts[1]}: {parts[2]}</div>'
+    elif raw_msg.startswith("NEDOSTATOK_CR:"):
+        parts = raw_msg.split(":")
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Nedostatok CR: máš {int(parts[1]):,}, potrebuješ {int(parts[2]):,}</div>'
 
     nuc_ok  = w.get("nuclear_approved", False)
     nuc_col = "#39ff6a" if nuc_ok else "#ff3a3a"
@@ -8056,18 +8087,33 @@ def country_weapons(cid):
         )
 
     edit_html = ""
+    # Načítaj CR hráča pre zobrazenie cien
+    _career_tmp = load_jf(KB_CAREER, {})
+    my_cr_disp  = _career_tmp.get(uname, {}).get("career_cr", 0)
+
     if can_edit:
+        _rows_buy = ""
+        _icons = {"conventional": "🪖", "missiles": "🚀", "cyber": "💻"}
+        _names = {"conventional": "Konvenčné sily (tis.)", "missiles": "Balistické rakety", "cyber": "Kybernetické zbrane"}
+        for wtype, unit_cost in WEAPON_BUILD_COSTS.items():
+            stock = w.get(wtype, 0)
+            _rows_buy += (
+                f'<div class="row">'
+                f'<span class="lbl">{_icons[wtype]} {_names[wtype]}</span>'
+                f'<span style="display:flex;align-items:center;gap:6px">'
+                f'<span class="val" style="min-width:50px">{stock:,}</span>'
+                f'<input type="number" name="buy_{wtype}" value="0" min="0" style="width:60px" placeholder="+qty">'
+                f'<span style="color:#2a7a45;font-size:.82rem">{unit_cost:,} CR/ks</span>'
+                f'</span></div>'
+            )
         edit_html = (
-            f'<form method="POST" style="margin-top:10px">'
-            f'<input type="hidden" name="action" value="update">'
-            f'<div class="row"><span class="lbl">🪖 Konvenčné sily (tis.)</span>'
-            f'<input type="number" name="conventional" value="{w.get("conventional",0)}" min="0" style="width:90px"></div>'
-            f'<div class="row"><span class="lbl">🚀 Balistické rakety</span>'
-            f'<input type="number" name="missiles" value="{w.get("missiles",0)}" min="0" style="width:90px"></div>'
-            f'<div class="row"><span class="lbl">💻 Kybernetické zbrane</span>'
-            f'<input type="number" name="cyber" value="{w.get("cyber",0)}" min="0" style="width:90px"></div>'
-            f'<button type="submit" class="b" style="margin-top:8px">💾 Uložiť</button>'
-            f'</form>'
+            f'<div class="card" style="border-color:#ff990044;margin-top:6px">'
+            f'<div class="card-title" style="color:#ff9900">🏭 Nakúpiť zbrane <small style="color:#555">(tvoje CR: {my_cr_disp:,})</small></div>'
+            f'<form method="POST">'
+            f'<input type="hidden" name="action" value="buy_weapons">'
+            f'{_rows_buy}'
+            f'<button type="submit" class="b" style="margin-top:8px;border-color:#ff9900;color:#ff9900">🏭 Nakúpiť</button>'
+            f'</form></div>'
         )
 
     return (
@@ -8083,7 +8129,8 @@ def country_weapons(cid):
         f'<div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get("missiles",0)}</span></div>'
         f'<div class="row"><span class="lbl">🪖 Konv. sily</span><span class="val">{w.get("conventional",0):,} tis.</span></div>'
         f'<div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get("cyber",0)}</span></div>'
-        f'{edit_html}</div>'
+        f'</div>'
+        f'{edit_html}'
         f'{build_html}'
         f'<p><a href="/countries/pu_market" style="color:#ff9900">🔬 Trh Pu →</a>'
         f' &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 Rada →</a>'
