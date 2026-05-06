@@ -966,6 +966,7 @@ const UPGRADES=[
   {id:'polisher2',name:'★★ Nano Leštička',cost:3000, cat:'špeciál',  desc:'Leštenie ×3 hodnota',         eff:'polish2'},
   {id:'automed',  name:'Auto-Medkit',     cost:3500, cat:'ochrana',  desc:'+8 HP po každej udalosti',    eff:'automed'},
   {id:'drill4',   name:'Drill Mk.IV',     cost:4000, cat:'ťažba',    desc:'+4 nerasty/ťah (max tier)',   eff:'mine+4'},
+  {id:'turbo',    name:'⚡ Turbo Drill',  cost:50000,cat:'ťažba',    desc:'Animácia ťažby 5× rýchlejšia', eff:'turbo'},
 ];
 
 const MINERALS_4=[
@@ -1174,6 +1175,31 @@ async function fetchMineEnergy(){
   catch(e){G.mineEnergy=G.mineEnergy||0;}
 }
 let _miningLock=false;
+
+// ── Auto-miner (len pre testerov) ────────────────────────────────────────────
+let _autoMinerInterval=null;
+const AUTO_MINE_DELAY_MS=8000; // ťaží každých 8 sekúnd
+function _autoMinerAllowed(){return !!(window.__IS_TESTER__||window.__BETA_FLAGS__?.auto_miner);}
+function toggleAutoMiner(){
+  if(!_autoMinerAllowed())return;
+  if(_autoMinerInterval){
+    clearInterval(_autoMinerInterval);_autoMinerInterval=null;
+    _updateAutoBtn();
+    rG([{txt:'⏹ Auto-miner VYPNUTÝ.',cls:'lwarn'}]);
+  } else {
+    _autoMinerInterval=setInterval(()=>{if(!_miningLock&&G.hp>0)aMine();},AUTO_MINE_DELAY_MS);
+    _updateAutoBtn();
+    rG([{txt:`⚡ Auto-miner ZAPNUTÝ — ťaží každých ${AUTO_MINE_DELAY_MS/1000}s.`,cls:'lok'}]);
+  }
+}
+function _updateAutoBtn(){
+  const btn=document.getElementById('auto-mine-btn');
+  if(!btn)return;
+  const on=!!_autoMinerInterval;
+  btn.textContent=on?'⏹ Auto OFF':'⚡ Auto ON';
+  btn.style.borderColor=on?'#ff9900':'#39ff6a';
+  btn.style.color=on?'#ff9900':'#39ff6a';
+}
 function newGame(username){
   G={
     username, hp:100, maxHp:100,
@@ -1494,6 +1520,7 @@ function showGame(logs=[]){
   document.getElementById('lbbtn').style.display='inline-block';
   if(!_mineEnergyFetched)fetchMineEnergy();
   rG(logs);
+  setTimeout(_updateAutoBtn,50);
 }
 
 function rG(logs=[]){
@@ -1527,6 +1554,7 @@ function rG(logs=[]){
     G.era===4?`<button class="btn" style="color:#ff9944;border-color:#ff994444" onclick="sFX('click');aPlanetTravel()"><span class="bk">[P]</span>${t('btn_planets')}</button>`:'',
     G.era===4?`<button class="btn" style="color:#aaaaff;border-color:#aaaaff44" onclick="sFX('click');aCorpDashboard()"><span class="bk">[N]</span>${t('btn_corp')}</button>`:'',
     `<button class="btn btn-d" onclick="sFX('click');aQuit()">${t('btn_depart')}</button>`,
+    _autoMinerAllowed()?`<button id="auto-mine-btn" class="btn" style="border-color:#39ff6a;color:#39ff6a" onclick="toggleAutoMiner()">⚡ Auto ON</button>`:'',
   ].filter(Boolean);
 
   const _plabel=G.era===4?curPlanet4().name:G.planet===3?t('planet_zyrax8_col'):G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
@@ -1572,6 +1600,7 @@ function rG(logs=[]){
     <div class="mg">${btns.join('')}</div>
   </div>`);
   const gl=document.getElementById('glog');if(gl)gl.scrollTop=gl.scrollHeight;
+  setTimeout(_updateAutoBtn,20);
 
   const hasPl2=hasPol();
   document.onkeydown=e=>{const k=e.key.toLowerCase();
@@ -1626,8 +1655,10 @@ function aMine(){
   rG([{txt:t('mine_drilling'),cls:'linf'}]);
   const pw=document.getElementById('mpw'),pf=document.getElementById('mpf');
   if(pw)pw.style.display='block';sFX('mine');
+  const _turbo=hU('turbo');
+  const _stepMs=_turbo?10:50, _doneMs=_turbo?30:165, _startMs=_turbo?10:55;
   let p=0;function step(){p=Math.min(100,p+Math.random()*20+9);if(pf)pf.style.width=p+'%';
-    if(p<100)setTimeout(step,50);else setTimeout(doMine,165);}setTimeout(step,55);}
+    if(p<100)setTimeout(step,_stepMs);else setTimeout(doMine,_doneMs);}setTimeout(step,_startMs);}
 
 async function doMine(){
   const logs=[];G.turn++;
@@ -1750,7 +1781,10 @@ async function doMine(){
   G.visited.add(`${(G.turn*3)%13},${(G.turn*2)%13}`);
   _miningLock=false;
   quickSave();
-  if(G.hp<=0){setTimeout(sceneOver,700);return;}
+  if(G.hp<=0){
+    if(_autoMinerInterval){clearInterval(_autoMinerInterval);_autoMinerInterval=null;}
+    setTimeout(sceneOver,700);return;
+  }
   if(G.planet===3&&colonizationMet()){setTimeout(sceneColonizeWin,700);return;}
   rG(logs);}
 
@@ -2029,6 +2063,7 @@ function aStat(){
 //  QUIT
 // ══════════════════════════════════════════════════════════════
 function aQuit(){
+  if(_autoMinerInterval){clearInterval(_autoMinerInterval);_autoMinerInterval=null;}
   const _qPlanet=G.era===4?curPlanet4().name:G.planet===3?'ZYRAX-8':G.planet===2?t('planet_zyrax10'):t('planet_zyrax9');
   setScr(`<div class="panel" style="text-align:center;min-width:560px;">
   ${corners()}
