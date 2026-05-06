@@ -379,29 +379,46 @@ WEAPON_BUILD_COSTS = {
     # warheads → len cez Pu (nie CR)
 }
 
-# Vojenské akcie — každá spotrebuje zdroje a spôsobí škodu
-MILITARY_ACTIONS = {
+# Vojenské zbrane — výkon na jednotku + straty útočníka + nahnevanie sveta
+# dmg_*: škoda nepriateľovi na každú použitú jednotku
+# loss_rate: podiel vlastných strát útočníka (0.0 = žiadne, 0.3 = 30%)
+# anger_neutral: naštvanosť neutrálnych krajín za 1 jednotku
+# anger_perm: naštvanosť stálych členov RB za 1 jednotku
+WEAPON_STATS = {
     "conventional": {
-        "name_sk": "Konvenčný útok", "name_en": "Conventional strike",
-        "icon": "🪖", "cost_field": "conventional", "cost": 10,
-        "dmg_field": "conventional", "dmg": 15, "dmg_nuclear": 0,
+        "icon": "🪖", "name_sk": "Konvenčné sily",
+        "dmg_conventional": 1.5,   # 1 tis. útočníka zničí 1.5 tis. obrancu
+        "dmg_missiles": 0, "dmg_cyber": 0, "dmg_warheads": 0,
+        "loss_rate": 0.30,         # útočník stratí 30 % nasadených
+        "anger_neutral": 1, "anger_perm": 3,
     },
-    "missile": {
-        "name_sk": "Raketový útok", "name_en": "Missile strike",
-        "icon": "🚀", "cost_field": "missiles", "cost": 1,
-        "dmg_field": "conventional", "dmg": 30, "dmg_nuclear": 0,
+    "missiles": {
+        "icon": "🚀", "name_sk": "Balistické rakety",
+        "dmg_conventional": 8.0,   # 1 raketa ničí 8 tis. konvenčných
+        "dmg_missiles": 0.5, "dmg_cyber": 0, "dmg_warheads": 0,
+        "loss_rate": 0.0,          # rakety sú spotrebné
+        "anger_neutral": 8, "anger_perm": 20,
     },
     "cyber": {
-        "name_sk": "Kybernetický útok", "name_en": "Cyber attack",
-        "icon": "💻", "cost_field": "cyber", "cost": 1,
-        "dmg_field": "cyber", "dmg": 2, "dmg_nuclear": 0,
+        "icon": "💻", "name_sk": "Kybernetická zbraň",
+        "dmg_conventional": 0, "dmg_missiles": 0,
+        "dmg_cyber": 3.0,          # 1 kyber jednotka ničí 3 kyber nepriateľa
+        "dmg_warheads": 0,
+        "loss_rate": 0.0,
+        "anger_neutral": 3, "anger_perm": 8,
     },
-    "nuke": {
-        "name_sk": "Jadrový úder", "name_en": "Nuclear strike",
-        "icon": "☢", "cost_field": "warheads", "cost": 1,
-        "dmg_field": "conventional", "dmg": 200, "dmg_nuclear": 1,
+    "warheads": {
+        "icon": "☢", "name_sk": "Jadrová hlavica",
+        "dmg_conventional": 300,
+        "dmg_missiles": 5, "dmg_cyber": 5, "dmg_warheads": 0,
+        "loss_rate": 1.0,          # každá použitá hlavica je spotrebená
+        "anger_neutral": 80, "anger_perm": 100,
     },
 }
+
+# Dôsledky naštvanosti (anger body od jednej krajiny)
+ANGER_SANCTIONS_THRESHOLD  = 50   # Rada automaticky navrhne sankcie
+ANGER_WAR_AUTH_THRESHOLD   = 90   # Rada automaticky navrhne vojenskú intervenciu
 
 # ── Investície ────────────────────────────────────────────────────────────────
 INV_DURATION_H   = 24     # investícia trvá 24 hodín
@@ -7483,38 +7500,122 @@ def country_war(cid):
                 msg = f"🕊 Prímerie s {COUNTRY_BY_ID.get(target,{}).get('name',target)}."
 
         elif action == "strike":
-            target  = request.form.get("target", "")
-            atype   = request.form.get("atype", "")
-            act     = MILITARY_ACTIONS.get(atype)
-            if act and target in cd.get("at_war", []) and target in cdata:
+            target = request.form.get("target", "")
+            if target in cd.get("at_war", []) and target in cdata:
                 w_src = cd.setdefault("weapons", {})
                 w_dst = cdata[target].setdefault("weapons", {})
-                cost_f = act["cost_field"]
-                # Jadrový úder — iba ak má schválenie
-                if atype == "nuke" and not w_src.get("nuclear_approved"):
-                    msg = "❌ Nemáš schválenie Rady na jadrové zbrane!"
-                elif w_src.get(cost_f, 0) < act["cost"]:
-                    msg = f"❌ Nedostatok {cost_f}: {w_src.get(cost_f,0)} < {act['cost']}"
+                used  = {}
+                errors = []
+                # Načítaj množstvo každej zbrane
+                for wtype in WEAPON_STATS:
+                    try:
+                        qty = max(0, int(request.form.get(f"use_{wtype}", 0)))
+                    except ValueError:
+                        qty = 0
+                    if qty > 0:
+                        if wtype == "warheads" and not w_src.get("nuclear_approved"):
+                            errors.append("☢ Nemáš schválenie Rady na jadrové zbrane!")
+                            qty = 0
+                        elif w_src.get(wtype, 0) < qty:
+                            errors.append(f"Nedostatok {wtype}: {w_src.get(wtype,0)} < {qty}")
+                            qty = 0
+                    if qty > 0:
+                        used[wtype] = qty
+
+                if errors:
+                    msg = "❌ " + " | ".join(errors)
+                elif not used:
+                    msg = "❌ Vyber aspoň jednu zbraň."
                 else:
-                    w_src[cost_f] = w_src.get(cost_f, 0) - act["cost"]
-                    dmg_f = act["dmg_field"]
-                    actual_dmg = min(act["dmg"], w_dst.get(dmg_f, 0))
-                    w_dst[dmg_f] = max(0, w_dst.get(dmg_f, 0) - act["dmg"])
-                    if act["dmg_nuclear"]:
-                        w_dst["warheads"] = max(0, w_dst.get("warheads", 0) - act["dmg_nuclear"])
+                    tname = COUNTRY_BY_ID.get(target, {}).get("name", target)
+                    dmg_report = []
+                    loss_report = []
+                    total_anger_neutral = 0
+                    total_anger_perm    = 0
+
+                    for wtype, qty in used.items():
+                        stats = WEAPON_STATS[wtype]
+                        # Straty útočníka
+                        loss = round(qty * stats["loss_rate"])
+                        w_src[wtype] = max(0, w_src.get(wtype, 0) - loss)
+                        if loss > 0:
+                            loss_report.append(f"-{loss} {stats['icon']}")
+
+                        # Škody nepriateľovi
+                        for dmg_key in ("conventional", "missiles", "cyber", "warheads"):
+                            dmg_per = stats.get(f"dmg_{dmg_key}", 0)
+                            if dmg_per <= 0:
+                                continue
+                            total_dmg = round(qty * dmg_per)
+                            actual    = min(total_dmg, w_dst.get(dmg_key, 0))
+                            w_dst[dmg_key] = max(0, w_dst.get(dmg_key, 0) - total_dmg)
+                            if actual > 0:
+                                dmg_icon = WEAPON_STATS.get(dmg_key, {}).get("icon", dmg_key)
+                                dmg_report.append(f"{dmg_icon}-{actual}")
+
+                        # Naštvanosť
+                        total_anger_neutral += qty * stats["anger_neutral"]
+                        total_anger_perm    += qty * stats["anger_perm"]
+
+                        # Jadrový úder → proliferačné heat
+                        if wtype == "warheads":
+                            eu = uname.upper()
+                            edata = load_jf(KB_ENERGY, {})
+                            if eu in edata:
+                                edata[eu]["proliferation_heat"] = min(100.0, round(
+                                    edata[eu].get("proliferation_heat", 0) + 40 * qty, 2))
+                                save_jf(KB_ENERGY, edata)
+
                     cd["weapons"] = w_src
                     cdata[target]["weapons"] = w_dst
-                    tname = COUNTRY_BY_ID.get(target, {}).get("name", target)
-                    msg = f"{act['icon']} {act['name_sk']} na {tname} — škoda: {actual_dmg} {dmg_f}"
-                    # Jadrový úder → veľký heat pre útočníka
-                    if atype == "nuke":
-                        eu = uname.upper()
-                        edata = load_jf(KB_ENERGY, {})
-                        if eu in edata:
-                            edata[eu]["proliferation_heat"] = min(100.0, round(
-                                edata[eu].get("proliferation_heat", 0) + 40, 2))
-                            save_jf(KB_ENERGY, edata)
-                        msg += " ☢ +40 proliferačného heat!"
+
+                    # Naštvanosť — uloží sa do každej krajiny okrem útočníka
+                    for other_cid, other_cd in cdata.items():
+                        if other_cid == cid:
+                            continue
+                        is_perm = other_cid in COUNCIL_PERMANENT
+                        anger_add = total_anger_perm if is_perm else total_anger_neutral
+                        if anger_add <= 0:
+                            continue
+                        anger = other_cd.setdefault("anger", {})
+                        anger[cid] = min(200, anger.get(cid, 0) + anger_add)
+                        other_cd["anger"] = anger
+                        # Automatické rezolúcie pri prekročení prahu
+                        cur_anger = anger[cid]
+                        cncl = _get_council_data()
+                        now_t = time.time()
+                        existing_types = {r["type"] for r in cncl["resolutions"]
+                                         if r["status"] == "open" and r["target_country"] == cid}
+                        if cur_anger >= ANGER_WAR_AUTH_THRESHOLD and "war_auth" not in existing_types and is_perm:
+                            cncl["resolutions"].append({
+                                "id": f"res_auto_war_{int(now_t)}",
+                                "type": "war_auth", "target_country": cid,
+                                "proposed_by": "ISGC_AUTO",
+                                "proposed_by_country": other_cid,
+                                "proposed_at": now_t,
+                                "votes_for": [], "votes_against": [],
+                                "vetoed_by": None, "status": "open",
+                                "expires_at": now_t + RES_VOTE_HOURS * 3600,
+                            })
+                            save_jf(KB_COUNCIL, cncl)
+                        elif cur_anger >= ANGER_SANCTIONS_THRESHOLD and "sanctions" not in existing_types and is_perm:
+                            cncl["resolutions"].append({
+                                "id": f"res_auto_sanc_{int(now_t)}",
+                                "type": "sanctions", "target_country": cid,
+                                "proposed_by": "ISGC_AUTO",
+                                "proposed_by_country": other_cid,
+                                "proposed_at": now_t,
+                                "votes_for": [], "votes_against": [],
+                                "vetoed_by": None, "status": "open",
+                                "expires_at": now_t + RES_VOTE_HOURS * 3600,
+                            })
+                            save_jf(KB_COUNCIL, cncl)
+
+                    dmg_str  = ", ".join(dmg_report)  if dmg_report  else "žiadna"
+                    loss_str = ", ".join(loss_report) if loss_report else "žiadne"
+                    msg = (f"⚔ Útok na {tname} — škody: {dmg_str} | "
+                           f"vlastné straty: {loss_str} | "
+                           f"naštvanosť sveta +{total_anger_neutral:.0f}")
 
         cdata[cid] = cd
         save_jf(KB_COUNTRIES, cdata)
@@ -7537,28 +7638,79 @@ def country_war(cid):
         war_html = '<div style="color:#ff3a3a;margin-bottom:8px">⚔ Vo vojne s: ' + \
             ", ".join(f'{COUNTRY_BY_ID.get(e,{}).get("flag","")} {COUNTRY_BY_ID.get(e,{}).get("name",e)}' for e in at_war) + '</div>'
 
-    action_opts = "".join(
-        f'<option value="{aid}">{a["icon"]} {a["name_sk"]} (−{a["cost"]} {a["cost_field"]})</option>'
-        for aid, a in MILITARY_ACTIONS.items()
-    )
+    # Naštvanosť iných krajín voči nám
+    anger_rows = ""
+    my_anger = {other_cid: cd_o.get("anger", {}).get(cid, 0)
+                for other_cid, cd_o in cdata.items()
+                if cd_o.get("anger", {}).get(cid, 0) > 0}
+    if my_anger:
+        for other_cid, pts in sorted(my_anger.items(), key=lambda x: -x[1]):
+            oc = COUNTRY_BY_ID.get(other_cid, {})
+            col = "#ff3a3a" if pts >= ANGER_WAR_AUTH_THRESHOLD else "#ff9900" if pts >= ANGER_SANCTIONS_THRESHOLD else "#888"
+            anger_rows += (f'<div class="row"><span class="lbl">{oc.get("flag","")} {oc.get("name",other_cid)}</span>'
+                          f'<span style="color:{col}">{pts} {"⚔ vojenská akcia" if pts >= ANGER_WAR_AUTH_THRESHOLD else "🚫 sankcie" if pts >= ANGER_SANCTIONS_THRESHOLD else ""}</span></div>')
+
+    # Útokový formulár — výber množstva zbraní
+    strike_form = ""
+    if at_war:
+        weapon_inputs = ""
+        for wtype, stats in WEAPON_STATS.items():
+            stock = w.get(wtype, 0)
+            if stock <= 0:
+                continue
+            nuc_warn = " ⚠ +40 heat/ks, potrebné schválenie" if wtype == "warheads" else ""
+            anger_note = f"naštvanosť +{stats['anger_neutral']}/ks neutrálni, +{stats['anger_perm']}/ks RB"
+            weapon_inputs += (
+                f'<div class="row" style="padding:4px 0">'
+                f'<span class="lbl">{stats["icon"]} {stats["name_sk"]}'
+                f' <small style="color:#555">[{stock:,}]</small></span>'
+                f'<span style="display:flex;align-items:center;gap:6px">'
+                f'<input type="number" name="use_{wtype}" value="0" min="0" max="{stock}" style="width:70px">'
+                f'<span style="color:#555;font-size:.8rem">{anger_note}{nuc_warn}</span>'
+                f'</span></div>'
+            )
+        if weapon_inputs:
+            strike_form = (
+                f'<div style="margin-top:10px;border-top:1px solid #1a3a1a;padding-top:8px">'
+                f'<div style="color:#ff9900;margin-bottom:6px">🎯 Útok — vyber zbrane:</div>'
+                f'<select name="target" style="margin-bottom:6px">{enemy_opts}</select>'
+                f'{weapon_inputs}'
+                f'<button name="action" value="strike" class="b red" style="margin-top:6px">🎯 Zaútočiť</button>'
+                f'</div>'
+            )
+
     edit_html = ""
     if has_war_role or is_owner:
-        edit_html = f"""
-<div class="card" style="border-color:#ff3a3a44">
-  <div class="card-title" style="color:#ff3a3a">⚔ Vojenské operácie</div>
-  <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-    <select name="target">{declare_opts}</select>
-    <button name="action" value="declare" class="b red">⚔ Vyhlásiť vojnu</button>
-  </form>
-  {'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><select name="target">' + enemy_opts + '</select><button name="action" value="ceasefire" class="b" style="border-color:#38d1ff;color:#38d1ff">🕊 Prímerie</button></form>' if at_war else ''}
-  {'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select name="target">' + enemy_opts + '</select><select name="atype">' + action_opts + '</select><button name="action" value="strike" class="b red">🎯 Útok</button></form>' if at_war else ''}
-</div>"""
+        ceasefire_form = ""
+        if at_war:
+            ceasefire_form = (f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;'
+                             f'align-items:center;margin-bottom:8px">'
+                             f'<select name="target">{enemy_opts}</select>'
+                             f'<button name="action" value="ceasefire" class="b" '
+                             f'style="border-color:#38d1ff;color:#38d1ff">🕊 Prímerie</button></form>')
+        edit_html = (
+            f'<div class="card" style="border-color:#ff3a3a44">'
+            f'<div class="card-title" style="color:#ff3a3a">⚔ Vojenské operácie</div>'
+            f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+            f'<select name="target">{declare_opts}</select>'
+            f'<button name="action" value="declare" class="b red">⚔ Vyhlásiť vojnu</button></form>'
+            f'{ceasefire_form}'
+            f'{"<form method=POST>" + strike_form + "</form>" if at_war and strike_form else ""}'
+            f'{"<div style=color:#888;font-size:.85rem>Žiadne zbrane v arzenáli.</div>" if at_war and not strike_form else ""}'
+            f'</div>'
+        )
+
+    anger_html = ""
+    if anger_rows:
+        anger_html = (f'<div class="card" style="border-color:#ff440044">'
+                     f'<div class="card-title" style="color:#ff9900">😡 Naštvanosť iných krajín voči nám</div>'
+                     f'{anger_rows}</div>')
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>{c['name']} — Vojenský stav</title>{_COUNTRIES_CSS}</head><body>
 <a href="/countries/{cid}" class="btn-back">← {c['name']}</a>
 <h1>{c['flag']} {c['name']} — Vojenský stav</h1>
-{msg_html}{war_html}
+{msg_html}{war_html}{anger_html}
 <div class="card">
   <div class="card-title">⚔ Arzenál</div>
   <div class="row"><span class="lbl">🪖 Konvenčné sily</span><span class="val">{w.get('conventional',0):,} tis.</span></div>
