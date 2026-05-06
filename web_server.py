@@ -2665,6 +2665,12 @@ def render_lobby(pilot):
     html += f'<div class="card-title">&#127918; {L("MINI HRY","MINI GAMES")}</div>'
     html += f'<a href="/mini/cislo" class="btn">&#128290; &nbsp; {L("HÁDANIE ČÍSLA","NUMBER GUESSING")} &nbsp; <span style="color:#a07000;font-size:0.85em">(1&ndash;100, 7 {L("pokusov","attempts")})</span></a>'
     html += f'<a href="/mini/obesenec" class="btn">&#128279; &nbsp; {L("OBESENEC","HANGMAN")} &nbsp; <span style="color:#a07000;font-size:0.85em">({L("hádaj slovo","guess the word")})</span></a>'
+    # Energetická minihra — patrí do mini hier
+    _energy_public = next((f for f in BETA_FEATURES if f["id"] == "energy_minigame"), {}).get("public", False)
+    if u_data.get("is_tester") is True or _energy_public:
+        html += (f'<a href="/energy" class="btn" style="border-color:#39ff6a;color:#39ff6a">'
+                 f'&#9889; &nbsp; {L("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}'
+                 f'</a>')
     html += '</div>'
 
     # ── New game KB
@@ -2792,16 +2798,7 @@ def render_lobby(pilot):
                 f'</div>'
             )
 
-    # ── Energetická minihra (tester alebo public)
-    _energy_public = next((f for f in BETA_FEATURES if f["id"] == "energy_minigame"), {}).get("public", False)
-    if u_data.get("is_tester") is True or _energy_public:
-        html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
-        _beta_tag = ' &nbsp;<span style="font-size:.75em;opacity:.6">[BETA]</span>' if not _energy_public else ""
-        html += (f'<a href="/energy" style="display:block;background:#010d01;border:1px solid #39ff6a;'
-                 f'color:#39ff6a;font-family:\'VT323\',monospace;font-size:1.15em;padding:9px 14px;'
-                 f'text-align:center;text-decoration:none;letter-spacing:.06em">'
-                 f'&#9889; {L("ENERGETICKÁ MINIHRA","ENERGY MINIGAME")}{_beta_tag}'
-                 f'</a></div>')
+    # (energia presunutá do Mini hier vyššie)
 
     # ── Krajiny (tester only pre teraz)
     _countries_public = next((f for f in BETA_FEATURES if f["id"] == "countries"), {}).get("public", False)
