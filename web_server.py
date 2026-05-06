@@ -3294,7 +3294,8 @@ def game():
     _spr = get_sp_ranks(_u)
     if _spr:
         my_career = dict(my_career, special_ranks=_spr)
-    _is_tester = _u.get("is_tester") is True
+    _is_tester  = _u.get("is_tester")  is True
+    _is_premium = _u.get("is_premium") is True
     # Pre každý feature: True ak je tester ALEBO feature je public
     _beta_flags = {
         f["id"]: (_is_tester or f.get("public", False))
@@ -3314,6 +3315,7 @@ def game():
         f"window.__MY_CAREER__={json.dumps(my_career)};"
         f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
         f"window.__IS_TESTER__={'true' if _is_tester else 'false'};"
+        f"window.__IS_PREMIUM__={'true' if _is_premium else 'false'};"
         f"window.__BETA_FLAGS__={json.dumps(_beta_flags)};"
         f"window.__SESSION_USER__={json.dumps(session['username'].lower())};"
         f"</script>\n"
@@ -3873,6 +3875,7 @@ def owner_panel():
         adm_cell = ("<span style='color:#00ccff'>&#9679; Admin</span>" if is_adm
                     else "<span style='color:#444'>—</span>")
         is_tst  = u.get("is_tester") is True
+        is_prem = u.get("is_premium") is True
         tst_cell = ("<span style='color:#39ff6a'>&#946; Tester</span>" if is_tst
                     else "<span style='color:#444'>—</span>")
         # Správy tohto hráča
@@ -3994,6 +3997,10 @@ def owner_panel():
             <a href="/owner/toggle_tester/{display}"
                style="color:{'#ff9900' if is_tst else '#39ff6a'};font-size:.8em;margin-left:3px">
                {'Revoke Tester' if is_tst else 'Make Tester'}</a>
+            &nbsp;
+            <a href="/owner/toggle_premium/{display}"
+               style="color:{'#ff9900' if is_prem else '#ffcc00'};font-size:.8em;margin-left:3px;font-weight:bold">
+               {'Revoke Premium' if is_prem else '⚡ Premium'}</a>
             &nbsp;
             <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
                onclick="return confirm('Vymazat {display}?')">Del</a>
@@ -4215,6 +4222,17 @@ def owner_toggle_tester(uname):
     users = load_users()
     if uname in users:
         users[uname]["is_tester"] = not users[uname].get("is_tester", False)
+        save_users(users)
+    return redirect("/owner/panel")
+
+
+@app.route("/owner/toggle_premium/<uname>")
+def owner_toggle_premium(uname):
+    if not _owner_check():
+        return redirect("/owner")
+    users = load_users()
+    if uname in users:
+        users[uname]["is_premium"] = not users[uname].get("is_premium", False)
         save_users(users)
     return redirect("/owner/panel")
 

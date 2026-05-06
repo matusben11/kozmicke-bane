@@ -1176,10 +1176,11 @@ async function fetchMineEnergy(){
 }
 let _miningLock=false;
 
-// ── Auto-miner (len pre testerov) ────────────────────────────────────────────
+// ── Auto-miner (premium = okamžitá ťažba, tester = pomalší auto) ─────────────
 let _autoMinerInterval=null;
-const AUTO_MINE_DELAY_MS=8000; // ťaží každých 8 sekúnd
-function _autoMinerAllowed(){return !!(window.__IS_TESTER__||window.__BETA_FLAGS__?.auto_miner);}
+function _isPremium(){return !!window.__IS_PREMIUM__;}
+function _autoMinerAllowed(){return _isPremium()||(window.__IS_TESTER__)||!!(window.__BETA_FLAGS__?.auto_miner);}
+function _autoMineDelay(){return _isPremium()?500:8000;} // premium: 0.5s, tester: 8s
 function toggleAutoMiner(){
   if(!_autoMinerAllowed())return;
   if(_autoMinerInterval){
@@ -1187,9 +1188,10 @@ function toggleAutoMiner(){
     _updateAutoBtn();
     rG([{txt:'⏹ Auto-miner VYPNUTÝ.',cls:'lwarn'}]);
   } else {
-    _autoMinerInterval=setInterval(()=>{if(!_miningLock&&G.hp>0)aMine();},AUTO_MINE_DELAY_MS);
+    const _d=_autoMineDelay();
+    _autoMinerInterval=setInterval(()=>{if(!_miningLock&&G.hp>0)aMine();},_d);
     _updateAutoBtn();
-    rG([{txt:`⚡ Auto-miner ZAPNUTÝ — ťaží každých ${AUTO_MINE_DELAY_MS/1000}s.`,cls:'lok'}]);
+    rG([{txt:`⚡ Auto-miner ZAPNUTÝ — ťaží každých ${_d/1000}s.`,cls:'lok'}]);
   }
 }
 function _updateAutoBtn(){
@@ -1655,7 +1657,8 @@ function aMine(){
   rG([{txt:t('mine_drilling'),cls:'linf'}]);
   const pw=document.getElementById('mpw'),pf=document.getElementById('mpf');
   if(pw)pw.style.display='block';sFX('mine');
-  const _turbo=hU('turbo');
+  const _premium=_isPremium(), _turbo=hU('turbo');
+  if(_premium){if(pf)pf.style.width='100%';doMine();return;}
   const _stepMs=_turbo?10:50, _doneMs=_turbo?30:165, _startMs=_turbo?10:55;
   let p=0;function step(){p=Math.min(100,p+Math.random()*20+9);if(pf)pf.style.width=p+'%';
     if(p<100)setTimeout(step,_stepMs);else setTimeout(doMine,_doneMs);}setTimeout(step,_startMs);}
