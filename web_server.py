@@ -37,6 +37,7 @@ KB_AUCTIONS   = DATA_DIR / "kb_auctions.json"
 KB_COUNTRIES    = DATA_DIR / "kb_countries.json"
 KB_COUNCIL      = DATA_DIR / "kb_council.json"
 KB_INVESTMENTS  = DATA_DIR / "kb_investments.json"
+KB_POINTS       = DATA_DIR / "kb_points.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -84,6 +85,7 @@ _KV_KEYS = {
     KB_COUNTRIES:   "kb_countries",
     KB_COUNCIL:     "kb_council",
     KB_INVESTMENTS: "kb_investments",
+    KB_POINTS:      "kb_points",
 }
 
 
@@ -2403,6 +2405,12 @@ WEB_BRIDGE = """\
         body: JSON.stringify({credits_earned: credits_earned})
       }).then(function(r){return r.text();});
     },
+    add_xp: function(amount) {
+      return fetch('/api/add_xp', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({amount: amount})
+      }).then(function(r){return r.json();});
+    },
     get_career: function() {
       return fetch('/api/get_career').then(function(r){return r.text();});
     },
@@ -2553,6 +2561,7 @@ DEPTHS = {1: "Povrch", 2: "Litosféra", 3: "Hlboká", 4: "Magma", 5: "Jadro"}
 DEPTHS_EN = {1: "Surface", 2: "Lithosphere", 3: "Deep", 4: "Magma", 5: "Core"}
 
 def render_lobby(pilot):
+    _daily_login_xp(pilot.lower())   # denný login bonus
     all_saves = load_jf(KB_SAVES, {})
     saves  = all_saves.get(pilot.upper(), {})
     career = load_jf(KB_CAREER, {})
@@ -2715,6 +2724,18 @@ def render_lobby(pilot):
             html += f'<a href="#" class="btn btn-red" style="margin:0" onclick="{del_js}">&#128465;</a>'
             html += f'</div>'
     html += '</div>'
+
+    # ── XP odkaz
+    _xp_rec = _get_points(pilot.lower())
+    _xp_val = _xp_rec.get("xp", 0)
+    _xp_claimed = len(_xp_rec.get("claimed", []))
+    html += (f'<div class="card" style="border-color:#ff990044">'
+             f'<a href="/points" style="display:flex;justify-content:space-between;'
+             f'color:#ff9900;text-decoration:none;font-size:1.05rem;letter-spacing:.06em">'
+             f'<span>&#11088; {L("XP & ODMENY","XP & REWARDS")}</span>'
+             f'<span style="color:#ffcc44">{_xp_val:,} XP &nbsp; '
+             f'({_xp_claimed}/{len(XP_MILESTONES)} {L("míľnikov","milestones")})</span></a>'
+             f'</div>')
 
     # ── Leaderboard top 5
     entries = sorted(career.items(), key=lambda x: -x[1].get("career_cr", 0))
@@ -3447,6 +3468,10 @@ def api_sync_turn_cr():
         return json.dumps(career.get(key, {}))
 
     _live_cr_synced[pilot] = credits_now
+    # XP za predaj: +1 za každých 100 CR delta
+    xp_sell = delta // 100
+    if xp_sell > 0:
+        _add_xp(pilot.lower(), xp_sell)
     career = load_jf(KB_CAREER, {})
     e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
                           "total_mined": 0, "wins": 0, "last_seen": "–"})
@@ -3484,6 +3509,7 @@ def api_session_end():
     e["last_seen"]     = datetime.now().strftime("%Y-%m-%d %H:%M")
     if d.get("win"):
         e["wins"] = e.get("wins", 0) + 1
+        _add_xp(pilot.lower(), XP_WIN)
     r, rname = kb_rank(e["career_cr"])
     e["rank"] = r; e["rank_name"] = rname
     career[key] = e
@@ -8860,6 +8886,183 @@ def energy_invest_collect():
             break
     save_jf(KB_INVESTMENTS, invs)
     return redirect("/energy/invest")
+
+
+# ── XP / Odmeny ──────────────────────────────────────────────────────────────
+
+XP_MILESTONES = [
+    {"xp":    100, "cr":     500, "title": None,              "icon": "🎯"},
+    {"xp":    500, "cr":   2000,  "title": "⛏ Skúsený",       "icon": "⛏"},
+    {"xp":   1000, "cr":   5000,  "title": "⭐ Expert",        "icon": "⭐"},
+    {"xp":   2500, "cr":  10000,  "title": "💎 Majster",       "icon": "💎"},
+    {"xp":   5000, "cr":  25000,  "title": "🔥 Legenda",       "icon": "🔥"},
+    {"xp":  10000, "cr":  50000,  "title": "👑 Elita",         "icon": "👑"},
+    {"xp":  25000, "cr": 100000,  "title": "🌌 Kozmická ikona","icon": "🌌"},
+]
+
+# XP za akcie (serverside)
+XP_WIN          = 50    # výhra session
+XP_DAILY_LOGIN  = 20    # prvý login dňa
+XP_PER_100_SOLD = 1     # za každých 100 CR predaných
+XP_PER_100_ENERGY = 1   # za každých 100 energie vyrobenej
+
+
+def _get_points(uname_lower: str) -> dict:
+    data = load_jf(KB_POINTS, {})
+    return data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
+
+
+def _add_xp(uname_lower: str, amount: int) -> dict:
+    """Pridá XP, skontroluje míľniky, automaticky vyplatí odmeny. Vráti aktualizovaný záznam."""
+    if amount <= 0:
+        return _get_points(uname_lower)
+    data   = load_jf(KB_POINTS, {})
+    rec    = data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
+    old_xp = rec["xp"]
+    rec["xp"] = old_xp + amount
+
+    # Skontroluj míľniky
+    new_rewards = []
+    for m in XP_MILESTONES:
+        if m["xp"] in rec.get("claimed", []):
+            continue
+        if rec["xp"] >= m["xp"]:
+            rec.setdefault("claimed", []).append(m["xp"])
+            # CR odmena
+            if m["cr"] > 0:
+                career = load_jf(KB_CAREER, {})
+                key    = uname_lower.upper()
+                career.setdefault(key, {})["career_cr"] = \
+                    career[key].get("career_cr", 0) + m["cr"]
+                save_jf(KB_CAREER, career)
+            # Titul → special_rank
+            if m["title"]:
+                users = load_users()
+                if uname_lower in users:
+                    sr = users[uname_lower].get("special_ranks", [])
+                    if m["title"] not in sr:
+                        sr.append(m["title"])
+                    users[uname_lower]["special_ranks"] = sr[-2:]  # max 2
+                    save_users(users)
+            new_rewards.append(m)
+
+    rec["new_rewards"] = new_rewards  # pre flash správu
+    data[uname_lower] = rec
+    save_jf(KB_POINTS, data)
+    return rec
+
+
+def _daily_login_xp(uname_lower: str):
+    """Pridá denný login bonus ak ešte nebol dnes."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    data  = load_jf(KB_POINTS, {})
+    rec   = data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
+    if rec.get("last_login_date") == today:
+        return
+    rec["last_login_date"] = today
+    data[uname_lower] = rec
+    save_jf(KB_POINTS, data)
+    _add_xp(uname_lower, XP_DAILY_LOGIN)
+
+
+@app.route("/points")
+def points_page():
+    if not _require_session():
+        return redirect("/")
+    uname = session["username"].lower()
+    rec   = _get_points(uname)
+    xp    = rec.get("xp", 0)
+    claimed = set(rec.get("claimed", []))
+
+    css = """<style>
+body{background:#000;color:#cfffcf;font-family:'VT323',monospace;font-size:1.05rem;padding:14px}
+.card{border:1px solid #1a3a1a;background:#020d02;max-width:680px;margin:0 auto 10px;padding:12px 16px}
+.card-title{color:#39ff6a;font-size:1.1rem;margin-bottom:8px;letter-spacing:.08em}
+.row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0a1a0a}
+.lbl{color:#2a7a45}.val{color:#cfffcf}
+.btn-back{display:inline-block;margin-bottom:10px;color:#39ff6a;border:1px solid #39ff6a44;
+  padding:3px 10px;font-family:inherit;font-size:1rem;text-decoration:none}
+h1{color:#39ff6a;font-size:1.4rem;letter-spacing:.12em;margin:4px 0 6px}
+.sub{color:#2a7a45;font-size:.85rem;margin-bottom:10px}
+.ms-row{display:flex;justify-content:space-between;align-items:center;
+  padding:6px 0;border-bottom:1px solid #0a1a0a}
+.ms-done{color:#2a7a45}.ms-next{color:#ff9900}.ms-future{color:#333}
+.xpbar-wrap{height:12px;background:#0a0a0a;border:1px solid #1a3a1a;margin:8px 0;position:relative}
+.xpbar-fill{height:100%;background:linear-gradient(90deg,#1a6600,#39ff6a);transition:width .4s}
+.xpbar-lbl{position:absolute;right:4px;top:-1px;font-size:.8rem;color:#39ff6a}
+</style><link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
+
+    # Nájdi nasledujúci míľnik
+    next_m = next((m for m in XP_MILESTONES if m["xp"] not in claimed), None)
+    bar_html = ""
+    if next_m:
+        prev_xp = max((m["xp"] for m in XP_MILESTONES if m["xp"] in claimed), default=0)
+        span    = next_m["xp"] - prev_xp
+        prog    = max(0, xp - prev_xp)
+        pct     = min(100, round(prog / span * 100)) if span else 100
+        bar_html = (
+            f'<div style="color:#ff9900;font-size:.9rem;margin-bottom:4px">'
+            f'Ďalší míľnik: {next_m["icon"]} {next_m["xp"]:,} XP</div>'
+            f'<div class="xpbar-wrap">'
+            f'<div class="xpbar-fill" style="width:{pct}%"></div>'
+            f'<span class="xpbar-lbl">{prog:,}/{span:,}</span>'
+            f'</div>'
+        )
+
+    ms_rows = ""
+    for m in XP_MILESTONES:
+        done = m["xp"] in claimed
+        is_next = not done and (not next_m or m["xp"] == next_m["xp"])
+        cls = "ms-done" if done else "ms-next" if is_next else "ms-future"
+        chk = "✅" if done else ("🎯" if is_next else "○")
+        title_str = f' + titul <span style="color:#ffd700">{m["title"]}</span>' if m["title"] else ""
+        ms_rows += (
+            f'<div class="ms-row {cls}">'
+            f'<span>{chk} {m["icon"]} <strong>{m["xp"]:,} XP</strong>'
+            f'{title_str}</span>'
+            f'<span style="color:{"#2a7a45" if done else "#ff9900"}">'
+            f'{"✓ Získané" if done else f"+{m[chr(99)+chr(114)]:,} CR"}</span>'
+            f'</div>'
+        )
+
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        f'<title>XP & Odmeny — KB</title>{css}</head><body>'
+        f'<a href="/lobby" class="btn-back">← Lobby</a>'
+        f'<h1>⭐ XP & ODMENY</h1>'
+        f'<div class="sub">PILOT: {uname.upper()}</div>'
+        f'<div class="card">'
+        f'<div class="card-title">📊 Tvoje XP</div>'
+        f'<div class="row"><span class="lbl">Celkové XP</span>'
+        f'<span style="color:#ff9900;font-size:1.2rem"><strong>{xp:,}</strong></span></div>'
+        f'<div class="row"><span class="lbl">Splnené míľniky</span>'
+        f'<span class="val">{len(claimed)} / {len(XP_MILESTONES)}</span></div>'
+        f'{bar_html}</div>'
+        f'<div class="card"><div class="card-title">🎁 MÍĽNIKY & ODMENY</div>'
+        f'{ms_rows}</div>'
+        f'<div class="card" style="border-color:#2a7a4544">'
+        f'<div class="card-title" style="color:#2a7a45">📋 Ako zarábať XP</div>'
+        f'<div class="row"><span class="lbl">⛏ Každý ťah ťažby</span><span class="val">+1 XP (hĺbka L3=+2, L4=+3, L5=+4)</span></div>'
+        f'<div class="row"><span class="lbl">💰 Predaj minerálov</span><span class="val">+1 XP za každých 100 CR</span></div>'
+        f'<div class="row"><span class="lbl">🏆 Výhra session</span><span class="val">+{XP_WIN} XP</span></div>'
+        f'<div class="row"><span class="lbl">☀ Denný login</span><span class="val">+{XP_DAILY_LOGIN} XP</span></div>'
+        f'<div class="row"><span class="lbl">⚡ Energia minihra</span><span class="val">+1 XP za každých 100 energie</span></div>'
+        f'</div>'
+        f'</body></html>'
+    )
+
+
+@app.route("/api/add_xp", methods=["POST"])
+def api_add_xp():
+    """Klient posiela XP za ťažbu/predaj."""
+    if not _require_session():
+        return "{}", 401
+    d      = request.json or {}
+    uname  = session["username"].lower()
+    amount = max(0, int(d.get("amount", 0)))
+    rec    = _add_xp(uname, amount)
+    # Vráť nové odmeny pre flash správu
+    return json.dumps({"xp": rec["xp"], "new_rewards": rec.get("new_rewards", [])})
 
 
 # ── Štart ──────────────────────────────────────────────────────────────────

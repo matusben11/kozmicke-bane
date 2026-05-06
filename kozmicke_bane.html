@@ -1176,6 +1176,24 @@ async function fetchMineEnergy(){
   catch(e){G.mineEnergy=G.mineEnergy||0;}
 }
 let _miningLock=false;
+let _xpBatch=0, _xpTimer=null;
+function _addXpClient(amount){
+  _xpBatch+=amount;
+  clearTimeout(_xpTimer);
+  _xpTimer=setTimeout(()=>{
+    if(_xpBatch<=0)return;
+    const amt=_xpBatch;_xpBatch=0;
+    const api=py();if(!api||!api.add_xp)return;
+    try{api.add_xp(amt).then(d=>{
+      if(!d||!d.new_rewards||!d.new_rewards.length)return;
+      // Flash odmeny
+      const msgs=d.new_rewards.map(m=>
+        `${m.icon} MÍĽNIK ${m.xp.toLocaleString()} XP! +${m.cr.toLocaleString()} CR${m.title?' + '+m.title:''}`
+      );
+      msgs.forEach(msg=>rG([{txt:msg,cls:'lrar'}]));
+    }).catch(()=>{});}catch(e){}
+  },3000); // dávkuje každé 3s aby nezahltil server
+}
 let _sessionStartCr=0; // CR na začiatku session — na výpočet earned delta
 function _syncCrLive(){
   const api=py();if(!api||!api.sync_turn_cr)return;
@@ -1792,6 +1810,9 @@ async function doMine(){
   G.visited.add(`${(G.turn*3)%13},${(G.turn*2)%13}`);
   _miningLock=false;
   quickSave();
+  // XP za ťah — podľa hĺbky
+  const _xpTurn=1+(G.depth>2?G.depth-2:0); // L1=1, L2=1, L3=2, L4=3, L5=4
+  _addXpClient(_xpTurn);
   if(G.hp<=0){
     if(_autoMinerInterval){clearInterval(_autoMinerInterval);_autoMinerInterval=null;}
     setTimeout(sceneOver,700);return;
