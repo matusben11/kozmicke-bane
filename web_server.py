@@ -2800,11 +2800,16 @@ def render_lobby(pilot):
     # ── Krajiny (tester only pre teraz)
     _countries_public = next((f for f in BETA_FEATURES if f["id"] == "countries"), {}).get("public", False)
     if u_data.get("is_tester") is True or _countries_public:
+        # Zisti či hráč má nejakú rolu — ak áno, zobraz "Moja krajina", inak "Rada"
+        _cdata_lb = _get_country_data()
+        _my_pairs = _player_countries(session["username"], _cdata_lb)
+        _country_href = "/my_country" if _my_pairs else "/countries"
+        _country_label = L("MOJA KRAJINA","MY COUNTRY") if _my_pairs else L("MEDZIGALAKTICKÁ RADA","INTERGALACTIC COUNCIL")
         html += '<div style="width:100%;max-width:700px;margin-bottom:6px">'
-        html += (f'<a href="/countries" style="display:block;background:#010808;border:1px solid #38d1ff;'
+        html += (f'<a href="{_country_href}" style="display:block;background:#010808;border:1px solid #38d1ff;'
                  f'color:#38d1ff;font-family:\'VT323\',monospace;font-size:1.15em;padding:9px 14px;'
                  f'text-align:center;text-decoration:none;letter-spacing:.06em">'
-                 f'🌍 {L("MEDZIGALAKTICKÁ RADA","INTERGALACTIC COUNCIL")}'
+                 f'🌍 {_country_label}'
                  f' &nbsp;<span style="font-size:.75em;opacity:.6">[BETA]</span>'
                  f'</a></div>')
 
@@ -5186,6 +5191,13 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
     text-align:center;text-decoration:none;letter-spacing:.06em">
   &#127917; {Lp("AUKCIE — dražby komoditných lotov","AUCTIONS — commodity lot bidding")}
 </a>
+<a href="/my_country"
+  style="display:block;width:100%;max-width:680px;margin-bottom:8px;
+    background:#010808;border:1px solid #38d1ff;color:#38d1ff;
+    font-family:'VT323',monospace;font-size:1.1em;padding:10px;
+    text-align:center;text-decoration:none;letter-spacing:.06em">
+  🌍 {Lp("MOJA KRAJINA — správa krajiny a armády","MY COUNTRY — manage country and army")}
+</a>
 <a href="/energy/invest"
   style="display:block;width:100%;max-width:680px;margin-bottom:12px;
     background:#0a0700;border:1px solid #ff9900;color:#ffcc44;
@@ -7287,6 +7299,113 @@ button.b.red{border-color:#ff3a3a;color:#ff3a3a;background:#0d0000}
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 """
 
+@app.route("/my_country")
+def my_country():
+    """Osobný panel hráča — všetky krajiny kde má rolu, rýchle akcie."""
+    if not _require_session() or not _countries_allowed():
+        return redirect("/lobby")
+    uname  = session["username"]
+    cdata  = _get_country_data()
+    pairs  = _player_countries(uname, cdata)  # [(cid, rid)]
+    now    = time.time()
+
+    if not pairs:
+        return (
+            f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
+            f'<title>Moja krajina — KB</title>{_COUNTRIES_CSS}</head><body>'
+            f'<a href="/lobby" class="btn-back">← Lobby</a>'
+            f'<h1>🌍 MOJA KRAJINA</h1>'
+            f'<div class="card"><div style="color:#ff9900">Nemáš pridelenú žiadnu rolu.</div>'
+            f'<div style="color:#2a7a45;font-size:.85rem;margin-top:6px">'
+            f'Požiadaj owera o pridelenie roly v krajine.</div></div>'
+            f'<p><a href="/countries" style="color:#38d1ff">🌍 Zoznam krajín</a></p>'
+            f'</body></html>'
+        )
+
+    cards = ""
+    for cid, rid in pairs:
+        c   = COUNTRY_BY_ID.get(cid, {})
+        cd  = cdata.get(cid, {})
+        w   = cd.get("weapons", {})
+        role = ROLE_BY_ID.get(rid, {})
+        at_war = cd.get("at_war", [])
+        # Naštvanosť voči tejto krajine
+        my_anger = {oc: ocd.get("anger", {}).get(cid, 0)
+                    for oc, ocd in cdata.items()
+                    if ocd.get("anger", {}).get(cid, 0) > 0}
+        max_anger = max(my_anger.values(), default=0)
+        anger_col = "#ff3a3a" if max_anger >= ANGER_WAR_AUTH_THRESHOLD else "#ff9900" if max_anger >= ANGER_SANCTIONS_THRESHOLD else "#2a7a45"
+
+        # Nuclear status
+        nuc_ok  = w.get("nuclear_approved", False)
+        nuc_sym = "✅☢" if nuc_ok else "❌☢"
+
+        # Energy z minihry
+        eu       = uname.upper()
+        edata_c  = load_jf(KB_ENERGY, {})
+        ep       = edata_c.get(eu, {})
+        fuel     = ep.get("fuel", {})
+        pu239    = fuel.get("pu239", 0.0)
+        wg_pu    = fuel.get("wg_pu", 0.0)
+        heat     = ep.get("proliferation_heat", 0.0)
+
+        war_badge = (f'<div style="color:#ff3a3a;font-size:.9rem;margin:4px 0">⚔ Vo vojne s: '
+                    + ", ".join(COUNTRY_BY_ID.get(e, {}).get("name", e) for e in at_war)
+                    + '</div>') if at_war else ""
+
+        sanctions = cd.get("sanctions", [])
+        sanc_badge = (f'<div style="color:#ff9900;font-size:.85rem">🚫 Sankcie od: {", ".join(sanctions)}</div>'
+                     ) if sanctions else ""
+
+        # Rýchle akcie
+        quick = (
+            f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'
+            f'<a href="/countries/{cid}" style="background:#010d01;border:1px solid #39ff6a44;color:#39ff6a;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">📋 Detail</a>'
+            f'<a href="/countries/{cid}/weapons" style="background:#0d0000;border:1px solid #ff9900;color:#ff9900;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">⚔ Arzenál</a>'
+            f'<a href="/countries/{cid}/war" style="background:#1a0000;border:1px solid #ff3a3a;color:#ff3a3a;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">💣 Vojna</a>'
+            f'<a href="/council" style="background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">🏛 Rada</a>'
+            f'<a href="/countries/pu_market" style="background:#0d0700;border:1px solid #ff990044;color:#ff9900;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">🔬 Pu trh</a>'
+            f'<a href="/countries/transfer" style="background:#050505;border:1px solid #38d1ff44;color:#38d1ff;padding:3px 10px;font-family:inherit;font-size:.9rem;text-decoration:none">↔ Presun</a>'
+            f'</div>'
+        )
+
+        cards += (
+            f'<div class="card" style="border-color:#38d1ff44">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:6px">'
+            f'<span style="font-size:1.2rem">{c.get("flag","")} <strong style="color:#cfffcf">{c.get("name",cid)}</strong></span>'
+            f'<span class="role-tag high">{role.get("icon","")} {role.get("name_sk","")}</span>'
+            f'</div>'
+            f'{war_badge}{sanc_badge}'
+            f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 12px;font-size:.9rem;margin-top:6px">'
+            f'<div><span class="lbl">🪖 Konv.</span> <span class="val">{w.get("conventional",0):,}</span></div>'
+            f'<div><span class="lbl">🚀 Rakety</span> <span class="val">{w.get("missiles",0)}</span></div>'
+            f'<div><span class="lbl">☢</span> <span class="val">{w.get("warheads",0)} {nuc_sym}</span></div>'
+            f'<div><span class="lbl">💻 Kyber</span> <span class="val">{w.get("cyber",0)}</span></div>'
+            f'<div><span class="lbl" style="color:{anger_col}">😡 Naštv.</span> <span style="color:{anger_col}">{max_anger}</span></div>'
+            f'</div>'
+            f'<div style="border-top:1px solid #1a3a1a;margin-top:8px;padding-top:6px;font-size:.85rem;display:flex;gap:12px;flex-wrap:wrap">'
+            f'<span><span class="lbl">⚡ Energia</span> {ep.get("energy",0):.0f}</span>'
+            f'<span><span class="lbl">Pu-239</span> <span style="color:#ff9900">{pu239:.2f}</span></span>'
+            f'<span><span class="lbl">WG-Pu</span> <span style="color:#ff3a3a">{wg_pu:.3f}</span></span>'
+            f'<span><span class="lbl">Heat</span> <span style="color:{"#ff3a3a" if heat>=60 else "#ff9900" if heat>=30 else "#2a7a45"}">{heat:.1f}%</span></span>'
+            f'</div>'
+            f'{quick}'
+            f'</div>'
+        )
+
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
+        f'<title>Moja krajina — KB</title>{_COUNTRIES_CSS}</head><body>'
+        f'<a href="/lobby" class="btn-back">← Lobby</a>'
+        f'<h1>🌍 MOJA KRAJINA</h1>'
+        f'<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; '
+        f'Krajiny: {len(pairs)} &nbsp;|&nbsp; '
+        f'<a href="/countries" style="color:#38d1ff">Všetky krajiny</a></div>'
+        f'{cards}'
+        f'</body></html>'
+    )
+
+
 @app.route("/countries")
 def countries_page():
     if not _require_session() or not _countries_allowed():
@@ -7447,7 +7566,9 @@ def country_war(cid):
     is_owner = session.get("owner") is True
 
     msg = ""
-    if request.method == "POST" and (has_war_role or is_owner):
+    if request.method == "POST" and not (has_war_role or is_owner):
+        return redirect(f"/countries/{cid}/war")
+    if request.method == "POST":
         action = request.form.get("action", "")
 
         if action == "declare":
@@ -8106,9 +8227,11 @@ def country_weapons(cid):
         for v in roles.values()
     )
     can_edit = is_owner or has_role
+    if request.method == "POST" and not can_edit:
+        return redirect(f"/countries/{cid}/weapons")
 
     msg = ""
-    if request.method == "POST" and can_edit:
+    if request.method == "POST":
         action = request.form.get("action", "update")
 
         if action == "build_warhead":
