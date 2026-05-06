@@ -1095,6 +1095,7 @@ function loadGame(slot){
     corpContract:d.corpContract||false, corpFee:d.corpFee||0, omegaUnlocked:d.omegaUnlocked||false,
     hardMode:d.hardMode||false, mineEnergy:0,
   };
+  _sessionStartCr=G.credits; // live CR sync — start od aktuálneho stavu save
   for(const m of MINERALS)if(!G.inv[m.id])G.inv[m.id]={qty:0,pl:0};
   for(const m of MINERALS_4)if(!G.inv[m.id])G.inv[m.id]={qty:0,pl:0};
   return true;
@@ -1175,6 +1176,12 @@ async function fetchMineEnergy(){
   catch(e){G.mineEnergy=G.mineEnergy||0;}
 }
 let _miningLock=false;
+let _sessionStartCr=0; // CR na začiatku session — na výpočet earned delta
+function _syncCrLive(){
+  const api=py();if(!api||!api.sync_turn_cr)return;
+  const earned=Math.max(0,G.credits-_sessionStartCr);
+  try{api.sync_turn_cr(earned).catch(()=>{});}catch(e){}
+}
 
 // ── Auto-miner (premium = okamžitá ťažba, tester = pomalší auto) ─────────────
 let _autoMinerInterval=null;
@@ -1203,6 +1210,7 @@ function _updateAutoBtn(){
   btn.style.color=on?'#ff9900':'#39ff6a';
 }
 function newGame(username){
+  _sessionStartCr=0;
   G={
     username, hp:100, maxHp:100,
     credits:100, turn:0, goal:15000,
@@ -1811,6 +1819,7 @@ function aSell(){
   logs.push({txt:t('sell_total',{total,cr:G.credits}),cls:'lok'});
   flash('rgba(57,255,106,.13)');sFX('buy');
   quickSave();
+  _syncCrLive();
   if(G.era<4&&G.planet===2&&G.credits>=G.goal){setTimeout(sceneCorpOffer,600);return;}
   rG([{txt:t('sell_station'),cls:'linf'},...logs]);}
 

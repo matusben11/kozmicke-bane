@@ -2397,6 +2397,12 @@ WEB_BRIDGE = """\
         body: JSON.stringify({credits_earned: credits_earned, mined: mined, win: win})
       }).then(function(r){return r.text();});
     },
+    sync_turn_cr: function(credits_earned) {
+      return fetch('/api/sync_turn_cr', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({credits_earned: credits_earned})
+      }).then(function(r){return r.text();});
+    },
     get_career: function() {
       return fetch('/api/get_career').then(function(r){return r.text();});
     },
@@ -3420,6 +3426,38 @@ def api_clear_lb():
     save_jf(KB_LB, [])
     return "true"
 
+# In-memory tracker: koľko CR bolo už live-syncnutých pre aktuálnu session
+_live_cr_synced: dict = {}  # {username_lower: total_cr_synced_this_session}
+
+
+@app.route("/api/sync_turn_cr", methods=["POST"])
+def api_sync_turn_cr():
+    """Okamžitý live sync CR po každom predaji — pripočíta delta k career_cr."""
+    if not _require_session():
+        return "{}", 401
+    pilot   = session["username"]
+    key     = pilot.upper()
+    d       = request.json or {}
+    credits_now = int(d.get("credits_earned", 0))  # celkový earned v tejto session
+
+    prev = _live_cr_synced.get(pilot, 0)
+    delta = credits_now - prev
+    if delta <= 0:
+        career = load_jf(KB_CAREER, {})
+        return json.dumps(career.get(key, {}))
+
+    _live_cr_synced[pilot] = credits_now
+    career = load_jf(KB_CAREER, {})
+    e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
+                          "total_mined": 0, "wins": 0, "last_seen": "–"})
+    e["career_cr"] += delta
+    r, rname = kb_rank(e["career_cr"])
+    e["rank"] = r; e["rank_name"] = rname
+    career[key] = e
+    save_jf(KB_CAREER, career)
+    return json.dumps(e)
+
+
 @app.route("/api/report_session_end", methods=["POST"])
 def api_session_end():
     if not _require_session():
@@ -3433,7 +3471,13 @@ def api_session_end():
         "total_mined": 0, "wins": 0, "last_seen": "–"
     })
     earned = int(d.get("credits_earned", 0))
-    e["career_cr"]    += earned
+
+    # CR boli už live-syncnuté počas session — tu len dopočítame prípadný zostatok
+    prev_synced = _live_cr_synced.pop(pilot, 0)
+    remaining = earned - prev_synced
+    if remaining > 0:
+        e["career_cr"] += remaining
+
     e["sessions"]     += 1
     e["total_mined"]  += int(d.get("mined", 0))
     e["best_session"]  = max(e["best_session"], earned)
@@ -3444,7 +3488,6 @@ def api_session_end():
     e["rank"] = r; e["rank_name"] = rname
     career[key] = e
     save_jf(KB_CAREER, career)
-    # Sync skóre do login systému
     users = load_users()
     if pilot in users:
         users[pilot]["games_played"] = users[pilot].get("games_played", 0) + 1
