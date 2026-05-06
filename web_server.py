@@ -1130,42 +1130,48 @@ _DEFAULT_PROFILE = {
 
 
 def _ensure_profile_fields(profile):
+    # Základné kontajnery musia byť prvé
     profile.setdefault("plants", [])
     profile.setdefault("energy", 0.0)
     profile.setdefault("fuel", {})
+    profile.setdefault("raw_materials", {})
+    profile.setdefault("commodities", {})
+    profile.setdefault("mines", [])
+    # Palivo
     profile["fuel"].setdefault("coal", 0.0)
     profile["fuel"].setdefault("gas", 0.0)
-    profile["fuel"].setdefault("uranium", 0.0)       # LEU-3
-    profile["fuel"].setdefault("uranium_leu5", 0.0)   # LEU-5
-    profile["fuel"].setdefault("uranium_heu20", 0.0)  # HEU-20
-    profile["fuel"].setdefault("pu239", 0.0)          # plutónium
+    profile["fuel"].setdefault("uranium", 0.0)
+    profile["fuel"].setdefault("uranium_leu5", 0.0)
+    profile["fuel"].setdefault("uranium_heu20", 0.0)
+    profile["fuel"].setdefault("pu239", 0.0)
     profile["fuel"].setdefault("helium", 0.0)
-    profile["fuel"].setdefault("wg_pu", 0.0)          # zbraňové plutónium (WG-Pu)
-    profile["raw_materials"].setdefault("u238", 0.0)   # ochudobnený urán
-    profile.setdefault("proliferation_heat", 0.0)      # 0.0–100.0
-    profile.setdefault("safety_level", 0)
-    profile.setdefault("damaged_plants", [])
-    profile.setdefault("xenon_level", 0.0)            # 0–100, RBMK xenón-135
-    profile.setdefault("xenon_purge", False)          # aktívny purge (spaľuje palivo 2×)
-    profile.setdefault("dispatch_pending", None)      # čakajúca dispatch ponuka
-    profile.setdefault("hazard_mult_expires", 0.0)    # timestamp kedy expiruje zvýšené riziko
-    profile.setdefault("hazard_mult_val", 1.0)        # aktuálny multiplikátor rizika
-    profile.setdefault("kalkar_converted", False)
-    profile["raw_materials"].setdefault("spent_fuel", 0.0)  # vyhorené palivové články
-    profile["fuel"].setdefault("mox", 0.0)                  # MOX palivové články
-    profile.setdefault("commodities", {})
+    profile["fuel"].setdefault("wg_pu", 0.0)
+    profile["fuel"].setdefault("mox", 0.0)
+    # Suroviny
+    profile["raw_materials"].setdefault("u238", 0.0)
+    profile["raw_materials"].setdefault("spent_fuel", 0.0)
+    profile["raw_materials"].setdefault("uranium_raw", 0.0)
+    # Komodity
     profile["commodities"].setdefault("oil", 0.0)
     profile["commodities"].setdefault("gold", 0.0)
     profile["commodities"].setdefault("platinum", 0.0)
-    profile.setdefault("mines", [])
-    profile.setdefault("raw_materials", {})
-    profile["raw_materials"].setdefault("uranium_raw", 0.0)
+    # Jadrové / bezpečnostné
+    profile.setdefault("proliferation_heat", 0.0)
+    profile.setdefault("safety_level", 0)
+    profile.setdefault("damaged_plants", [])
+    profile.setdefault("xenon_level", 0.0)
+    profile.setdefault("xenon_purge", False)
+    profile.setdefault("dispatch_pending", None)
+    profile.setdefault("hazard_mult_expires", 0.0)
+    profile.setdefault("hazard_mult_val", 1.0)
+    profile.setdefault("kalkar_converted", False)
+    profile.setdefault("rbmk_online_refuel", False)
+    profile.setdefault("soviet_event_pending", None)
+    profile.setdefault("cascade_score", 0.0)
+    # Eventy
     profile.setdefault("active_events", [])
     profile.setdefault("last_event", None)
     profile.setdefault("last_event_at", 0.0)
-    profile.setdefault("rbmk_online_refuel", False)    # Fáza 7: RBMK online refueling
-    profile.setdefault("soviet_event_pending", None)   # Fáza 7: sovietský event
-    profile.setdefault("cascade_score", 0.0)           # kaskádová havária: akumulovaný risk score
     return profile
 
 
