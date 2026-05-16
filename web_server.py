@@ -8731,7 +8731,7 @@ def energy_invest():
         # Overenia
         if target == uname:
             msg = "❌ Nemôžeš investovať sám do seba."
-        elif target not in all_users_check:
+        elif not any(k.upper() == target for k in all_users_check):
             msg = "❌ Hráč neexistuje."
         elif amount < INV_MIN_CR and inv_type == "cr":
             msg = f"❌ Minimum {INV_MIN_CR} CR."
@@ -8810,7 +8810,7 @@ def energy_invest():
     edata   = load_jf(KB_ENERGY, {})
     all_users = load_users()
     pl_opts = "".join(
-        f'<option value="{u}">{u}</option>'
+        f'<option value="{u.upper()}">{u}</option>'
         for u in sorted(all_users.keys()) if u.lower() != uname.lower()
     )
     my_cr = career.get(uname, {}).get("career_cr", 0)
