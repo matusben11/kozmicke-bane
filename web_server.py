@@ -4689,12 +4689,12 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
         lbl_purex   = "PUREX ->" + str(purex_rods_out) + " Pu"
         lbl_mox_btn = "MOX ->" + str(max_mox) + " rod"
         form_dispose = sf_form("dispose", int_spent, lbl_dispose, "#7a7a7a",
-                                note_disp, cr >= cr_dispose) if int_spent > 0 else ""
+                                note_disp, cr < cr_dispose) if int_spent > 0 else ""
         form_purex   = sf_form("purex", int_spent, lbl_purex, "#ff44aa",
-                                note_purex, purex_rods_out >= 1 and cr >= cr_purex
+                                note_purex, not (purex_rods_out >= 1 and cr >= cr_purex)
                                 ) if purex_rods_out >= 1 else ""
         form_mox     = sf_form("mox", max_mox, lbl_mox_btn, "#99ddff",
-                                note_mox, max_mox >= 1) if max_mox >= 1 else ""
+                                note_mox, max_mox < 1) if max_mox >= 1 else ""
         spent_html = (
             f'<div class="card" style="border-color:{sf_col}44">'
             f'<div class="card-title" style="color:{sf_col}">&#9762; {lbl_title}</div>'
