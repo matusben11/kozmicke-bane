@@ -8727,11 +8727,12 @@ def energy_invest():
             amount = 0
 
         edata = load_jf(KB_ENERGY, {})
+        all_users_check = load_users()
         # Overenia
         if target == uname:
             msg = "❌ Nemôžeš investovať sám do seba."
-        elif target not in edata:
-            msg = "❌ Hráč nemá energetický profil."
+        elif target not in all_users_check:
+            msg = "❌ Hráč neexistuje."
         elif amount < INV_MIN_CR and inv_type == "cr":
             msg = f"❌ Minimum {INV_MIN_CR} CR."
         elif amount < INV_MIN_FUEL and inv_type == "fuel":
@@ -8807,9 +8808,10 @@ def energy_invest():
 
     # Zoznam hráčov s profilom
     edata   = load_jf(KB_ENERGY, {})
+    all_users = load_users()
     pl_opts = "".join(
         f'<option value="{u}">{u}</option>'
-        for u in sorted(edata.keys()) if u != uname
+        for u in sorted(all_users.keys()) if u.lower() != uname.lower()
     )
     my_cr = career.get(uname, {}).get("career_cr", 0)
 
