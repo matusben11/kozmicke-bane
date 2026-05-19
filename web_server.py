@@ -2873,6 +2873,7 @@ def render_lobby(pilot):
     msg_slots     = L("slotov z prehliadaca!", "slot(s) from browser!")
     msg_sync_err  = L("Sync chyba: ", "Sync error: ")
     html += f"""<script>
+localStorage.setItem('lang', '{lang}');
 (function(){{
   try{{
     function _doSync(showMsg){{

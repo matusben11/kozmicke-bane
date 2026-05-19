@@ -917,6 +917,7 @@ function t(key, vars={}) {
 function toggleLang() {
   LANG = LANG === 'sk' ? 'en' : 'sk';
   localStorage.setItem('lang', LANG);
+  fetch('/lang/' + LANG).catch(()=>{});
   const b = document.getElementById('lang-btn');
   if(b) b.textContent = LANG.toUpperCase();
   redrawCurrentView();
