@@ -7557,20 +7557,20 @@ def countries_page():
             c = COUNTRY_BY_ID.get(cid, {})
             r = ROLE_BY_ID.get(rid, {})
             tags += f'<span class="role-tag high">{c.get("flag","")} {c.get("name",cid)} — {r.get("icon","")} {r.get("name_sk" if lang!="en" else "name_en", rid)}</span> '
-        my_roles_html = f'<div class="card" style="border-color:#ff990044;margin-bottom:10px"><div class="card-title" style="color:#ff9900">👤 Moje roly</div>{tags}</div>'
+        my_roles_html = f'<div class="card" style="border-color:#ff990044;margin-bottom:10px"><div class="card-title" style="color:#ff9900">👤 {L("Moje roly","My roles")}</div>{tags}</div>'
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Krajiny — KB</title>{_COUNTRIES_CSS}</head><body>
+<title>{L("Krajiny","Countries")} — KB</title>{_COUNTRIES_CSS}</head><body>
 <a href="/lobby" class="btn-back">← Lobby</a>
-<h1>🌍 MEDZIGALAKTICKÁ RADA</h1>
-<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; Krajiny: {len(COUNTRIES)} &nbsp;|&nbsp; ★ = stály člen RB
-  &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 Rada bezpečnosti</a>
-  &nbsp;|&nbsp; <a href="/countries/transfer" style="color:#ff9900">↔ Presun materiálov</a>
+<h1>🌍 {L("MEDZIGALAKTICKÁ RADA","INTERGALACTIC COUNCIL")}</h1>
+<div class="sub">PILOT: {uname.upper()} &nbsp;|&nbsp; {L("Krajiny","Countries")}: {len(COUNTRIES)} &nbsp;|&nbsp; ★ = {L("stály člen RB","permanent SC member")}
+  &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 {L("Rada bezpečnosti","Security Council")}</a>
+  &nbsp;|&nbsp; <a href="/countries/transfer" style="color:#ff9900">↔ {L("Presun materiálov","Transfer materials")}</a>
 </div>
 {my_roles_html}
 <div style="max-width:900px;margin:0 auto">
 <table class="ctable">
-<thead><tr><th>Krajina</th><th>Región</th><th>Obsadené roly</th><th>Stav</th></tr></thead>
+<thead><tr><th>{L("Krajina","Country")}</th><th>{L("Región","Region")}</th><th>{L("Obsadené roly","Occupied roles")}</th><th>{L("Stav","Status")}</th></tr></thead>
 <tbody>{rows}</tbody>
 </table></div>
 </body></html>"""
@@ -7608,27 +7608,27 @@ def country_detail(cid):
     sanctions = cd.get("sanctions", [])
     status_html = ""
     if at_war:
-        status_html += f'<div style="color:#ff3a3a;margin:4px 0">⚔ Vo vojne s: {", ".join(at_war)}</div>'
+        status_html += f'<div style="color:#ff3a3a;margin:4px 0">⚔ {L("Vo vojne s","At war with")}: {", ".join(at_war)}</div>'
     if sanctions:
-        status_html += f'<div style="color:#ff9900;margin:4px 0">🚫 Sankcie od: {", ".join(sanctions)}</div>'
+        status_html += f'<div style="color:#ff9900;margin:4px 0">🚫 {L("Sankcie od","Sanctions from")}: {", ".join(sanctions)}</div>'
     if perm:
-        status_html += f'<div style="color:#ff88ff;margin:4px 0">★ Stály člen Rady bezpečnosti — má právo VETA</div>'
+        status_html += f'<div style="color:#ff88ff;margin:4px 0">★ {L("Stály člen Rady bezpečnosti — má právo VETA","Permanent Security Council member — has VETO right")}</div>'
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>{c["name"]} — KB</title>{_COUNTRIES_CSS}</head><body>
-<a href="/countries" class="btn-back">← Späť</a>
+<a href="/countries" class="btn-back">← {L("Späť","Back")}</a>
 <h1>{c["flag"]} {c["name"]}</h1>
-<div class="sub">{c["region"]} {"&nbsp;|&nbsp; ★ Stály člen RB" if perm else ""}</div>
+<div class="sub">{c["region"]} {"&nbsp;|&nbsp; ★ " + L("Stály člen RB","Permanent SC member") if perm else ""}</div>
 {status_html}
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-  <a href="/countries/{cid}/weapons" style="display:inline-block;background:#0d0000;border:1px solid #ff3a3a44;color:#ff9900;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Arzenál</a>
-  <a href="/countries/{cid}/war" style="display:inline-block;background:#1a0000;border:1px solid #ff3a3a;color:#ff3a3a;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ Vojenský stav</a>
-  <a href="/council" style="display:inline-block;background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:4px 12px;font-family:inherit;font-size:.95rem">🏛 Rada</a>
+  <a href="/countries/{cid}/weapons" style="display:inline-block;background:#0d0000;border:1px solid #ff3a3a44;color:#ff9900;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ {L("Arzenál","Arsenal")}</a>
+  <a href="/countries/{cid}/war" style="display:inline-block;background:#1a0000;border:1px solid #ff3a3a;color:#ff3a3a;padding:4px 12px;font-family:inherit;font-size:.95rem">⚔ {L("Vojenský stav","War status")}</a>
+  <a href="/council" style="display:inline-block;background:#050010;border:1px solid #ff88ff44;color:#ff88ff;padding:4px 12px;font-family:inherit;font-size:.95rem">🏛 {L("Rada","Council")}</a>
 </div>
 <div class="card">
-<div class="card-title">🏛 Obsadenie rolí</div>
+<div class="card-title">🏛 {L("Obsadenie rolí","Role assignments")}</div>
 <table class="ctable"><thead>
-<tr><th>Rola</th><th>Sila</th><th>Hráč(i)</th></tr>
+<tr><th>{L("Rola","Role")}</th><th>{L("Sila","Power")}</th><th>{L("Hráč(i)","Player(s)")}</th></tr>
 </thead><tbody>{rows}</tbody></table>
 </div>
 </body></html>"""
@@ -7726,10 +7726,10 @@ def country_war(cid):
                         qty = 0
                     if qty > 0:
                         if wtype == "warheads" and not w_src.get("nuclear_approved"):
-                            errors.append("☢ Nemáš schválenie Rady na jadrové zbrane!")
+                            errors.append(L("☢ Nemáš schválenie Rady na jadrové zbrane!","☢ No Security Council approval for nuclear weapons!"))
                             qty = 0
                         elif w_src.get(wtype, 0) < qty:
-                            errors.append(f"Nedostatok {wtype}: {w_src.get(wtype,0)} < {qty}")
+                            errors.append(f'{L("Nedostatok","Insufficient")} {wtype}: {w_src.get(wtype,0)} < {qty}')
                             qty = 0
                     if qty > 0:
                         used[wtype] = qty
@@ -7737,7 +7737,7 @@ def country_war(cid):
                 if errors:
                     msg = "❌ " + " | ".join(errors)
                 elif not used:
-                    msg = "❌ Vyber aspoň jednu zbraň."
+                    msg = L("❌ Vyber aspoň jednu zbraň.","❌ Select at least one weapon.")
                 else:
                     tname = COUNTRY_BY_ID.get(target, {}).get("name", target)
                     dmg_report = []
@@ -7823,11 +7823,11 @@ def country_war(cid):
                             })
                             save_jf(KB_COUNCIL, cncl)
 
-                    dmg_str  = ", ".join(dmg_report)  if dmg_report  else "žiadna"
-                    loss_str = ", ".join(loss_report) if loss_report else "žiadne"
-                    msg = (f"⚔ Útok na {tname} — škody: {dmg_str} | "
-                           f"vlastné straty: {loss_str} | "
-                           f"naštvanosť sveta +{total_anger_neutral:.0f}")
+                    dmg_str  = ", ".join(dmg_report)  if dmg_report  else L("žiadna","none")
+                    loss_str = ", ".join(loss_report) if loss_report else L("žiadne","none")
+                    msg = (f"⚔ {L('Útok na','Strike on')} {tname} — {L('škody','damage')}: {dmg_str} | "
+                           f"{L('vlastné straty','own losses')}: {loss_str} | "
+                           f"{L('naštvanosť sveta','world anger')} +{total_anger_neutral:.0f}")
 
         cdata[cid] = cd
         save_jf(KB_COUNTRIES, cdata)
@@ -7847,7 +7847,7 @@ def country_war(cid):
     )
     war_html = ""
     if at_war:
-        war_html = '<div style="color:#ff3a3a;margin-bottom:8px">⚔ Vo vojne s: ' + \
+        war_html = f'<div style="color:#ff3a3a;margin-bottom:8px">⚔ {L("Vo vojne s","At war with")}: ' + \
             ", ".join(f'{COUNTRY_BY_ID.get(e,{}).get("flag","")} {COUNTRY_BY_ID.get(e,{}).get("name",e)}' for e in at_war) + '</div>'
 
     # Naštvanosť iných krajín voči nám
@@ -7860,7 +7860,7 @@ def country_war(cid):
             oc = COUNTRY_BY_ID.get(other_cid, {})
             col = "#ff3a3a" if pts >= ANGER_WAR_AUTH_THRESHOLD else "#ff9900" if pts >= ANGER_SANCTIONS_THRESHOLD else "#888"
             anger_rows += (f'<div class="row"><span class="lbl">{oc.get("flag","")} {oc.get("name",other_cid)}</span>'
-                          f'<span style="color:{col}">{pts} {"⚔ vojenská akcia" if pts >= ANGER_WAR_AUTH_THRESHOLD else "🚫 sankcie" if pts >= ANGER_SANCTIONS_THRESHOLD else ""}</span></div>')
+                          f'<span style="color:{col}">{pts} {"⚔ " + L("vojenská akcia","military action") if pts >= ANGER_WAR_AUTH_THRESHOLD else "🚫 " + L("sankcie","sanctions") if pts >= ANGER_SANCTIONS_THRESHOLD else ""}</span></div>')
 
     # Útokový formulár — výber množstva zbraní
     strike_form = ""
@@ -7870,11 +7870,11 @@ def country_war(cid):
             stock = w.get(wtype, 0)
             if stock <= 0:
                 continue
-            nuc_warn = " ⚠ +40 heat/ks, potrebné schválenie" if wtype == "warheads" else ""
-            anger_note = f"naštvanosť +{stats['anger_neutral']}/ks neutrálni, +{stats['anger_perm']}/ks RB"
+            nuc_warn = f' ⚠ +40 heat/{L("ks","pcs")}, {L("potrebné schválenie","approval required")}' if wtype == "warheads" else ""
+            anger_note = f'{L("naštvanosť","anger")} +{stats["anger_neutral"]}/{L("ks","pcs")} {L("neutrálni","neutral")}, +{stats["anger_perm"]}/{L("ks","pcs")} RB'
             weapon_inputs += (
                 f'<div class="row" style="padding:4px 0">'
-                f'<span class="lbl">{stats["icon"]} {stats["name_sk"]}'
+                f'<span class="lbl">{stats["icon"]} {stats["name_sk"] if L("sk","en")=="sk" else stats["name_en"]}'
                 f' <small style="color:#555">[{stock:,}]</small></span>'
                 f'<span style="display:flex;align-items:center;gap:6px">'
                 f'<input type="number" name="use_{wtype}" value="0" min="0" max="{stock}" style="width:70px">'
@@ -7899,36 +7899,36 @@ def country_war(cid):
                              f'align-items:center;margin-bottom:8px">'
                              f'<select name="target">{enemy_opts}</select>'
                              f'<button name="action" value="ceasefire" class="b" '
-                             f'style="border-color:#38d1ff;color:#38d1ff">🕊 Prímerie</button></form>')
+                             f'style="border-color:#38d1ff;color:#38d1ff">🕊 {L("Prímerie","Ceasefire")}</button></form>')
         edit_html = (
             f'<div class="card" style="border-color:#ff3a3a44">'
-            f'<div class="card-title" style="color:#ff3a3a">⚔ Vojenské operácie</div>'
+            f'<div class="card-title" style="color:#ff3a3a">⚔ {L("Vojenské operácie","Military operations")}</div>'
             f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
             f'<select name="target">{declare_opts}</select>'
-            f'<button name="action" value="declare" class="b red">⚔ Vyhlásiť vojnu</button></form>'
+            f'<button name="action" value="declare" class="b red">⚔ {L("Vyhlásiť vojnu","Declare war")}</button></form>'
             f'{ceasefire_form}'
             f'{"<form method=POST>" + strike_form + "</form>" if at_war and strike_form else ""}'
-            f'{"<div style=color:#888;font-size:.85rem>Žiadne zbrane v arzenáli.</div>" if at_war and not strike_form else ""}'
+            f'{"<div style=color:#888;font-size:.85rem>" + L("Žiadne zbrane v arzenáli.","No weapons in arsenal.") + "</div>" if at_war and not strike_form else ""}'
             f'</div>'
         )
 
     anger_html = ""
     if anger_rows:
         anger_html = (f'<div class="card" style="border-color:#ff440044">'
-                     f'<div class="card-title" style="color:#ff9900">😡 Naštvanosť iných krajín voči nám</div>'
+                     f'<div class="card-title" style="color:#ff9900">😡 {L("Naštvanosť iných krajín voči nám","Other countries anger toward us")}</div>'
                      f'{anger_rows}</div>')
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>{c['name']} — Vojenský stav</title>{_COUNTRIES_CSS}</head><body>
+<title>{c['name']} — {L("Vojenský stav","War status")}</title>{_COUNTRIES_CSS}</head><body>
 <a href="/countries/{cid}" class="btn-back">← {c['name']}</a>
-<h1>{c['flag']} {c['name']} — Vojenský stav</h1>
+<h1>{c['flag']} {c['name']} — {L("Vojenský stav","War status")}</h1>
 {msg_html}{war_html}{anger_html}
 <div class="card">
-  <div class="card-title">⚔ Arzenál</div>
-  <div class="row"><span class="lbl">🪖 Konvenčné sily</span><span class="val">{w.get('conventional',0):,} tis.</span></div>
-  <div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get('missiles',0)}</span></div>
-  <div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get('warheads',0)} {"✅" if w.get("nuclear_approved") else "❌"}</span></div>
-  <div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get('cyber',0)}</span></div>
+  <div class="card-title">⚔ {L("Arzenál","Arsenal")}</div>
+  <div class="row"><span class="lbl">🪖 {L("Konvenčné sily","Conventional forces")}</span><span class="val">{w.get('conventional',0):,} {L("tis.","k")}</span></div>
+  <div class="row"><span class="lbl">🚀 {L("Rakety","Missiles")}</span><span class="val">{w.get('missiles',0)}</span></div>
+  <div class="row"><span class="lbl">☢ {L("Hlavice","Warheads")}</span><span class="val">{w.get('warheads',0)} {"✅" if w.get("nuclear_approved") else "❌"}</span></div>
+  <div class="row"><span class="lbl">💻 {L("Kyber","Cyber")}</span><span class="val">{w.get('cyber',0)}</span></div>
 </div>
 {edit_html}
 </body></html>"""
@@ -7961,7 +7961,7 @@ def countries_transfer():
 
             # Jadrové hlavice — cieľová krajina musí mať schválenie
             if mat == "warheads" and not dst_w.get("nuclear_approved"):
-                msg = "❌ Cieľová krajina nemá schválenie Rady na jadrové zbrane!"
+                msg = L("❌ Cieľová krajina nemá schválenie Rady na jadrové zbrane!","❌ Target country has no Security Council nuclear approval!")
             elif src_w.get(mat, 0) < qty:
                 msg = f"❌ Nedostatok: {src_w.get(mat, 0)} < {qty}"
             else:
@@ -7978,11 +7978,11 @@ def countries_transfer():
     # Zostavenie formulára
     if len(my_cids) < 2:
         return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Presun materiálov</title>{_COUNTRIES_CSS}</head><body>
-<a href="/countries" class="btn-back">← Krajiny</a>
-<h1>↔ Presun materiálov</h1>
+<title>{L("Presun materiálov","Transfer materials")}</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← {L("Krajiny","Countries")}</a>
+<h1>↔ {L("Presun materiálov","Transfer materials")}</h1>
 <div class="card"><div style="color:#ff9900">
-Musíš mať rolu aspoň v 2 krajinách aby si mohol presúvať materiály.</div></div>
+{L("Musíš mať rolu aspoň v 2 krajinách aby si mohol presúvať materiály.","You need a role in at least 2 countries to transfer materials.")}</div></div>
 </body></html>"""
 
     c_opts = lambda exclude="": "".join(
@@ -8006,35 +8006,35 @@ Musíš mať rolu aspoň v 2 krajinách aby si mohol presúvať materiály.</div
     msg_html = f'<div style="color:{"#39ff6a" if msg.startswith("✅") else "#ff3a3a"};margin-bottom:8px">{msg}</div>' if msg else ""
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Presun materiálov — KB</title>{_COUNTRIES_CSS}</head><body>
-<a href="/countries" class="btn-back">← Krajiny</a>
-<h1>↔ Presun materiálov medzi krajinami</h1>
-<div class="sub">Môžeš presúvať iba medzi krajinami kde máš rolu.</div>
+<title>{L("Presun materiálov","Transfer materials")} — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← {L("Krajiny","Countries")}</a>
+<h1>↔ {L("Presun materiálov medzi krajinami","Transfer materials between countries")}</h1>
+<div class="sub">{L("Môžeš presúvať iba medzi krajinami kde máš rolu.","You can only transfer between countries where you have a role.")}</div>
 {msg_html}
 <div class="card">
-  <div class="card-title">🏦 Tvoj arzenál</div>
+  <div class="card-title">🏦 {L("Tvoj arzenál","Your arsenal")}</div>
   {arsenal_rows}
 </div>
 <div class="card" style="border-color:#ff990044">
-  <div class="card-title" style="color:#ff9900">↔ Nový presun</div>
+  <div class="card-title" style="color:#ff9900">↔ {L("Nový presun","New transfer")}</div>
   <form method="POST" style="display:grid;gap:8px;max-width:500px">
-    <div class="row"><span class="lbl">Zo:</span>
+    <div class="row"><span class="lbl">{L("Zo:","From:")}</span>
       <select name="src">{c_opts()}</select></div>
-    <div class="row"><span class="lbl">Do:</span>
+    <div class="row"><span class="lbl">{L("Do:","To:")}</span>
       <select name="dst">{c_opts()}</select></div>
-    <div class="row"><span class="lbl">Materiál:</span>
+    <div class="row"><span class="lbl">{L("Materiál:","Material:")}</span>
       <select name="material">
-        <option value="warheads">☢ Jadrové hlavice</option>
-        <option value="missiles">🚀 Balistické rakety</option>
-        <option value="conventional">🪖 Konvenčné sily (tis.)</option>
-        <option value="cyber">💻 Kybernetické zbrane</option>
+        <option value="warheads">☢ {L("Jadrové hlavice","Nuclear warheads")}</option>
+        <option value="missiles">🚀 {L("Balistické rakety","Ballistic missiles")}</option>
+        <option value="conventional">🪖 {L("Konvenčné sily (tis.)","Conventional forces (k)")}</option>
+        <option value="cyber">💻 {L("Kybernetické zbrane","Cyber weapons")}</option>
       </select></div>
-    <div class="row"><span class="lbl">Počet:</span>
+    <div class="row"><span class="lbl">{L("Počet:","Qty:")}</span>
       <input type="number" name="qty" value="1" min="1" style="width:80px"></div>
-    <button type="submit" class="b" style="margin-top:4px">↔ Presunúť</button>
+    <button type="submit" class="b" style="margin-top:4px">↔ {L("Presunúť","Transfer")}</button>
   </form>
   <div style="color:#2a7a45;font-size:.82em;margin-top:8px">
-    ⚠ Jadrové hlavice možno presunúť len do krajiny so schválením Rady bezpečnosti.
+    ⚠ {L("Jadrové hlavice možno presunúť len do krajiny so schválením Rady bezpečnosti.","Nuclear warheads can only be transferred to countries with Security Council approval.")}
   </div>
 </div>
 </body></html>"""
@@ -8108,7 +8108,7 @@ def council_page():
         for_v = res["votes_for"]; against_v = res["votes_against"]
         vetoed = res.get("vetoed_by", "")
         col = {"open":"#ff9900","passed":"#39ff6a","rejected":"#ff3a3a","vetoed":"#ff88ff"}.get(res["status"],"#888")
-        status_lbl = {"open":"🗳 OTVORENÉ","passed":"✅ SCHVÁLENÉ","rejected":"❌ ZAMIETNUTÉ","vetoed":"🚫 VETO"}.get(res["status"],res["status"])
+        status_lbl = {"open": "🗳 " + L("OTVORENÉ","OPEN"), "passed": "✅ " + L("SCHVÁLENÉ","PASSED"), "rejected": "❌ " + L("ZAMIETNUTÉ","REJECTED"), "vetoed": "🚫 VETO"}.get(res["status"], res["status"])
         can_vote = res["status"] == "open" and me and uname not in for_v and uname not in against_v
         can_veto = res["status"] == "open" and me.get("is_permanent") and not vetoed
         vote_html = ""
@@ -8116,25 +8116,25 @@ def council_page():
             vote_html = (
                 f'<form method="POST" action="/council/vote" style="display:inline">'
                 f'<input type="hidden" name="res_id" value="{res["id"]}">'
-                f'<button name="vote" value="for" class="b">✅ ZA</button> '
-                f'<button name="vote" value="against" class="b red">❌ PROTI</button>'
+                f'<button name="vote" value="for" class="b">✅ {L("ZA","FOR")}</button> '
+                f'<button name="vote" value="against" class="b red">❌ {L("PROTI","AGAINST")}</button>'
                 f'{" <button name=vote value=veto class=b style=border-color:#ff88ff;color:#ff88ff>🚫 VETO</button>" if can_veto else ""}'
                 f'</form>')
         return (
             f'<div style="border:1px solid {col}44;background:#050505;padding:8px 12px;margin-bottom:6px">'
             f'<div style="display:flex;justify-content:space-between;flex-wrap:wrap">'
-            f'<span style="color:{col}">{rt.get("icon","")} {rt.get("name_sk","")}</span>'
+            f'<span style="color:{col}">{rt.get("icon","")} {rt.get("name_sk","") if L("sk","en")=="sk" else rt.get("name_en", rt.get("name_sk",""))}</span>'
             f'<span style="color:#888;font-size:.85rem">{status_lbl} {time_str}</span></div>'
             f'<div style="color:#cfffcf;margin:3px 0">{tc.get("flag","")} {tc.get("name",res["target_country"])}</div>'
-            f'<div style="font-size:.85rem;color:#2a7a45">{rt.get("desc_sk","")}</div>'
+            f'<div style="font-size:.85rem;color:#2a7a45">{rt.get("desc_sk","") if L("sk","en")=="sk" else rt.get("desc_en", rt.get("desc_sk",""))}</div>'
             f'<div style="font-size:.82rem;margin-top:4px">'
-            f'ZA: <span style="color:#39ff6a">{", ".join(for_v) or "—"}</span> &nbsp; '
-            f'PROTI: <span style="color:#ff3a3a">{", ".join(against_v) or "—"}</span>'
+            f'{L("ZA","FOR")}: <span style="color:#39ff6a">{", ".join(for_v) or "—"}</span> &nbsp; '
+            f'{L("PROTI","AGAINST")}: <span style="color:#ff3a3a">{", ".join(against_v) or "—"}</span>'
             f'{" &nbsp; VETO: <span style=color:#ff88ff>" + vetoed + "</span>" if vetoed else ""}'
             f'</div>{vote_html}</div>'
         )
 
-    open_html   = "".join(_res_html(r) for r in open_res) or '<div style="color:#2a7a45">Žiadne otvorené rezolúcie.</div>'
+    open_html   = "".join(_res_html(r) for r in open_res) or f'<div style="color:#2a7a45">{L("Žiadne otvorené rezolúcie.","No open resolutions.")}</div>'
     closed_html = "".join(_res_html(r) for r in reversed(closed_res)) or '<div style="color:#2a7a45">—</div>'
 
     # Geneva mediátori
@@ -8147,10 +8147,9 @@ def council_page():
         )
         geneva_html = (
             f'<div class="card" style="border-color:#38d1ff44;background:#00080d">'
-            f'<div class="card-title" style="color:#38d1ff">🇨🇭 SÍDLO RADY — ŽENEVA (neutrálne)</div>'
+            f'<div class="card-title" style="color:#38d1ff">🇨🇭 {L("SÍDLO RADY — ŽENEVA (neutrálne)","COUNCIL HQ — GENEVA (neutral)")}</div>'
             f'<div style="color:#2a7a45;font-size:.85rem;margin-bottom:6px">'
-            f'Neutrálni mediátori môžu navrhovať akékoľvek rezolúcie a hlasovať bez stranníctva. '
-            f'Švajčiarsko je chránené — nikdy sa nemôže stať cieľom vojenskej akcie.'
+            f'{L("Neutrálni mediátori môžu navrhovať akékoľvek rezolúcie a hlasovať bez stranníctva. Švajčiarsko je chránené — nikdy sa nemôže stať cieľom vojenskej akcie.","Neutral mediators can propose any resolutions and vote without bias. Switzerland is protected — it can never become the target of military action.")}'
             f'</div>{gtags}</div>'
         )
 
@@ -8162,12 +8161,12 @@ def council_page():
         role_label = ROLE_BY_ID.get(me.get("role",""), {}).get("name_sk", me.get("role",""))
         badges = ""
         if me.get("is_permanent"):
-            badges += '&nbsp;<span style="color:#ff88ff">★ Stály člen — VETO</span>'
+            badges += f'&nbsp;<span style="color:#ff88ff">★ {L("Stály člen — VETO","Permanent member — VETO")}</span>'
         if me.get("is_geneva"):
-            badges += '&nbsp;<span style="color:#38d1ff">🕊 Neutrálny mediátor</span>'
+            badges += f'&nbsp;<span style="color:#38d1ff">🕊 {L("Neutrálny mediátor","Neutral mediator")}</span>'
         new_res_html = f"""
         <div class="card" style="border-color:#ff990044">
-        <div class="card-title" style="color:#ff9900">📋 Podať novú rezolúciu</div>
+        <div class="card-title" style="color:#ff9900">📋 {L("Podať novú rezolúciu","Submit new resolution")}</div>
         <div style="color:#2a7a45;font-size:.85rem;margin-bottom:6px">
           {COUNTRY_BY_ID.get(me.get("country",""),{}).get("flag","")}
           {COUNTRY_BY_ID.get(me.get("country",""),{}).get("name","").upper()} — {role_label}
@@ -8176,7 +8175,7 @@ def council_page():
         <form method="POST" action="/council/propose" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <select name="target_country" style="min-width:160px">{c_opts}</select>
           <select name="res_type" style="min-width:200px">{t_opts}</select>
-          <button type="submit" class="b">📋 Podať rezolúciu</button>
+          <button type="submit" class="b">📋 {L("Podať rezolúciu","Submit resolution")}</button>
         </form></div>"""
 
     # Upozornenia z energetickej minihry
@@ -8191,7 +8190,7 @@ def council_page():
                       f'<span style="color:#ff88ff">WG-Pu: {a["wg_pu"]}</span>'
                       f'<span style="color:#888">{c_name}</span></div>')
         alert_html = (f'<div class="card" style="border-color:#ff3a3a44">'
-                     f'<div class="card-title" style="color:#ff3a3a">⚠ JADROVÉ UPOZORNENIA — energetická minihra</div>'
+                     f'<div class="card-title" style="color:#ff3a3a">⚠ {L("JADROVÉ UPOZORNENIA — energetická minihra","NUCLEAR ALERTS — energy minigame")}</div>'
                      f'{rows_a}</div>')
 
     # Zbraňový prehľad stálych členov
@@ -8202,25 +8201,25 @@ def council_page():
         w  = cd.get("weapons", {})
         nuc_ok = "✅" if w.get("nuclear_approved") else "❌"
         perm_html += (f'<span style="margin-right:16px">{c.get("flag","")} {c.get("name",cid)}: '
-                     f'☢{nuc_ok} {w.get("warheads",0)} hlavíc 🚀{w.get("missiles",0)}</span>')
+                     f'☢{nuc_ok} {w.get("warheads",0)} {L("hlavíc","warheads")} 🚀{w.get("missiles",0)}</span>')
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Rada bezpečnosti — KB</title>{_COUNTRIES_CSS}</head><body>
-<a href="/countries" class="btn-back">← Krajiny</a>
-<h1>🏛 MEDZIGALAKTICKÁ RADA BEZPEČNOSTI</h1>
-<div class="sub" style="margin-bottom:6px">Stáli členovia: {perm_html}</div>
+<title>{L("Rada bezpečnosti","Security Council")} — KB</title>{_COUNTRIES_CSS}</head><body>
+<a href="/countries" class="btn-back">← {L("Krajiny","Countries")}</a>
+<h1>🏛 {L("MEDZIGALAKTICKÁ RADA BEZPEČNOSTI","INTERGALACTIC SECURITY COUNCIL")}</h1>
+<div class="sub" style="margin-bottom:6px">{L("Stáli členovia","Permanent members")}: {perm_html}</div>
 {geneva_html}
 {alert_html}
 {new_res_html}
 <div class="card">
-  <div class="card-title">🗳 OTVORENÉ REZOLÚCIE</div>
+  <div class="card-title">🗳 {L("OTVORENÉ REZOLÚCIE","OPEN RESOLUTIONS")}</div>
   {open_html}
 </div>
 <div class="card" style="border-color:#2a7a4544">
-  <div class="card-title" style="color:#2a7a45">📁 UZAVRETÉ REZOLÚCIE (posledných 10)</div>
+  <div class="card-title" style="color:#2a7a45">📁 {L("UZAVRETÉ REZOLÚCIE (posledných 10)","CLOSED RESOLUTIONS (last 10)")}</div>
   {closed_html}
 </div>
-<p><a href="/countries/transfer" style="color:#ff9900">↔ Presun materiálov medzi krajinami →</a></p>
+<p><a href="/countries/transfer" style="color:#ff9900">↔ {L("Presun materiálov medzi krajinami","Transfer materials between countries")} →</a></p>
 </body></html>"""
 
 
@@ -8397,21 +8396,21 @@ def country_weapons(cid):
     msg_html = ""
     if raw_msg.startswith("OK:"):
         parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Vyrobených {parts[1]} hlavíc (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Vyrobených","Built")} {parts[1]} {L("hlavíc","warheads")} (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
     elif raw_msg.startswith("OK_WEAPONS:"):
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Zbrane nakúpené za {int(raw_msg.split(":")[1]):,} CR.</div>'
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Zbrane nakúpené za","Weapons purchased for")} {int(raw_msg.split(":")[1]):,} CR.</div>'
     elif raw_msg == "NESCHVALENE":
-        msg_html = '<div style="color:#ff3a3a;margin-bottom:8px">❌ Krajina nemá schválenie Rady na jadrové zbrane!</div>'
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Krajina nemá schválenie Rady na jadrové zbrane!","Country has no Security Council nuclear approval!")}</div>'
     elif raw_msg.startswith("NEDOSTATOK:"):
         parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Nedostatok {parts[1]}: {parts[2]}</div>'
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok","Insufficient")} {parts[1]}: {parts[2]}</div>'
     elif raw_msg.startswith("NEDOSTATOK_CR:"):
         parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Nedostatok CR: máš {int(parts[1]):,}, potrebuješ {int(parts[2]):,}</div>'
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok CR: máš","Insufficient CR: you have")} {int(parts[1]):,}, {L("potrebuješ","need")} {int(parts[2]):,}</div>'
 
     nuc_ok  = w.get("nuclear_approved", False)
     nuc_col = "#39ff6a" if nuc_ok else "#ff3a3a"
-    nuc_lbl = "✅ SCHVÁLENÝ Radou bezpečnosti" if nuc_ok else "❌ NESCHVÁLENÝ — porušenie medzinárodného práva"
+    nuc_lbl = L("✅ SCHVÁLENÝ Radou bezpečnosti","✅ APPROVED by Security Council") if nuc_ok else L("❌ NESCHVÁLENÝ — porušenie medzinárodného práva","❌ NOT APPROVED — violation of international law")
 
     # Pu zásoby hráča z minihry
     eu    = uname.upper()
@@ -8425,31 +8424,31 @@ def country_weapons(cid):
     if can_edit and nuc_ok:
         build_html = (
             f'<div class="card" style="border-color:#ff440044;margin-top:6px">'
-            f'<div class="card-title" style="color:#ff9900">☢ Výroba jadrových hlavíc</div>'
-            f'<div class="row"><span class="lbl">WG-Pu (zásoby)</span>'
-            f'<span style="color:#ff3a3a">{wg_avail:.3f} ks'
-            f' <small style="color:#555">(1 WG-Pu = 1 hlavica, +30 heat)</small></span></div>'
-            f'<div class="row"><span class="lbl">Pu-239 (zásoby)</span>'
-            f'<span style="color:#ff9900">{pu239_avail:.2f} ks'
-            f' <small style="color:#555">(5 Pu-239 = 1 hlavica, +10 heat)</small></span></div>'
+            f'<div class="card-title" style="color:#ff9900">☢ {L("Výroba jadrových hlavíc","Nuclear warhead production")}</div>'
+            f'<div class="row"><span class="lbl">WG-Pu ({L("zásoby","stock")})</span>'
+            f'<span style="color:#ff3a3a">{wg_avail:.3f} {L("ks","pcs")}'
+            f' <small style="color:#555">(1 WG-Pu = 1 {L("hlavica","warhead")}, +30 heat)</small></span></div>'
+            f'<div class="row"><span class="lbl">Pu-239 ({L("zásoby","stock")})</span>'
+            f'<span style="color:#ff9900">{pu239_avail:.2f} {L("ks","pcs")}'
+            f' <small style="color:#555">(5 Pu-239 = 1 {L("hlavica","warhead")}, +10 heat)</small></span></div>'
             f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">'
             f'<input type="hidden" name="action" value="build_warhead">'
             f'<select name="pu_type" style="min-width:120px">'
             f'<option value="wg_pu">☢ WG-Pu (1:1)</option>'
             f'<option value="pu239">Pu-239 (5:1)</option></select>'
             f'<input type="number" name="qty" value="1" min="1" style="width:60px">'
-            f'<button type="submit" class="b" style="border-color:#ff3a3a;color:#ff3a3a">☢ Vyrobiť</button>'
+            f'<button type="submit" class="b" style="border-color:#ff3a3a;color:#ff3a3a">☢ {L("Vyrobiť","Build")}</button>'
             f'</form>'
             f'<div style="color:#2a7a45;font-size:.82rem;margin-top:4px">'
-            f'Plutónium: Energetická minihra alebo'
-            f' <a href="/countries/pu_market" style="color:#ff9900">Trh Pu →</a>'
+            f'{L("Plutónium: Energetická minihra alebo","Plutonium: Energy minigame or")}'
+            f' <a href="/countries/pu_market" style="color:#ff9900">{L("Trh Pu","Pu Market")} →</a>'
             f'</div></div>'
         )
     elif can_edit:
         build_html = (
             f'<div style="color:#ff9900;font-size:.9rem;margin:8px 0">'
-            f'☢ Výroba hlavíc blokovaná — krajina nemá schválenie Rady. '
-            f'<a href="/council" style="color:#ff88ff">Požiadaj Radu →</a></div>'
+            f'☢ {L("Výroba hlavíc blokovaná — krajina nemá schválenie Rady.","Warhead production blocked — country has no Council approval.")}'
+            f' <a href="/council" style="color:#ff88ff">{L("Požiadaj Radu","Ask the Council")} →</a></div>'
         )
 
     edit_html = ""
@@ -8460,7 +8459,7 @@ def country_weapons(cid):
     if can_edit:
         _rows_buy = ""
         _icons = {"conventional": "🪖", "missiles": "🚀", "cyber": "💻"}
-        _names = {"conventional": "Konvenčné sily (tis.)", "missiles": "Balistické rakety", "cyber": "Kybernetické zbrane"}
+        _names = {"conventional": L("Konvenčné sily (tis.)","Conventional forces (k)"), "missiles": L("Balistické rakety","Ballistic missiles"), "cyber": L("Kybernetické zbrane","Cyber weapons")}
         for wtype, unit_cost in WEAPON_BUILD_COSTS.items():
             stock = w.get(wtype, 0)
             _rows_buy += (
@@ -8474,33 +8473,33 @@ def country_weapons(cid):
             )
         edit_html = (
             f'<div class="card" style="border-color:#ff990044;margin-top:6px">'
-            f'<div class="card-title" style="color:#ff9900">🏭 Nakúpiť zbrane <small style="color:#555">(tvoje CR: {my_cr_disp:,})</small></div>'
+            f'<div class="card-title" style="color:#ff9900">🏭 {L("Nakúpiť zbrane","Buy weapons")} <small style="color:#555">({L("tvoje CR","your CR")}: {my_cr_disp:,})</small></div>'
             f'<form method="POST">'
             f'<input type="hidden" name="action" value="buy_weapons">'
             f'{_rows_buy}'
-            f'<button type="submit" class="b" style="margin-top:8px;border-color:#ff9900;color:#ff9900">🏭 Nakúpiť</button>'
+            f'<button type="submit" class="b" style="margin-top:8px;border-color:#ff9900;color:#ff9900">🏭 {L("Nakúpiť","Purchase")}</button>'
             f'</form></div>'
         )
 
     return (
         f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
-        f'<title>{c["name"]} — Zbrane</title>{_COUNTRIES_CSS}</head><body>'
+        f'<title>{c["name"]} — {L("Zbrane","Weapons")}</title>{_COUNTRIES_CSS}</head><body>'
         f'<a href="/countries/{cid}" class="btn-back">← {c["name"]}</a>'
-        f'<h1>{c["flag"]} {c["name"]} — Zbraňový arzenál</h1>'
+        f'<h1>{c["flag"]} {c["name"]} — {L("Zbraňový arzenál","Weapons arsenal")}</h1>'
         f'{msg_html}'
         f'<div class="card">'
-        f'<div class="card-title">☢ Jadrový status</div>'
+        f'<div class="card-title">☢ {L("Jadrový status","Nuclear status")}</div>'
         f'<div style="color:{nuc_col};margin-bottom:6px">{nuc_lbl}</div>'
-        f'<div class="row"><span class="lbl">☢ Hlavice</span><span class="val">{w.get("warheads",0)}</span></div>'
-        f'<div class="row"><span class="lbl">🚀 Rakety</span><span class="val">{w.get("missiles",0)}</span></div>'
-        f'<div class="row"><span class="lbl">🪖 Konv. sily</span><span class="val">{w.get("conventional",0):,} tis.</span></div>'
-        f'<div class="row"><span class="lbl">💻 Kyber</span><span class="val">{w.get("cyber",0)}</span></div>'
+        f'<div class="row"><span class="lbl">☢ {L("Hlavice","Warheads")}</span><span class="val">{w.get("warheads",0)}</span></div>'
+        f'<div class="row"><span class="lbl">🚀 {L("Rakety","Missiles")}</span><span class="val">{w.get("missiles",0)}</span></div>'
+        f'<div class="row"><span class="lbl">🪖 {L("Konv. sily","Conv. forces")}</span><span class="val">{w.get("conventional",0):,} {L("tis.","k")}</span></div>'
+        f'<div class="row"><span class="lbl">💻 {L("Kyber","Cyber")}</span><span class="val">{w.get("cyber",0)}</span></div>'
         f'</div>'
         f'{edit_html}'
         f'{build_html}'
-        f'<p><a href="/countries/pu_market" style="color:#ff9900">🔬 Trh Pu →</a>'
-        f' &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 Rada →</a>'
-        f' &nbsp;|&nbsp; <a href="/countries/{cid}" style="color:#39ff6a">← Späť</a></p>'
+        f'<p><a href="/countries/pu_market" style="color:#ff9900">🔬 {L("Trh Pu","Pu Market")} →</a>'
+        f' &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff">🏛 {L("Rada","Council")} →</a>'
+        f' &nbsp;|&nbsp; <a href="/countries/{cid}" style="color:#39ff6a">← {L("Späť","Back")}</a></p>'
         f'</body></html>'
     )
 
@@ -8635,15 +8634,15 @@ def pu_market():
     if raw_msg.startswith("OK_LIST:"):
         p = raw_msg.split(":")
         lbl = "WG-Pu" if p[2] == "wg_pu" else "Pu-239"
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Ponuka {p[1]} {lbl} za {p[3]} CR pridaná.</div>'
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Ponuka","Listing")} {p[1]} {lbl} {L("za","for")} {p[3]} CR {L("pridaná.","added.")}</div>'
     elif raw_msg.startswith("OK_BUY:"):
         p = raw_msg.split(":")
         lbl = "WG-Pu" if p[2] == "wg_pu" else "Pu-239"
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ Kúpené {p[1]} {lbl} od {p[3]} za {p[4]} CR.</div>'
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Kúpené","Bought")} {p[1]} {lbl} {L("od","from")} {p[3]} {L("za","for")} {p[4]} CR.</div>'
     elif raw_msg == "OK_CANCEL":
-        msg_html = '<div style="color:#39ff6a;margin-bottom:8px">✅ Ponuka zrušená.</div>'
+        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Ponuka zrušená.","Listing cancelled.")}</div>'
     elif raw_msg.startswith("CHYBA"):
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ Chyba: {raw_msg}</div>'
+        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Chyba","Error")}: {raw_msg}</div>'
     else:
         msg_html = ""
 
@@ -8664,39 +8663,39 @@ def pu_market():
             btns += (f'<form method="POST" style="display:inline">'
                     f'<input type="hidden" name="action" value="buy">'
                     f'<input type="hidden" name="lid" value="{l["id"]}">'
-                    f'<button class="b" style="font-size:.85rem">Kúpiť</button></form>')
+                    f'<button class="b" style="font-size:.85rem">{L("Kúpiť","Buy")}</button></form>')
         if is_mine:
             btns += (f'<form method="POST" style="display:inline;margin-left:4px">'
                     f'<input type="hidden" name="action" value="cancel">'
                     f'<input type="hidden" name="lid" value="{l["id"]}">'
-                    f'<button class="b red" style="font-size:.85rem">Zrušiť</button></form>')
+                    f'<button class="b red" style="font-size:.85rem">{L("Zrušiť","Cancel")}</button></form>')
         rows += (f'<tr><td style="color:{col}">{lbl}</td><td>{l["qty"]:.3f}</td>'
                 f'<td style="color:#ff9900">{l["price_cr"]:,} CR</td>'
                 f'<td style="color:#888">{l["seller"]}</td>'
                 f'<td style="color:#555">{left_h}h</td><td>{btns}</td></tr>')
     if not rows:
-        rows = '<tr><td colspan="6" style="color:#2a7a45">Žiadne ponuky.</td></tr>'
+        rows = f'<tr><td colspan="6" style="color:#2a7a45">{L("Žiadne ponuky.","No listings.")}</td></tr>'
 
     return (
         f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
-        f'<title>Trh Pu — KB</title>{_COUNTRIES_CSS}</head><body>'
-        f'<a href="/countries" class="btn-back">← Krajiny</a>'
-        f'<h1>🔬 TRH PLUTÓNIA</h1>'
-        f'<div class="sub">Tvoje: Pu-239: <span style="color:#ff9900">{my_pu239:.2f}</span>'
+        f'<title>{L("Trh Pu","Pu Market")} — KB</title>{_COUNTRIES_CSS}</head><body>'
+        f'<a href="/countries" class="btn-back">← {L("Krajiny","Countries")}</a>'
+        f'<h1>🔬 {L("TRH PLUTÓNIA","PLUTONIUM MARKET")}</h1>'
+        f'<div class="sub">{L("Tvoje","Your")}: Pu-239: <span style="color:#ff9900">{my_pu239:.2f}</span>'
         f' &nbsp; WG-Pu: <span style="color:#ff3a3a">{my_wg:.3f}</span></div>'
         f'{msg_html}'
         f'<div class="card" style="border-color:#ff990044">'
-        f'<div class="card-title" style="color:#ff9900">📤 Ponúknuť Pu na predaj</div>'
+        f'<div class="card-title" style="color:#ff9900">📤 {L("Ponúknuť Pu na predaj","List Pu for sale")}</div>'
         f'<form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
         f'<input type="hidden" name="action" value="list">'
         f'<select name="pu_type"><option value="pu239">Pu-239</option>'
         f'<option value="wg_pu">☢ WG-Pu</option></select>'
         f'<input type="number" name="qty" value="1" min="0.001" step="0.001" style="width:80px">'
         f'<input type="number" name="price_cr" value="10000" min="1" style="width:100px" placeholder="CR">'
-        f'<button type="submit" class="b">📤 Ponúknuť</button></form></div>'
-        f'<div class="card"><div class="card-title">🛒 Aktívne ponuky</div>'
+        f'<button type="submit" class="b">📤 {L("Ponúknuť","List")}</button></form></div>'
+        f'<div class="card"><div class="card-title">🛒 {L("Aktívne ponuky","Active listings")}</div>'
         f'<table class="ctable"><thead><tr>'
-        f'<th>Typ</th><th>Mn.</th><th>Cena</th><th>Predajca</th><th>Zostatok</th><th></th>'
+        f'<th>{L("Typ","Type")}</th><th>{L("Mn.","Qty")}</th><th>{L("Cena","Price")}</th><th>{L("Predajca","Seller")}</th><th>{L("Zostatok","Expires")}</th><th></th>'
         f'</tr></thead><tbody>{rows}</tbody></table></div>'
         f'</body></html>'
     )
@@ -8731,17 +8730,17 @@ def energy_invest():
         all_users_check = load_users()
         # Overenia
         if target == uname:
-            msg = "❌ Nemôžeš investovať sám do seba."
+            msg = L("❌ Nemôžeš investovať sám do seba.","❌ You cannot invest in yourself.")
         elif not any(k.upper() == target for k in all_users_check):
-            msg = "❌ Hráč neexistuje."
+            msg = L("❌ Hráč neexistuje.","❌ Player does not exist.")
         elif amount < INV_MIN_CR and inv_type == "cr":
             msg = f"❌ Minimum {INV_MIN_CR} CR."
         elif amount < INV_MIN_FUEL and inv_type == "fuel":
-            msg = f"❌ Minimum {INV_MIN_FUEL} paliva."
+            msg = f"❌ {L('Minimum','Minimum')} {INV_MIN_FUEL} {L('paliva','fuel')}."
         else:
             my_invs = [i for i in invs.get(uname, []) if i["expires_at"] > now]
             if len(my_invs) >= INV_MAX_ACTIVE:
-                msg = f"❌ Max {INV_MAX_ACTIVE} aktívnych investícií."
+                msg = f"❌ Max {INV_MAX_ACTIVE} {L('aktívnych investícií.','active investments.')}"
             elif inv_type == "cr" and my_cr < amount:
                 msg = "❌ Nedostatok CR."
             elif inv_type == "fuel":
@@ -8829,33 +8828,33 @@ h1{color:#39ff6a;font-size:1.3rem;margin:4px 0}
 </style><link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
 
     return f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Investície — KB</title>{css}</head><body>
-<a href="/energy" class="btn-back">← Energia</a>
-<h1>💰 INVESTÍCIE — ENERGETICKÁ MINIHRA</h1>
+<title>{L("Investície","Investments")} — KB</title>{css}</head><body>
+<a href="/energy" class="btn-back">← {L("Energia","Energy")}</a>
+<h1>💰 {L("INVESTÍCIE — ENERGETICKÁ MINIHRA","INVESTMENTS — ENERGY MINIGAME")}</h1>
 <div style="color:#2a7a45;font-size:.85rem;margin-bottom:8px">
-  Investuj CR alebo energiu do iných hráčov. Návrat: ×{INV_RETURN_RATE} po {INV_DURATION_H}h.
-  Max {INV_MAX_ACTIVE} aktívnych. Tvoje CR: {my_cr:,}
+  {L("Investuj CR alebo energiu do iných hráčov.","Invest CR or energy in other players.")} {L("Návrat:","Return:")} ×{INV_RETURN_RATE} {L("po","after")} {INV_DURATION_H}h.
+  Max {INV_MAX_ACTIVE} {L("aktívnych.","active.")} {L("Tvoje CR:","Your CR:")} {my_cr:,}
 </div>
 {msg_html}
 <div class="card" style="border-color:#ff990044">
-  <div class="card-title" style="color:#ff9900">💸 Nová investícia</div>
+  <div class="card-title" style="color:#ff9900">💸 {L("Nová investícia","New investment")}</div>
   <form method="POST" style="display:grid;gap:8px;max-width:400px">
-    <div class="row"><span class="lbl">Hráč:</span><select name="target">{pl_opts}</select></div>
-    <div class="row"><span class="lbl">Typ:</span>
+    <div class="row"><span class="lbl">{L("Hráč:","Player:")}</span><select name="target">{pl_opts}</select></div>
+    <div class="row"><span class="lbl">{L("Typ:","Type:")}</span>
       <select name="inv_type">
-        <option value="cr">💰 CR (kredity)</option>
-        <option value="fuel">⚡ Energia (minihra)</option>
+        <option value="cr">💰 CR ({L("kredity","credits")})</option>
+        <option value="fuel">⚡ {L("Energia (minihra)","Energy (minigame)")}</option>
       </select></div>
-    <div class="row"><span class="lbl">Suma:</span>
+    <div class="row"><span class="lbl">{L("Suma:","Amount:")}</span>
       <input type="number" name="amount" value="{INV_MIN_CR}" min="1" style="width:100px"></div>
-    <button type="submit" class="btn-buy" style="margin-top:4px">💸 Investovať</button>
+    <button type="submit" class="btn-buy" style="margin-top:4px">💸 {L("Investovať","Invest")}</button>
   </form>
 </div>
 <div class="card">
-  <div class="card-title">📤 Moje investície (posielam)</div>{out_html}
+  <div class="card-title">📤 {L("Moje investície (posielam)","My investments (outgoing)")}</div>{out_html}
 </div>
 <div class="card" style="border-color:#38d1ff44">
-  <div class="card-title" style="color:#38d1ff">📥 Investície do mňa (prijímam)</div>{in_html}
+  <div class="card-title" style="color:#38d1ff">📥 {L("Investície do mňa (prijímam)","Investments to me (incoming)")}</div>{in_html}
 </div>
 </body></html>"""
 
