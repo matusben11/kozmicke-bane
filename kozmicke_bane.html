@@ -1736,7 +1736,7 @@ function rG(logs=[]){
     G.era===4?`<button class="btn btn-b" onclick="sFX('click');aColony()"><span class="bk">[C]</span>${t('btn_colony')}</button>`:'',
     G.era===4?`<button class="btn" style="color:#ff9944;border-color:#ff994444" onclick="sFX('click');aPlanetTravel()"><span class="bk">[P]</span>${t('btn_planets')}</button>`:'',
     G.era===4?`<button class="btn" style="color:#aaaaff;border-color:#aaaaff44" onclick="sFX('click');aCorpDashboard()"><span class="bk">[N]</span>${t('btn_corp')}</button>`:'',
-    `<button class="btn btn-d" onclick="sFX('click');aQuit()">${t('btn_depart')}</button>`,
+    !G.epsilonStayed?`<button class="btn btn-d" onclick="sFX('click');aQuit()">${t('btn_depart')}</button>`:'',
     _autoMinerAllowed()?`<button id="auto-mine-btn" class="btn" style="border-color:#39ff6a;color:#39ff6a" onclick="toggleAutoMiner()">⚡ Auto ON</button>`:'',
   ].filter(Boolean);
 
@@ -1800,7 +1800,7 @@ function rG(logs=[]){
     else if(k==='p'&&G.era===4)aPlanetTravel();
     else if(k==='n'&&G.era===4)aCorpDashboard();
     else if(k==='s')sceneSave();
-    else if(k==='escape')aQuit();};}
+    else if(k==='escape'&&!G.epsilonStayed)aQuit();};}
 
 // ══════════════════════════════════════════════════════════════
 //  DEPTH ACTIONS
