@@ -553,6 +553,22 @@ const T = {
     // story text
     'story_text': `Korporácia  ► NOVA MINING CORP. ◄  ťa vyslala\nna planétu   Z Y R A X - 9  ...\n\nPredchádzajúca posádka zmizla pred 6 rokmi.\nSignál z bane ALPHA-7 ustal bez varovania.\nNikto sa nevrátil. NOVA CORP. to označila za\n"technické zlyhanie".\n\nTvoja misia:\n  ► Pristáť na Zyrax-9 a preskúmať baňu ALPHA-7\n  ► Klesať do hĺbky — 5 úrovní, čím hlbšie tým vzácnejšie\n  ► Vyťažiť a predať cenné nerasty  (11 druhov)\n  ► Investovať do vybavenia  (15 upgradov)\n  ► Zakúpiť LEŠTIACE ZARIADENIE pre vyšší výnos\n  ► Zozbierať  15 000 KREDITOV  a opustiť planétu\n  ► P R E Ž I Ť .\n\nSpoločnosť ti verí.\n... alebo aspoň verí, že tentokrát sa niekto vráti.`,
     // landing frames
+    // Akt 2 — Dr. Kessler station (L3)
+    'eps_act2_title': '── STANICA DR. KESSLERA ── HĹBKA 3km ──',
+    'eps_act2_1': '  Nachádzaš sa v opustenej výskumnej stanici. Zariadenia stále bežia.',
+    'eps_act2_2': '  Na pracovnom stole: denníky, vzorky Omega Ore v hermetických nádobách.',
+    'eps_act2_3': '  Posledný záznam: "Omega Ore nie je minerál. Keď ho vyťažíš... oni to vedia."',
+    'eps_act2_4': '  ⚠ NOVA CORP. TI O TOMTO NEPOVEDALA NIČ.',
+    // Omega Ore awareness
+    'eps_omega_1': '◉ Niečo v hĺbke zaregistrovalo pohyb. Omega Ore bol narušený.',
+    'eps_omega_2': '◉ Signál bol vyslaný. Niekto — alebo niečo — vie kde si.',
+    // HUD dreams (L3+) — záhadné správy
+    'eps_dream_0': '  [ ... jameson bol tu ... ]',
+    'eps_dream_1': '  [ ... 4km... nelez tam... ]',
+    'eps_dream_2': '  [ ... počuješ to? regulárne pulzy... ]',
+    'eps_dream_3': '  [ ... NOVA CORP. klame... misia EPSILON... ]',
+    'eps_dream_4': '  [ ... sme stále tu. neodchádzaj. ]',
+    'eps_dream_5': '  [ ... teplota klesá bez dôvodu... ]',
     // depth protection warnings
     'depth_no_heatshield': '⚠ Bez Tepelného Štítu — teplota poškodzuje skafander! HP -{dmg}/ťah',
     'depth_no_voidfilter': '☢ Bez Void Filtra — Omega žiarenie prenika skafandrom! HP -{dmg}/ťah',
@@ -937,6 +953,22 @@ const T = {
     // story text
     'story_text': `Corporation  ► NOVA MINING CORP. ◄  sent you\nto planet   Z Y R A X - 9  ...\n\nThe previous crew vanished 6 years ago.\nThe signal from mine ALPHA-7 went silent without warning.\nNo one returned. NOVA CORP. classified it as\na "technical failure".\n\nYour mission:\n  ► Land on Zyrax-9 and investigate mine ALPHA-7\n  ► Descend into the depths — 5 levels, deeper = rarer\n  ► Mine and sell valuable ores  (11 types)\n  ► Invest in equipment  (15 upgrades)\n  ► Purchase POLISHING EQUIPMENT for higher yields\n  ► Collect  15 000 CREDITS  and leave the planet\n  ► S U R V I V E .\n\nThe company believes in you.\n... or at least believes that this time someone will return.`,
     // landing frames
+    // Akt 2 — Dr. Kessler station (L3)
+    'eps_act2_title': '── DR. KESSLER STATION ── DEPTH 3km ──',
+    'eps_act2_1': '  You are in an abandoned research station. Equipment still running.',
+    'eps_act2_2': '  On the workbench: journals, Omega Ore samples in sealed containers.',
+    'eps_act2_3': '  Last entry: "Omega Ore is not a mineral. When you mine it... they know."',
+    'eps_act2_4': '  ⚠ NOVA CORP. TOLD YOU NOTHING ABOUT THIS.',
+    // Omega Ore awareness
+    'eps_omega_1': '◉ Something in the depths registered movement. Omega Ore was disturbed.',
+    'eps_omega_2': '◉ A signal was sent. Someone — or something — knows where you are.',
+    // HUD dreams (L3+)
+    'eps_dream_0': '  [ ... jameson was here ... ]',
+    'eps_dream_1': '  [ ... 4km... do not go there... ]',
+    'eps_dream_2': '  [ ... do you hear it? regular pulses... ]',
+    'eps_dream_3': '  [ ... NOVA CORP. is lying... mission EPSILON... ]',
+    'eps_dream_4': '  [ ... we are still here. do not leave. ]',
+    'eps_dream_5': '  [ ... temperature dropping for no reason... ]',
     // depth protection warnings
     'depth_no_heatshield': '⚠ No Heat Shield — temperature damages your suit! HP -{dmg}/turn',
     'depth_no_voidfilter': '☢ No Void Filter — Omega radiation penetrates your suit! HP -{dmg}/turn',
@@ -1131,6 +1163,7 @@ function saveGame(slot){
     era:G.era||1, colony:G.colony||null, currentPlanet4:G.currentPlanet4||'zyrax8',
     corpContract:G.corpContract||false, corpFee:G.corpFee||0, omegaUnlocked:G.omegaUnlocked||false,
     hardMode:G.hardMode||false,
+    epsilonAct:G.epsilonAct||0,
   };
   saves[slot]=data;
   localStorage.setItem(LS_KEY,JSON.stringify(saves));
@@ -1149,7 +1182,7 @@ function loadGame(slot){
     rp:d.rp||0, weapon:WEAPONS.find(w=>w.id===d.weapon)||null, rocket:d.rocket||0, planet:d.planet||1,
     era:d.era||1, colony:d.colony||null, currentPlanet4:d.currentPlanet4||'zyrax8',
     corpContract:d.corpContract||false, corpFee:d.corpFee||0, omegaUnlocked:d.omegaUnlocked||false,
-    hardMode:d.hardMode||false, mineEnergy:0,
+    hardMode:d.hardMode||false, mineEnergy:0, epsilonAct:d.epsilonAct||0,
   };
   _sessionStartCr=G.credits; // live CR sync — start od aktuálneho stavu save
   for(const m of MINERALS)if(!G.inv[m.id])G.inv[m.id]={qty:0,pl:0};
@@ -1296,6 +1329,7 @@ function newGame(username){
     era:1, colony:null, currentPlanet4:'zyrax8', corpContract:false, corpFee:0,
     omegaUnlocked: !!(window.__BETA_FLAGS__ && window.__BETA_FLAGS__.omega7),
     mineEnergy:0, hardMode:false,
+    epsilonAct:0,  // 0=none, 1=Akt1 started, 2=Akt2 started, ...
   };
 }
 function hU(id){return G.upgrades.some(u=>u.id===id);}
@@ -1715,6 +1749,17 @@ function aDescend(){
   if(G.depth===3&&!hU('heatshield'))extraLogs.push({txt:t('depth_warn_l3'),cls:'ldng'});
   if(G.depth===4&&!hU('voidfilter'))extraLogs.push({txt:t('depth_warn_l4'),cls:'ldng'});
   if(G.depth===5&&!hU('deepsuit'))extraLogs.push({txt:t('depth_warn_l5'),cls:'ldng'});
+  // Akt 2 — prvý zostup na L3
+  if(G.depth===3&&(G.epsilonAct||0)<2){
+    G.epsilonAct=2;
+    extraLogs.push({txt:'',cls:'linf'});
+    extraLogs.push({txt:t('eps_act2_title'),cls:'lrar'});
+    extraLogs.push({txt:t('eps_act2_1'),cls:'linf'});
+    extraLogs.push({txt:t('eps_act2_2'),cls:'linf'});
+    extraLogs.push({txt:t('eps_act2_3'),cls:'lwarn'});
+    extraLogs.push({txt:t('eps_act2_4'),cls:'ldng'});
+    quickSave();
+  }
   rG([{txt:t('depth_descend',{name:nextDep.name,n:G.depth,m:G.depthM}),cls:'linf'},
       {txt:t('depth_descend_warn'),cls:'lwarn'},...extraLogs]);}
 
@@ -1863,6 +1908,17 @@ async function doMine(){
     const dmg=12;
     G.hp=Math.max(0,G.hp-dmg);
     logs.push({txt:t('depth_no_deepsuit',{dmg}),cls:'ldng'});}
+
+  // Omega Ore detekcia — Akt 2+
+  if(G.depth>=3&&found['omega']&&found['omega']>0){
+    logs.push({txt:t('eps_omega_1'),cls:'lrar'});
+    logs.push({txt:t('eps_omega_2'),cls:'ldng'});}
+
+  // HUD sny — L3+, 12% šanca
+  if(G.depth>=3&&Math.random()<0.12){
+    const dreams=['eps_dream_0','eps_dream_1','eps_dream_2','eps_dream_3','eps_dream_4','eps_dream_5'];
+    const dk=dreams[Math.floor(Math.random()*dreams.length)];
+    logs.push({txt:t(dk),cls:'ldng'});}
 
   // Events
   if(Math.random()<.40){
