@@ -194,6 +194,12 @@ let LANG = localStorage.getItem('lang') || 'sk';
 (function(){ const b=document.getElementById('lang-btn'); if(b) b.textContent=LANG.toUpperCase(); })();
 (function(){ if(window.__IS_TESTER__){ const el=document.getElementById('tester-badge'); if(el)el.style.display='inline'; } })();
 
+// Stratení piloti — načítaj zo servera raz pri spustení
+let _lostPilots = [];
+(function(){
+  fetch('/api/epsilon_lost').then(r=>r.json()).then(d=>{_lostPilots=d.lost||[];}).catch(()=>{});
+})();
+
 const T = {
   sk: {
     // topbar / UI
@@ -1994,8 +2000,17 @@ async function doMine(){
   // HUD sny — L3+, 12% šanca
   if(G.depth>=3&&Math.random()<0.12){
     const dreams=['eps_dream_0','eps_dream_1','eps_dream_2','eps_dream_3','eps_dream_4','eps_dream_5'];
-    const dk=dreams[Math.floor(Math.random()*dreams.length)];
-    logs.push({txt:t(dk),cls:'ldng'});}
+    // Ak existujú Stratení piloti, občas sa objaví ich meno
+    if(_lostPilots.length>0&&Math.random()<0.4){
+      const name=_lostPilots[Math.floor(Math.random()*_lostPilots.length)];
+      const msgSk=`  [ ... ${name} je tu. stále tu. ... ]`;
+      const msgEn=`  [ ... ${name} is here. still here. ... ]`;
+      logs.push({txt:LANG==='en'?msgEn:msgSk,cls:'ldng'});
+    } else {
+      const dk=dreams[Math.floor(Math.random()*dreams.length)];
+      logs.push({txt:t(dk),cls:'ldng'});
+    }
+  }
 
   // L4 shadow sightings — 15% šanca
   if(G.depth>=4&&Math.random()<0.15){
@@ -2869,6 +2884,8 @@ ${t('eps_act4_4')}</div>
 function epsilonChoose(choice){
   G.epsilonAct=40+choice; // 41=vzorka, 42=odmietnutie, 43=zostať
   quickSave();
+  fetch('/api/epsilon_choice',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({choice})}).catch(()=>{});
   if(choice===1){
     // Vzorka pre NOVA Corp — odletíš s bonusom
     rG([{txt:t('eps_outcome_1'),cls:'lrar'}]);

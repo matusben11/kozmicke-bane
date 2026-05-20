@@ -9067,6 +9067,92 @@ def api_add_xp():
     return json.dumps({"xp": rec["xp"], "new_rewards": rec.get("new_rewards", [])})
 
 
+# ── EPSILON ──────────────────────────────────────────────────────────────────
+
+KB_EPSILON = DATA_DIR / "kb_epsilon.json"
+_FILE_KEY_MAP[KB_EPSILON] = "kb_epsilon"
+
+@app.route("/api/epsilon_choice", methods=["POST"])
+def api_epsilon_choice():
+    """Hráč urobil voľbu na L5 — spracuj následky."""
+    if not _require_session():
+        return "{}", 401
+    uname  = session["username"]
+    d      = request.json or {}
+    choice = int(d.get("choice", 0))
+    if choice not in (1, 2, 3):
+        return "{}", 400
+
+    eps = load_jf(KB_EPSILON, {})
+    eps.setdefault("choices", {})[uname] = {"choice": choice, "ts": time.time()}
+
+    if choice == 1:
+        # Vzorka pre NOVA Corp. — automatická rezolúcia v Rade
+        cncl = _get_council_data()
+        now  = time.time()
+        cncl.setdefault("resolutions", []).append({
+            "id": f"res_epsilon_nova_{int(now)}",
+            "type": "nuclear_ban",
+            "target_country": "switzerland",  # neutrálny, len symbolický
+            "proposed_by": uname,
+            "proposed_by_country": "epsilon",
+            "proposed_at": now,
+            "votes_for": [], "votes_against": [],
+            "vetoed_by": None, "status": "open",
+            "expires_at": now + 72 * 3600,
+            "label": f"☢ NOVA CORP. DOMINANCE — {uname} dodal vzorku entity",
+        })
+        cncl.setdefault("alerts", []).append({
+            "ts": now,
+            "msg": f"☢ Pilot {uname} odovzdal vzorku The Deep korporácii NOVA CORP.",
+            "country": None,
+        })
+        save_jf(KB_COUNCIL, cncl)
+
+    elif choice == 2:
+        # Odmietnutie — rezolúcia o vojenskej akcii NOVA Corp.
+        cncl = _get_council_data()
+        now  = time.time()
+        cncl.setdefault("resolutions", []).append({
+            "id": f"res_epsilon_refuse_{int(now)}",
+            "type": "war_auth",
+            "target_country": "switzerland",
+            "proposed_by": uname,
+            "proposed_by_country": "epsilon",
+            "proposed_at": now,
+            "votes_for": [], "votes_against": [],
+            "vetoed_by": None, "status": "open",
+            "expires_at": now + 48 * 3600,
+            "label": f"✗ NOVA CORP. VOJENSKÁ AKCIA — pilot {uname} odmietol odovzdať vzorku",
+        })
+        save_jf(KB_COUNCIL, cncl)
+
+    elif choice == 3:
+        # Zostať — špeciálny rank "◉ Stratený"
+        users = load_users()
+        u = users.get(uname, {})
+        sp = get_sp_ranks(u)
+        lost_rank = "◉ Stratený"
+        if lost_rank not in sp:
+            sp.append(lost_rank)
+        u["special_ranks"] = sp[:2]
+        users[uname] = u
+        save_users(users)
+        eps.setdefault("lost_pilots", [])
+        if uname not in eps["lost_pilots"]:
+            eps["lost_pilots"].append(uname)
+
+    save_jf(KB_EPSILON, eps)
+    return json.dumps({"ok": True, "choice": choice})
+
+
+@app.route("/api/epsilon_lost")
+def api_epsilon_lost():
+    """Vráti zoznam 'Stratených' pilotov pre HUD sny iných hráčov."""
+    eps = load_jf(KB_EPSILON, {})
+    return json.dumps({"lost": eps.get("lost_pilots", [])})
+
+
 # ── Štart ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
