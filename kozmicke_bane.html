@@ -1027,9 +1027,9 @@ const UPGRADES=[
   {id:'drill4',   name:'Drill Mk.IV',     cost:4000, cat:'ťažba',    desc:'+4 nerasty/ťah (max tier)',   eff:'mine+4'},
   {id:'turbo',    name:'⚡ Turbo Drill',  cost:50000,cat:'ťažba',    desc:'Animácia ťažby 5× rýchlejšia', eff:'turbo'},
   // Hĺbkové ochranné upgrady (EPSILON)
-  {id:'heatshield', name:'🔥 Tepelný Štít',  cost:3200, cat:'ochrana', desc:'Ochrana pred teplom L3 — bez neho HP strata', eff:'heatshield'},
-  {id:'voidfilter', name:'☢ Void Filter',    cost:7500, cat:'ochrana', desc:'Filtruje Omega žiarenie na L4 — bez neho HP strata', eff:'voidfilter'},
-  {id:'deepsuit',   name:'🌑 Deep Suit',     cost:18000,cat:'ochrana', desc:'Nutný pre L5 — bez neho HP → 0 za 10 táhov', eff:'deepsuit'},
+  {id:'heatshield', name:'🔥 Heat Shield',  cost:3200, cat:'ochrana', desc:'L3+ ochrana — bez neho HP strata/ťah', desc_en:'L3+ protection — without it HP loss/turn', eff:'heatshield'},
+  {id:'voidfilter', name:'☢ Void Filter',   cost:7500, cat:'ochrana', desc:'L4+ Omega žiarenie — bez neho HP strata/ťah', desc_en:'L4+ Omega radiation — HP loss without it', eff:'voidfilter'},
+  {id:'deepsuit',   name:'🌑 Deep Suit',    cost:18000,cat:'ochrana', desc:'Nutný pre L5 — bez neho HP → 0 za 10 táhov', desc_en:'Required for L5 — without it HP → 0 in 10 turns', eff:'deepsuit'},
 ];
 
 const MINERALS_4=[
@@ -1922,17 +1922,25 @@ function aSell(){
 //  SHOP
 // ══════════════════════════════════════════════════════════════
 function aShop(){
+  const catMap={
+    'ťažba':    LANG==='en'?'MINING':'ŤAŽBA',
+    'ochrana':  LANG==='en'?'PROTECTION':'OCHRANA',
+    'prieskum': LANG==='en'?'EXPLORATION':'PRIESKUM',
+    'logistika':LANG==='en'?'LOGISTICS':'LOGISTIKA',
+    'špeciál':  LANG==='en'?'SPECIAL':'ŠPECIÁL',
+  };
   const cats=['ťažba','ochrana','prieskum','logistika','špeciál'];
   let html='';
   for(const cat of cats){
     const items=UPGRADES.filter(u=>u.cat===cat);if(!items.length)continue;
-    html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">[${cat.toUpperCase()}]</div>`;
+    html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">[${catMap[cat]||cat.toUpperCase()}]</div>`;
     for(const u of items){
       const owned=G.upgrades.some(x=>x.id===u.id);const afford=G.credits>=u.cost;
       const isPol=u.id==='polisher'||u.id==='polisher2';
+      const uDesc=LANG==='en'&&u.desc_en?u.desc_en:u.desc;
       html+=`<div class="si${owned?' owned':''}" onclick="${owned?'':`shopBuy('${u.id}')`}">
         <span>${owned?'✓ ':''}<strong style="color:${isPol?'#ffe066':'var(--a)'}">${u.name}</strong>
-          <small style="color:var(--ad);margin-left:.4rem">${u.desc}</small></span>
+          <small style="color:var(--ad);margin-left:.4rem">${uDesc}</small></span>
         <span style="font-size:.9rem;color:${owned?'var(--g)':afford?'var(--a)':'var(--r)'}">
           ${owned?t('shop_owned'):u.cost+' CR'}</span></div>`;}  }
   // ── ERA 4: Kolóniové zásoby ────────────────────────────────────
@@ -1966,7 +1974,7 @@ function aShop(){
     }
   }
 
-  html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">[ZBRANE]</div>`;
+  html+=`<div style="font-size:.88rem;color:var(--ad);letter-spacing:.09em;margin:.32rem 0 .16rem">[${LANG==='en'?'WEAPONS':'ZBRANE'}]</div>`;
   for(const w of WEAPONS){
     const owned=G.weapon&&G.weapon.id===w.id;const afford=G.credits>=w.cost;
     html+=`<div class="si${owned?' owned':''}" onclick="${owned?'':`weaponBuy('${w.id}')`}">
