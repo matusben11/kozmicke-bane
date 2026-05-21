@@ -5297,6 +5297,16 @@ h1{color:#39ff6a;font-size:1.8em;letter-spacing:.1em;margin:10px 0 4px;text-alig
   💰 {Lp("INVESTÍCIE — vklad CR/energie do iných hráčov","INVESTMENTS — invest CR/energy in other players")}
 </a>
 
+<script>
+(function(){{
+  var k='energy_scroll';
+  var saved=sessionStorage.getItem(k);
+  if(saved){{window.scrollTo(0,parseInt(saved));sessionStorage.removeItem(k);}}
+  document.querySelectorAll('form').forEach(function(f){{
+    f.addEventListener('submit',function(){{sessionStorage.setItem(k,window.scrollY);}});
+  }});
+}})();
+</script>
 </body></html>"""
 
     return html
