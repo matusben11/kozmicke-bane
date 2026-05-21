@@ -38,6 +38,7 @@ KB_COUNTRIES    = DATA_DIR / "kb_countries.json"
 KB_COUNCIL      = DATA_DIR / "kb_council.json"
 KB_INVESTMENTS  = DATA_DIR / "kb_investments.json"
 KB_POINTS       = DATA_DIR / "kb_points.json"
+KB_EPSILON      = DATA_DIR / "kb_epsilon.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -86,6 +87,7 @@ _KV_KEYS = {
     KB_COUNCIL:     "kb_council",
     KB_INVESTMENTS: "kb_investments",
     KB_POINTS:      "kb_points",
+    KB_EPSILON:     "kb_epsilon",
 }
 
 
@@ -9078,9 +9080,6 @@ def api_add_xp():
 
 
 # ── EPSILON ──────────────────────────────────────────────────────────────────
-
-KB_EPSILON = DATA_DIR / "kb_epsilon.json"
-_FILE_KEY_MAP[KB_EPSILON] = "kb_epsilon"
 
 @app.route("/api/epsilon_choice", methods=["POST"])
 def api_epsilon_choice():
