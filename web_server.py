@@ -38,6 +38,7 @@ KB_COUNTRIES    = DATA_DIR / "kb_countries.json"
 KB_COUNCIL      = DATA_DIR / "kb_council.json"
 KB_INVESTMENTS  = DATA_DIR / "kb_investments.json"
 KB_POINTS       = DATA_DIR / "kb_points.json"
+KB_SHARDS       = DATA_DIR / "kb_shards.json"
 KB_EPSILON      = DATA_DIR / "kb_epsilon.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
@@ -87,6 +88,7 @@ _KV_KEYS = {
     KB_COUNCIL:     "kb_council",
     KB_INVESTMENTS: "kb_investments",
     KB_POINTS:      "kb_points",
+    KB_SHARDS:      "kb_shards",
     KB_EPSILON:     "kb_epsilon",
 }
 
@@ -2563,7 +2565,7 @@ DEPTHS = {1: "Povrch", 2: "Litosféra", 3: "Hlboká", 4: "Magma", 5: "Jadro"}
 DEPTHS_EN = {1: "Surface", 2: "Lithosphere", 3: "Deep", 4: "Magma", 5: "Core"}
 
 def render_lobby(pilot):
-    _daily_login_xp(pilot.lower())   # denný login bonus
+    _daily_login_shards(pilot)   # denný login bonus
     all_saves = load_jf(KB_SAVES, {})
     saves  = all_saves.get(pilot.upper(), {})
     career = load_jf(KB_CAREER, {})
@@ -2727,16 +2729,14 @@ def render_lobby(pilot):
             html += f'</div>'
     html += '</div>'
 
-    # ── XP odkaz
-    _xp_rec = _get_points(pilot.lower())
-    _xp_val = _xp_rec.get("xp", 0)
-    _xp_claimed = len(_xp_rec.get("claimed", []))
-    html += (f'<div class="card" style="border-color:#ff990044">'
-             f'<a href="/points" style="display:flex;justify-content:space-between;'
-             f'color:#ff9900;text-decoration:none;font-size:1.05rem;letter-spacing:.06em">'
-             f'<span>&#11088; {L("XP & ODMENY","XP & REWARDS")}</span>'
-             f'<span style="color:#ffcc44">{_xp_val:,} XP &nbsp; '
-             f'({_xp_claimed}/{len(XP_MILESTONES)} {L("míľnikov","milestones")})</span></a>'
+    # ── Void Shards odkaz
+    _vs_rec = _get_shards(pilot)
+    _vs_bal = _vs_rec.get("balance", 0)
+    html += (f'<div class="card" style="border-color:#dd00ff44">'
+             f'<a href="/shards" style="display:flex;justify-content:space-between;'
+             f'color:#dd00ff;text-decoration:none;font-size:1.05rem;letter-spacing:.06em">'
+             f'<span>◈ {L("VOID SHARDS — prémiová mena","VOID SHARDS — premium currency")}</span>'
+             f'<span style="color:#dd00ff"><strong>{_vs_bal}</strong> / {VS_MAX_BALANCE} ◈</span></a>'
              f'</div>')
 
     # ── Leaderboard top 5
@@ -2844,6 +2844,21 @@ def render_lobby(pilot):
                  f'🌍 {_country_label}'
                  f' &nbsp;<span style="font-size:.75em;opacity:.6">[BETA]</span>'
                  f'</a></div>')
+
+    # ── Featured Player (nastavený adminom)
+    _featured = load_jf(KB_SHARDS, {}).get("_featured_player", "")
+    if _featured and _featured.lower() != pilot.lower():
+        _feat_vs = _get_shards(_featured).get("balance", 0)
+        _feat_career = load_jf(KB_CAREER, {}).get(_featured.upper(), {})
+        _feat_cr = _feat_career.get("career_cr", 0)
+        _feat_rank = kb_rank(_feat_cr)[1]
+        html += (f'<div style="width:100%;max-width:700px;margin-bottom:6px;'
+                 f'background:#010008;border:1px solid #38d1ff44;padding:8px 14px;'
+                 f'font-family:\'VT323\',monospace">'
+                 f'<span style="color:#38d1ff;font-size:.85em;letter-spacing:.08em">📌 {L("FEATURED PILOT","FEATURED PILOT")}</span><br>'
+                 f'<span style="color:#cfffcf;font-size:1.05em">{_featured.upper()}</span>'
+                 f' &nbsp; <span style="color:#888;font-size:.9em">{_feat_rank} &nbsp; {_feat_cr:,} CR &nbsp; ◈{_feat_vs}</span>'
+                 f'</div>')
 
     # ── Admin Panel (for is_admin players)
     if u_data.get("is_admin"):
@@ -3471,10 +3486,6 @@ def api_sync_turn_cr():
         return json.dumps(career.get(key, {}))
 
     _live_cr_synced[pilot] = credits_now
-    # XP za predaj: +1 za každých 100 CR delta
-    xp_sell = delta // 100
-    if xp_sell > 0:
-        _add_xp(pilot.lower(), xp_sell)
     career = load_jf(KB_CAREER, {})
     e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
                           "total_mined": 0, "wins": 0, "last_seen": "–"})
@@ -3512,7 +3523,11 @@ def api_session_end():
     e["last_seen"]     = datetime.now().strftime("%Y-%m-%d %H:%M")
     if d.get("win"):
         e["wins"] = e.get("wins", 0) + 1
-        _add_xp(pilot.lower(), XP_WIN)
+        planet = int(d.get("planet", 1))
+        if planet == 1 and _win_shard_flag(pilot, 1):
+            _add_shards(pilot, 2, "win_zyrax9")
+        elif planet == 2 and _win_shard_flag(pilot, 2):
+            _add_shards(pilot, 4, "win_zyrax10")
     r, rname = kb_rank(e["career_cr"])
     e["rank"] = r; e["rank_name"] = rname
     career[key] = e
@@ -4162,7 +4177,54 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <p><a href="/countries" style="color:#39ff6a;font-size:.9rem">🌍 Zobraziť stránku krajín</a>
   &nbsp;|&nbsp; <a href="/countries/pu_market" style="color:#ff9900;font-size:.9rem">🔬 Trh Pu</a>
   &nbsp;|&nbsp; <a href="/council" style="color:#ff88ff;font-size:.9rem">🏛 Rada</a></p>
+
+<h2>◈ VOID SHARDS — správa</h2>
+<p style="font-size:.82rem;color:#888">Plná kontrola: nastav/pridaj/odober shards ľubovoľnému hráčovi. Bez denného stropu.</p>
+<form method="POST" action="/owner/shards_set" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+  <input type="text" name="uname" placeholder="username" style="width:130px;font-size:.85rem">
+  <input type="number" name="amount" placeholder="hodnota" style="width:80px;font-size:.85rem" min="0" max="99">
+  <button type="submit" name="mode" value="set" class="btn" style="color:#dd00ff;border-color:#dd00ff">◈ Nastaviť</button>
+  <button type="submit" name="mode" value="add" class="btn" style="color:#39ff6a;border-color:#39ff6a">+ Pridať</button>
+  <button type="submit" name="mode" value="sub" class="btn btn-r">− Odobrať</button>
+</form>
+<p style="font-size:.82rem;color:#aaa">Top 10 hráčov podľa shardov: {
+  " &nbsp;|&nbsp; ".join(
+    f'<span style="color:#dd00ff">{u}</span>: {d.get("balance",0)} ◈'
+    for u, d in sorted(load_jf(KB_SHARDS, {}).items(), key=lambda x: -x[1].get("balance",0))[:10]
+  ) or "—"
+}</p>
 </body></html>"""
+
+@app.route("/owner/shards_set", methods=["POST"])
+def owner_shards_set():
+    if not _owner_check():
+        return redirect("/owner")
+    uname  = request.form.get("uname", "").strip()
+    mode   = request.form.get("mode", "set")
+    try:
+        amount = int(request.form.get("amount", 0))
+    except ValueError:
+        return redirect("/owner/panel")
+    if not uname:
+        return redirect("/owner/panel")
+    if mode == "set":
+        _set_shards(uname, amount)
+    elif mode == "add":
+        data = load_jf(KB_SHARDS, {})
+        key  = uname.lower()
+        rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+        rec["balance"] = max(0, min(VS_MAX_BALANCE, rec.get("balance", 0) + amount))
+        data[key] = rec
+        save_jf(KB_SHARDS, data)
+    elif mode == "sub":
+        data = load_jf(KB_SHARDS, {})
+        key  = uname.lower()
+        rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+        rec["balance"] = max(0, rec.get("balance", 0) - amount)
+        data[key] = rec
+        save_jf(KB_SHARDS, data)
+    return redirect("/owner/panel")
+
 
 @app.route("/owner/reset_pw", methods=["POST"])
 def owner_reset_pw():
@@ -4492,7 +4554,91 @@ input[type=text]{{outline:none}}</style>
   <tr><th>Hrac</th><th>Rang</th><th>Spec. ranky</th><th>&#9993; Správy</th><th>Nastav</th></tr>
   {rows}
 </table>
+
+<h2>◈ KOMUNITA — Void Shards</h2>
+<p style="color:#aaa;font-size:.85rem">
+  Môžeš darovať shards hráčom (max <strong style="color:#dd00ff">15 ◈ za deň</strong> celkovo za všetkých adminov).
+  Nemôžeš ich odoberať ani meniť ceny v obchode.
+</p>
+{
+  f'<div style="color:#39ff6a;font-size:.85rem;margin-bottom:6px">Dnes si daroval: <strong>{load_jf(KB_SHARDS,{{}}).get("_admin_given_today",{{}}).get(session["username"],{{}}).get(datetime.now().strftime("%Y-%m-%d"),0)}</strong> / 15 ◈</div>'
+}
+<form method="POST" action="/adminpanel/give_shards" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+  <input type="text" name="uname" placeholder="username hráča" style="width:140px;font-size:.85rem">
+  <input type="number" name="amount" placeholder="počet ◈" min="1" max="15" style="width:70px;font-size:.85rem">
+  <button type="submit" class="btn" style="color:#dd00ff;border-color:#dd00ff">◈ Darovať shards</button>
+</form>
+
+<h2>⚡ ADMIN BOOST — 2× earning na 24h</h2>
+<p style="color:#aaa;font-size:.85rem">Hráč zarobí 2× viac shardov počas 24h. Max 1 boost na hráča súčasne.</p>
+<form method="POST" action="/adminpanel/boost_player" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+  <input type="text" name="uname" placeholder="username hráča" style="width:140px;font-size:.85rem">
+  <button type="submit" class="btn" style="color:#ff9900;border-color:#ff9900">⚡ Aktivovať boost</button>
+</form>
+
+<h2>📌 FEATURED PLAYER — zobrazenie v lobby</h2>
+<p style="color:#aaa;font-size:.85rem">Označí hráča ako "Featured" — zobrazí sa v lobby pre ostatných.</p>
+<form method="POST" action="/adminpanel/set_featured" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+  <input type="text" name="uname" placeholder="username (prázdne = zruš)" style="width:160px;font-size:.85rem">
+  <button type="submit" class="btn" style="color:#38d1ff;border-color:#38d1ff">📌 Nastaviť</button>
+</form>
+
 </body></html>"""
+
+
+@app.route("/adminpanel/give_shards", methods=["POST"])
+def adminpanel_give_shards():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    admin   = session["username"]
+    target  = request.form.get("uname", "").strip()
+    try:
+        amount = max(1, min(15, int(request.form.get("amount", 1))))
+    except ValueError:
+        return redirect("/adminpanel")
+    # Skontroluj denný limit admina
+    today = datetime.now().strftime("%Y-%m-%d")
+    data  = load_jf(KB_SHARDS, {})
+    given = data.setdefault("_admin_given_today", {}).setdefault(admin, {})
+    given_today = given.get(today, 0)
+    if given_today >= 15:
+        return redirect("/adminpanel")
+    actual = min(amount, 15 - given_today)
+    # Pridaj shards bez denného stropu hráča (admin gift)
+    key = target.lower()
+    rec = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    rec["balance"] = max(0, min(VS_MAX_BALANCE, rec.get("balance", 0) + actual))
+    data[key] = rec
+    given[today] = given_today + actual
+    save_jf(KB_SHARDS, data)
+    return redirect("/adminpanel")
+
+
+@app.route("/adminpanel/boost_player", methods=["POST"])
+def adminpanel_boost_player():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    target = request.form.get("uname", "").strip()
+    if not target:
+        return redirect("/adminpanel")
+    data = load_jf(KB_SHARDS, {})
+    key  = target.lower()
+    rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    rec["boost_until"] = time.time() + 86400  # 24h
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    return redirect("/adminpanel")
+
+
+@app.route("/adminpanel/set_featured", methods=["POST"])
+def adminpanel_set_featured():
+    if not _is_admin_user():
+        return redirect("/lobby")
+    target = request.form.get("uname", "").strip()
+    data = load_jf(KB_SHARDS, {})
+    data["_featured_player"] = target if target else ""
+    save_jf(KB_SHARDS, data)
+    return redirect("/adminpanel")
 
 
 @app.route("/adminpanel/set_rank", methods=["POST"])
@@ -8902,181 +9048,279 @@ def energy_invest_collect():
     return redirect("/energy/invest")
 
 
-# ── XP / Odmeny ──────────────────────────────────────────────────────────────
+# ── Void Shards ──────────────────────────────────────────────────────────────
 
-XP_MILESTONES = [
-    {"xp":    100, "cr":     500, "title": None,              "icon": "🎯"},
-    {"xp":    500, "cr":   2000,  "title": "⛏ Skúsený",       "icon": "⛏"},
-    {"xp":   1000, "cr":   5000,  "title": "⭐ Expert",        "icon": "⭐"},
-    {"xp":   2500, "cr":  10000,  "title": "💎 Majster",       "icon": "💎"},
-    {"xp":   5000, "cr":  25000,  "title": "🔥 Legenda",       "icon": "🔥"},
-    {"xp":  10000, "cr":  50000,  "title": "👑 Elita",         "icon": "👑"},
-    {"xp":  25000, "cr": 100000,  "title": "🌌 Kozmická ikona","icon": "🌌"},
+VS_MAX_BALANCE  = 99
+VS_DAILY_CAP    = 5   # max shardov za deň zo všetkých zdrojov
+
+VS_SHOP = [
+    {"id": "hud_void",    "name": "🎨 HUD Téma: Void",       "price": 8,  "type": "cosmetic"},
+    {"id": "hud_red",     "name": "🎨 HUD Téma: Deep Red",   "price": 8,  "type": "cosmetic"},
+    {"id": "lore_secret", "name": "📜 Tajný lore záznam",    "price": 5,  "type": "lore"},
+    {"id": "void_lens",   "name": "🔭 Void Lens",            "price": 12, "type": "upgrade"},
+    {"id": "echo_drive",  "name": "⚡ Echo Drive",           "price": 10, "type": "upgrade"},
+    {"id": "deep_memory", "name": "👁 Deep Memory",          "price": 15, "type": "upgrade"},
 ]
 
-# XP za akcie (serverside)
-XP_WIN          = 50    # výhra session
-XP_DAILY_LOGIN  = 20    # prvý login dňa
-XP_PER_100_SOLD = 1     # za každých 100 CR predaných
-XP_PER_100_ENERGY = 1   # za každých 100 energie vyrobenej
+VS_SECRET_LORE = (
+    "KLASIFIKOVANÝ ZÁZNAM — NOVA CORP. INTERNÝ — STUPEŇ ALFA\n\n"
+    "Projekt VOID SIGNAL bol spustený v roku 2347.\n"
+    "Cieľ: komunikácia s entitou na Zyrax-9 a extrakcia Void Energy.\n"
+    "Predchádzajúce misie: 7. Prežitých pilotov: 0.\n"
+    "Misia EPSILON je 8. pokus.\n\n"
+    "Poznámka vedenia: 'Pilot je expendable. Vzorka nie.'\n"
+    "— Riaditeľ NOVA CORP., 2387"
+)
 
 
-def _get_points(uname_lower: str) -> dict:
-    data = load_jf(KB_POINTS, {})
-    return data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
+def _get_shards(uname: str) -> dict:
+    data = load_jf(KB_SHARDS, {})
+    return data.get(uname.lower(), {
+        "balance": 0, "earned_today": 0, "last_date": "",
+        "flags": {}, "owned": [], "boost_until": 0,
+    })
 
 
-def _add_xp(uname_lower: str, amount: int) -> dict:
-    """Pridá XP, skontroluje míľniky, automaticky vyplatí odmeny. Vráti aktualizovaný záznam."""
+def _add_shards(uname: str, amount: int, source: str = "") -> int:
+    """Pridá shards (respektuje denný strop). Vráti koľko bolo pridaných."""
     if amount <= 0:
-        return _get_points(uname_lower)
-    data   = load_jf(KB_POINTS, {})
-    rec    = data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
-    old_xp = rec["xp"]
-    rec["xp"] = old_xp + amount
-
-    # Skontroluj míľniky
-    new_rewards = []
-    for m in XP_MILESTONES:
-        if m["xp"] in rec.get("claimed", []):
-            continue
-        if rec["xp"] >= m["xp"]:
-            rec.setdefault("claimed", []).append(m["xp"])
-            # CR odmena
-            if m["cr"] > 0:
-                career = load_jf(KB_CAREER, {})
-                key    = uname_lower.upper()
-                career.setdefault(key, {})["career_cr"] = \
-                    career[key].get("career_cr", 0) + m["cr"]
-                save_jf(KB_CAREER, career)
-            # Titul → special_rank
-            if m["title"]:
-                users = load_users()
-                if uname_lower in users:
-                    sr = users[uname_lower].get("special_ranks", [])
-                    if m["title"] not in sr:
-                        sr.append(m["title"])
-                    users[uname_lower]["special_ranks"] = sr[-2:]  # max 2
-                    save_users(users)
-            new_rewards.append(m)
-
-    rec["new_rewards"] = new_rewards  # pre flash správu
-    data[uname_lower] = rec
-    save_jf(KB_POINTS, data)
-    return rec
-
-
-def _daily_login_xp(uname_lower: str):
-    """Pridá denný login bonus ak ešte nebol dnes."""
+        return 0
     today = datetime.now().strftime("%Y-%m-%d")
-    data  = load_jf(KB_POINTS, {})
-    rec   = data.get(uname_lower, {"xp": 0, "claimed": [], "last_login_date": ""})
+    data  = load_jf(KB_SHARDS, {})
+    key   = uname.lower()
+    rec   = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    if rec.get("last_date") != today:
+        rec["earned_today"] = 0
+        rec["last_date"] = today
+    remaining_cap = VS_DAILY_CAP - rec.get("earned_today", 0)
+    actual = max(0, min(amount, remaining_cap, VS_MAX_BALANCE - rec.get("balance", 0)))
+    if actual > 0:
+        rec["balance"]      = rec.get("balance", 0) + actual
+        rec["earned_today"] = rec.get("earned_today", 0) + actual
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    return actual
+
+
+def _set_shards(uname: str, amount: int):
+    """Owner: nastaví balance priamo (bez stropu)."""
+    data = load_jf(KB_SHARDS, {})
+    key  = uname.lower()
+    rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    rec["balance"] = max(0, min(VS_MAX_BALANCE, amount))
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+
+
+def _spend_shards(uname: str, amount: int) -> bool:
+    """Minie shards. Vráti True ak sa podarilo."""
+    data = load_jf(KB_SHARDS, {})
+    key  = uname.lower()
+    rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    if rec.get("balance", 0) < amount:
+        return False
+    rec["balance"] = rec["balance"] - amount
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    return True
+
+
+def _daily_login_shards(uname: str):
+    """Denný login bonus — 1 shard, max 1× za deň."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    data  = load_jf(KB_SHARDS, {})
+    key   = uname.lower()
+    rec   = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
     if rec.get("last_login_date") == today:
         return
     rec["last_login_date"] = today
-    data[uname_lower] = rec
-    save_jf(KB_POINTS, data)
-    _add_xp(uname_lower, XP_DAILY_LOGIN)
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    _add_shards(uname, 1, "daily_login")
 
 
-@app.route("/points")
-def points_page():
-    if not _require_session():
-        return redirect("/")
-    uname = session["username"].lower()
-    rec   = _get_points(uname)
-    xp    = rec.get("xp", 0)
-    claimed = set(rec.get("claimed", []))
+def _depth_shard_flag(uname: str, depth: int) -> bool:
+    """Vráti True a uloží flag ak hráč ešte nedostal shard za túto hĺbku."""
+    data = load_jf(KB_SHARDS, {})
+    key  = uname.lower()
+    rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    flag_key = f"depth_{depth}"
+    if rec.get("flags", {}).get(flag_key):
+        return False
+    rec.setdefault("flags", {})[flag_key] = True
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    return True
 
-    css = """<style>
+
+def _win_shard_flag(uname: str, planet: int) -> bool:
+    """Jednorazová odmena za výhru na planéte."""
+    data = load_jf(KB_SHARDS, {})
+    key  = uname.lower()
+    rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+    flag_key = f"win_planet_{planet}"
+    if rec.get("flags", {}).get(flag_key):
+        return False
+    rec.setdefault("flags", {})[flag_key] = True
+    data[key] = rec
+    save_jf(KB_SHARDS, data)
+    return True
+
+
+_VS_CSS = """<style>
 body{background:#000;color:#cfffcf;font-family:'VT323',monospace;font-size:1.05rem;padding:14px}
-.card{border:1px solid #1a3a1a;background:#020d02;max-width:680px;margin:0 auto 10px;padding:12px 16px}
-.card-title{color:#39ff6a;font-size:1.1rem;margin-bottom:8px;letter-spacing:.08em}
-.row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0a1a0a}
-.lbl{color:#2a7a45}.val{color:#cfffcf}
-.btn-back{display:inline-block;margin-bottom:10px;color:#39ff6a;border:1px solid #39ff6a44;
+.card{border:1px solid #1a2a3a;background:#01080d;max-width:700px;margin:0 auto 10px;padding:12px 16px}
+.card-title{color:#dd00ff;font-size:1.1rem;margin-bottom:8px;letter-spacing:.08em}
+.row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0a0a1a}
+.lbl{color:#7755aa}.val{color:#cfffcf}
+.btn-back{display:inline-block;margin-bottom:10px;color:#dd00ff;border:1px solid #dd00ff44;
   padding:3px 10px;font-family:inherit;font-size:1rem;text-decoration:none}
-h1{color:#39ff6a;font-size:1.4rem;letter-spacing:.12em;margin:4px 0 6px}
-.sub{color:#2a7a45;font-size:.85rem;margin-bottom:10px}
-.ms-row{display:flex;justify-content:space-between;align-items:center;
-  padding:6px 0;border-bottom:1px solid #0a1a0a}
-.ms-done{color:#2a7a45}.ms-next{color:#ff9900}.ms-future{color:#333}
-.xpbar-wrap{height:12px;background:#0a0a0a;border:1px solid #1a3a1a;margin:8px 0;position:relative}
-.xpbar-fill{height:100%;background:linear-gradient(90deg,#1a6600,#39ff6a);transition:width .4s}
-.xpbar-lbl{position:absolute;right:4px;top:-1px;font-size:.8rem;color:#39ff6a}
+h1{color:#dd00ff;font-size:1.4rem;letter-spacing:.12em;margin:4px 0 6px}
+.sub{color:#7755aa;font-size:.85rem;margin-bottom:10px}
+.item{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid #0a0a1a;cursor:pointer}
+.item:hover{background:#0a0010}
+.btn-buy{background:#0a0010;border:1px solid #dd00ff;color:#dd00ff;
+  font-family:inherit;font-size:.95rem;padding:2px 10px;cursor:pointer}
+.btn-buy:disabled{opacity:.4;cursor:default}
+.owned-tag{color:#2a7a45;font-size:.85rem}
 </style><link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
 
-    # Nájdi nasledujúci míľnik
-    next_m = next((m for m in XP_MILESTONES if m["xp"] not in claimed), None)
-    bar_html = ""
-    if next_m:
-        prev_xp = max((m["xp"] for m in XP_MILESTONES if m["xp"] in claimed), default=0)
-        span    = next_m["xp"] - prev_xp
-        prog    = max(0, xp - prev_xp)
-        pct     = min(100, round(prog / span * 100)) if span else 100
-        bar_html = (
-            f'<div style="color:#ff9900;font-size:.9rem;margin-bottom:4px">'
-            f'Ďalší míľnik: {next_m["icon"]} {next_m["xp"]:,} XP</div>'
-            f'<div class="xpbar-wrap">'
-            f'<div class="xpbar-fill" style="width:{pct}%"></div>'
-            f'<span class="xpbar-lbl">{prog:,}/{span:,}</span>'
+
+@app.route("/shards", methods=["GET", "POST"])
+def shards_page():
+    if not _require_session():
+        return redirect("/")
+    uname = session["username"]
+    msg   = ""
+
+    if request.method == "POST":
+        item_id = request.form.get("item_id", "")
+        item    = next((i for i in VS_SHOP if i["id"] == item_id), None)
+        if item:
+            rec = _get_shards(uname)
+            if item_id in rec.get("owned", []):
+                msg = L("❌ Už vlastníš túto položku.", "❌ You already own this item.")
+            elif not _spend_shards(uname, item["price"]):
+                msg = L("❌ Nedostatok Void Shards.", "❌ Not enough Void Shards.")
+            else:
+                data = load_jf(KB_SHARDS, {})
+                data[uname.lower()].setdefault("owned", []).append(item_id)
+                save_jf(KB_SHARDS, data)
+                msg = L(f"✅ Zakúpené: {item['name']}", f"✅ Purchased: {item['name']}")
+
+    rec     = _get_shards(uname)
+    balance = rec.get("balance", 0)
+    owned   = rec.get("owned", [])
+    today   = datetime.now().strftime("%Y-%m-%d")
+    earned  = rec.get("earned_today", 0) if rec.get("last_date") == today else 0
+    msg_html = f'<div style="color:{"#39ff6a" if msg.startswith("✅") else "#ff3a3a"};margin-bottom:8px">{msg}</div>' if msg else ""
+
+    items_html = ""
+    for item in VS_SHOP:
+        is_owned = item["id"] in owned
+        can_buy  = balance >= item["price"] and not is_owned
+        items_html += (
+            f'<div class="item">'
+            f'<div><strong style="color:#dd00ff">{item["name"]}</strong>'
+            f' <small style="color:#555;margin-left:6px">{L("typ","type")}: {item["type"]}</small>'
+            f'{"<span class=owned-tag> ✓ " + L("Vlastníš","Owned") + "</span>" if is_owned else ""}'
             f'</div>'
+            f'<form method="POST" style="display:inline">'
+            f'<input type="hidden" name="item_id" value="{item["id"]}">'
+            f'<button class="btn-buy" {"disabled" if not can_buy else ""}>'
+            f'{"✓" if is_owned else f"◈ {item[chr(112)+chr(114)+chr(105)+chr(99)+chr(101)]}"}'
+            f'</button></form></div>'
         )
 
-    ms_rows = ""
-    for m in XP_MILESTONES:
-        done = m["xp"] in claimed
-        is_next = not done and (not next_m or m["xp"] == next_m["xp"])
-        cls = "ms-done" if done else "ms-next" if is_next else "ms-future"
-        chk = "✅" if done else ("🎯" if is_next else "○")
-        title_str = f' + titul <span style="color:#ffd700">{m["title"]}</span>' if m["title"] else ""
-        ms_rows += (
-            f'<div class="ms-row {cls}">'
-            f'<span>{chk} {m["icon"]} <strong>{m["xp"]:,} XP</strong>'
-            f'{title_str}</span>'
-            f'<span style="color:{"#2a7a45" if done else "#ff9900"}">'
-            f'{"✓ Získané" if done else f"+{m[chr(99)+chr(114)]:,} CR"}</span>'
+    # Tajný lore ak vlastní
+    lore_html = ""
+    if "lore_secret" in owned:
+        lore_html = (
+            f'<div class="card" style="border-color:#ff440044;margin-top:6px">'
+            f'<div class="card-title" style="color:#ff3a3a">📜 {L("TAJNÝ ZÁZNAM","SECRET LOG")}</div>'
+            f'<pre style="color:#ff9900;font-size:.9rem;white-space:pre-wrap">{VS_SECRET_LORE}</pre>'
             f'</div>'
         )
 
     return (
         f'<!DOCTYPE html><html><head><meta charset="UTF-8">'
-        f'<title>XP & Odmeny — KB</title>{css}</head><body>'
-        f'<a href="/lobby" class="btn-back">← Lobby</a>'
-        f'<h1>⭐ XP & ODMENY</h1>'
+        f'<title>Void Shards — KB</title>{_VS_CSS}</head><body>'
+        f'<a href="/lobby" class="btn-back">← {L("Lobby","Lobby")}</a>'
+        f'<h1>◈ VOID SHARDS</h1>'
         f'<div class="sub">PILOT: {uname.upper()}</div>'
+        f'{msg_html}'
         f'<div class="card">'
-        f'<div class="card-title">📊 Tvoje XP</div>'
-        f'<div class="row"><span class="lbl">Celkové XP</span>'
-        f'<span style="color:#ff9900;font-size:1.2rem"><strong>{xp:,}</strong></span></div>'
-        f'<div class="row"><span class="lbl">Splnené míľniky</span>'
-        f'<span class="val">{len(claimed)} / {len(XP_MILESTONES)}</span></div>'
-        f'{bar_html}</div>'
-        f'<div class="card"><div class="card-title">🎁 MÍĽNIKY & ODMENY</div>'
-        f'{ms_rows}</div>'
-        f'<div class="card" style="border-color:#2a7a4544">'
-        f'<div class="card-title" style="color:#2a7a45">📋 Ako zarábať XP</div>'
-        f'<div class="row"><span class="lbl">⛏ Každý ťah ťažby</span><span class="val">+1 XP (hĺbka L3=+2, L4=+3, L5=+4)</span></div>'
-        f'<div class="row"><span class="lbl">💰 Predaj minerálov</span><span class="val">+1 XP za každých 100 CR</span></div>'
-        f'<div class="row"><span class="lbl">🏆 Výhra session</span><span class="val">+{XP_WIN} XP</span></div>'
-        f'<div class="row"><span class="lbl">☀ Denný login</span><span class="val">+{XP_DAILY_LOGIN} XP</span></div>'
-        f'<div class="row"><span class="lbl">⚡ Energia minihra</span><span class="val">+1 XP za každých 100 energie</span></div>'
+        f'<div class="card-title">◈ {L("Tvoj zostatok","Your balance")}</div>'
+        f'<div class="row"><span class="lbl">◈ Void Shards</span>'
+        f'<span style="color:#dd00ff;font-size:1.3rem"><strong>{balance}</strong> / {VS_MAX_BALANCE}</span></div>'
+        f'<div class="row"><span class="lbl">{L("Zarobené dnes","Earned today")}</span>'
+        f'<span class="val">{earned} / {VS_DAILY_CAP}</span></div>'
+        f'</div>'
+        f'<div class="card"><div class="card-title">🛒 {L("Void Shop","Void Shop")}</div>'
+        f'{items_html}</div>'
+        f'{lore_html}'
+        f'<div class="card" style="border-color:#1a1a2a">'
+        f'<div class="card-title" style="color:#7755aa">📋 {L("Ako zarobiť shards","How to earn shards")}</div>'
+        f'<div class="row"><span class="lbl">{L("Prvý zostup L3/L4/L5","First descent L3/L4/L5")}</span><span class="val">+1 / +2 / +3 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("Výhra Zyrax-9 (1. krát)","Win Zyrax-9 (1st time)")}</span><span class="val">+2 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("Výhra Zyrax-10 (1. krát)","Win Zyrax-10 (1st time)")}</span><span class="val">+4 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("EPSILON voľba na L5","EPSILON choice at L5")}</span><span class="val">+5 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("Void Pulse event (max 1×/session)","Void Pulse event (max 1×/session)")}</span><span class="val">+1 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("Denný login","Daily login")}</span><span class="val">+1 ◈</span></div>'
+        f'<div class="row"><span class="lbl">{L("Denný strop","Daily cap")}</span><span class="val">{VS_DAILY_CAP} ◈</span></div>'
         f'</div>'
         f'</body></html>'
     )
 
 
-@app.route("/api/add_xp", methods=["POST"])
-def api_add_xp():
-    """Klient posiela XP za ťažbu/predaj."""
+@app.route("/api/shard_trigger", methods=["POST"])
+def api_shard_trigger():
+    """Hra hlási trigger pre shard odmenu (depth, win, epsilon, void_pulse)."""
     if not _require_session():
         return "{}", 401
-    d      = request.json or {}
-    uname  = session["username"].lower()
-    amount = max(0, int(d.get("amount", 0)))
-    rec    = _add_xp(uname, amount)
-    # Vráť nové odmeny pre flash správu
-    return json.dumps({"xp": rec["xp"], "new_rewards": rec.get("new_rewards", [])})
+    uname   = session["username"]
+    d       = request.json or {}
+    trigger = d.get("trigger", "")
+    earned  = 0
+
+    if trigger.startswith("depth_") and trigger[6:].isdigit():
+        depth = int(trigger[6:])
+        rewards = {3: 1, 4: 2, 5: 3}
+        if depth in rewards and _depth_shard_flag(uname, depth):
+            earned = _add_shards(uname, rewards[depth], trigger)
+
+    elif trigger == "win_zyrax9":
+        if _win_shard_flag(uname, 1):
+            earned = _add_shards(uname, 2, trigger)
+
+    elif trigger == "win_zyrax10":
+        if _win_shard_flag(uname, 2):
+            earned = _add_shards(uname, 4, trigger)
+
+    elif trigger == "epsilon_choice":
+        flag_key = "epsilon_choice"
+        data = load_jf(KB_SHARDS, {})
+        key  = uname.lower()
+        rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+        if not rec.get("flags", {}).get(flag_key):
+            rec.setdefault("flags", {})[flag_key] = True
+            data[key] = rec
+            save_jf(KB_SHARDS, data)
+            earned = _add_shards(uname, 5, trigger)
+
+    elif trigger == "void_pulse":
+        flag_key = f"void_pulse_{datetime.now().strftime('%Y-%m-%d')}_{session.get('_session_id','x')}"
+        data = load_jf(KB_SHARDS, {})
+        key  = uname.lower()
+        rec  = data.get(key, {"balance": 0, "earned_today": 0, "last_date": "", "flags": {}, "owned": [], "boost_until": 0})
+        # Max 1× za session — sleduj cez session
+        if not session.get("void_pulse_today"):
+            session["void_pulse_today"] = True
+            earned = _add_shards(uname, 1, trigger)
+
+    rec = _get_shards(uname)
+    return json.dumps({"earned": earned, "balance": rec.get("balance", 0)})
 
 
 # ── EPSILON ──────────────────────────────────────────────────────────────────

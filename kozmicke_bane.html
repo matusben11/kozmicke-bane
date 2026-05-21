@@ -1330,23 +1330,22 @@ async function fetchMineEnergy(){
   catch(e){G.mineEnergy=G.mineEnergy||0;}
 }
 let _miningLock=false;
-let _xpBatch=0, _xpTimer=null;
-function _addXpClient(amount){
-  _xpBatch+=amount;
-  clearTimeout(_xpTimer);
-  _xpTimer=setTimeout(()=>{
-    if(_xpBatch<=0)return;
-    const amt=_xpBatch;_xpBatch=0;
-    const api=py();if(!api||!api.add_xp)return;
-    try{api.add_xp(amt).then(d=>{
-      if(!d||!d.new_rewards||!d.new_rewards.length)return;
-      // Flash odmeny
-      const msgs=d.new_rewards.map(m=>
-        `${m.icon} MÍĽNIK ${m.xp.toLocaleString()} XP! +${m.cr.toLocaleString()} CR${m.title?' + '+m.title:''}`
-      );
-      msgs.forEach(msg=>rG([{txt:msg,cls:'lrar'}]));
-    }).catch(()=>{});}catch(e){}
-  },3000); // dávkuje každé 3s aby nezahltil server
+// ── Void Shards triggers ──────────────────────────────────────────────────
+let _voidPulseUsed=false; // max 1× za session
+
+function _shardTrigger(trigger){
+  fetch('/api/shard_trigger',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({trigger})})
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.earned>0){
+      const msg=LANG==='en'
+        ?`◈ +${d.earned} Void Shard${d.earned>1?'s':''}! Balance: ${d.balance} ◈`
+        :`◈ +${d.earned} Void Shard${d.earned>1?'y':''}! Zostatok: ${d.balance} ◈`;
+      rG([{txt:msg,cls:'lrar'}]);
+    }
+  }).catch(()=>{});
 }
 let _sessionStartCr=0; // CR na začiatku session — na výpočet earned delta
 function _syncCrLive(){
@@ -1814,6 +1813,8 @@ function aDescend(){
   if(G.depth===3&&!hU('heatshield'))extraLogs.push({txt:t('depth_warn_l3'),cls:'ldng'});
   if(G.depth===4&&!hU('voidfilter'))extraLogs.push({txt:t('depth_warn_l4'),cls:'ldng'});
   if(G.depth===5&&!hU('deepsuit'))extraLogs.push({txt:t('depth_warn_l5'),cls:'ldng'});
+  // Void Shard za prvý zostup na hĺbku
+  if(G.depth>=3) _shardTrigger('depth_'+G.depth);
   // Akt 2 — prvý zostup na L3
   if(G.depth===3&&(G.epsilonAct||0)<2){
     G.epsilonAct=2;
@@ -2039,8 +2040,13 @@ async function doMine(){
   _miningLock=false;
   quickSave();
   // XP za ťah — podľa hĺbky
-  const _xpTurn=1+(G.depth>2?G.depth-2:0); // L1=1, L2=1, L3=2, L4=3, L5=4
-  _addXpClient(_xpTurn);
+  // Void Pulse event — 0.5% šanca, max 1× za session
+  if(!_voidPulseUsed&&Math.random()<0.005){
+    _voidPulseUsed=true;
+    const msg=LANG==='en'?'◈ VOID PULSE — a fragment of The Deep resonates with your equipment!':'◈ VOID PULSE — fragment The Deep rezonuje s tvojím vybavením!';
+    logs.push({txt:msg,cls:'lrar'});
+    _shardTrigger('void_pulse');
+  }
   if(G.hp<=0){
     if(_autoMinerInterval){clearInterval(_autoMinerInterval);_autoMinerInterval=null;}
     setTimeout(sceneOver,700);return;
@@ -2886,6 +2892,7 @@ function epsilonChoose(choice){
   quickSave();
   fetch('/api/epsilon_choice',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({choice})}).catch(()=>{});
+  _shardTrigger('epsilon_choice');
   if(choice===1){
     // Vzorka pre NOVA Corp — odletíš s bonusom
     rG([{txt:t('eps_outcome_1'),cls:'lrar'}]);
@@ -2920,6 +2927,8 @@ function sceneWin(){sFX('win');flash('rgba(57,255,106,.28)');
   const score=Math.floor(G.credits/5)+bonus;
   addToLeaderboard({username:G.username,credits:G.credits,turns:G.turn,score,maxDepth:G.stats.maxDepth,win:true,ts:Date.now()});
   reportSessionEnd(G.credits, G.stats.mined, true);
+  if(G.planet===1) _shardTrigger('win_zyrax9');
+  else if(G.planet===2) _shardTrigger('win_zyrax10');
   sceneEnd(true,t('end_win_msg',{p:G.planet===2?'10':'9',bonus:G.planet===2?t('end_win_bonus'):'',cr:G.credits,t:G.turn,pol:G.stats.polished,dep:G.stats.maxDepth,vis:G.visited.size}),score);}
 function sceneOver(){sFX('lose');flash('rgba(255,58,58,.28)');
   const score=Math.floor(G.credits/8);
