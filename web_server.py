@@ -18,6 +18,7 @@ from collections import Counter
 from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, redirect, session, make_response
+from flask_cors import CORS
 
 BASE_DIR  = pathlib.Path(__file__).parent.resolve()
 HTML_FILE = BASE_DIR / "kozmicke_bane.html"
@@ -1001,6 +1002,9 @@ MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
+CORS(app, resources={r"/bot/*": {"origins": "*"}},
+     allow_headers=["X-Bot-Secret", "Content-Type"],
+     methods=["GET", "POST", "OPTIONS"])
 
 
 # ── Language helpers ────────────────────────────────────────────────────────
@@ -9442,15 +9446,6 @@ def _ensure_bot_account():
         save_users(users)
         print(f"[bot] Účet '{_BOT_UNAME_KEY}' vytvorený.")
     return next(k for k in load_users() if k.lower() == _BOT_UNAME)
-
-
-@app.after_request
-def _bot_cors(response):
-    if request.path.startswith("/bot/"):
-        response.headers["Access-Control-Allow-Origin"]  = "*"
-        response.headers["Access-Control-Allow-Headers"] = "X-Bot-Secret, Content-Type"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    return response
 
 
 @app.route("/bot/login", methods=["POST", "OPTIONS"])
