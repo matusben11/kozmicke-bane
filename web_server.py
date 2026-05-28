@@ -1002,9 +1002,10 @@ MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
-CORS(app, resources={r"/bot/*": {"origins": "*"}},
+CORS(app, resources={r"/bot/*": {"origins": ["https://claude.ai", "https://api.claude.ai"]}},
      allow_headers=["X-Bot-Secret", "Content-Type"],
-     methods=["GET", "POST", "OPTIONS"])
+     methods=["GET", "POST", "OPTIONS"],
+     supports_credentials=False)
 
 
 # ── Language helpers ────────────────────────────────────────────────────────
