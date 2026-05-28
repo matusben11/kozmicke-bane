@@ -4536,11 +4536,15 @@ def adminpanel():
             <div style="display:inline-flex;flex-wrap:wrap;gap:1px;vertical-align:middle">{rank_btns_a}</div>
           </td>
         </tr>"""
+    _ap_shard_data  = load_jf(KB_SHARDS, {})
+    _ap_admin_given = (_ap_shard_data.get("_admin_given_today", {})
+                       .get(session["username"], {})
+                       .get(datetime.now().strftime("%Y-%m-%d"), 0))
     return f"""<!DOCTYPE html><html><head><title>Admin Panel</title>{ADMIN_CSS}
 <style>table{{font-size:.85em}}td,th{{padding:5px 8px;vertical-align:middle}}
 input[type=text]{{outline:none}}</style>
 </head><body>
-<h1>&#9733; ADMIN PANEL &mdash; KOZMICK&#201; BANE v4.8</h1>
+<h1>&#9733; ADMIN PANEL &mdash; KOZMICK&#201; BANE</h1>
 <p style="color:#888;font-size:.85rem">
   Prihlasen&#253; ako: <strong style="color:#ffb000">{session['username']}</strong> &nbsp;|&nbsp;
   <a href="/lobby" class="btn">Lobby</a>
@@ -4560,9 +4564,7 @@ input[type=text]{{outline:none}}</style>
   Môžeš darovať shards hráčom (max <strong style="color:#dd00ff">15 ◈ za deň</strong> celkovo za všetkých adminov).
   Nemôžeš ich odoberať ani meniť ceny v obchode.
 </p>
-{
-  f'<div style="color:#39ff6a;font-size:.85rem;margin-bottom:6px">Dnes si daroval: <strong>{load_jf(KB_SHARDS,{{}}).get("_admin_given_today",{{}}).get(session["username"],{{}}).get(datetime.now().strftime("%Y-%m-%d"),0)}</strong> / 15 ◈</div>'
-}
+<div style="color:#39ff6a;font-size:.85rem;margin-bottom:6px">Dnes si daroval: <strong>{_ap_admin_given}</strong> / 15 ◈</div>
 <form method="POST" action="/adminpanel/give_shards" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
   <input type="text" name="uname" placeholder="username hráča" style="width:140px;font-size:.85rem">
   <input type="number" name="amount" placeholder="počet ◈" min="1" max="15" style="width:70px;font-size:.85rem">
@@ -9406,9 +9408,259 @@ def api_epsilon_lost():
     return json.dumps({"lost": eps.get("lost_pilots", [])})
 
 
+# ── ClaudeBot API ──────────────────────────────────────────────────────────
+# Externý AI hráč. Autentifikácia: hlavička X-Bot-Secret = env BOT_SECRET.
+# Účet "ClaudeBot" sa vytvorí automaticky ak neexistuje.
+
+BOT_SECRET     = os.environ.get("BOT_SECRET", "")
+_BOT_UNAME     = "claudebot"      # lowercase, tak ako ostatní hráči
+_BOT_UNAME_KEY = "ClaudeBot"      # display / users.json key
+
+
+def _bot_auth():
+    """Vráti True ak X-Bot-Secret hlavička sedí s BOT_SECRET env premennou."""
+    if not BOT_SECRET:
+        return False
+    return request.headers.get("X-Bot-Secret", "") == BOT_SECRET
+
+
+def _ensure_bot_account():
+    """Vytvorí účet ClaudeBot ak ešte neexistuje. Vracia username key."""
+    users = load_users()
+    if not any(k.lower() == _BOT_UNAME for k in users):
+        pw_hash = hashlib.sha256(
+            (BOT_SECRET or "claudebot_default").encode()
+        ).hexdigest()
+        users[_BOT_UNAME_KEY] = {
+            "password": pw_hash,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "is_admin": False,
+            "banned_until": None,
+            "special_ranks": ["◈ Bot"],
+            "score": 0, "games_played": 0, "kb_sessions": 0,
+        }
+        save_users(users)
+        print(f"[bot] Účet '{_BOT_UNAME_KEY}' vytvorený.")
+    return next(k for k in load_users() if k.lower() == _BOT_UNAME)
+
+
+@app.after_request
+def _bot_cors(response):
+    if request.path.startswith("/bot/"):
+        response.headers["Access-Control-Allow-Origin"]  = "*"
+        response.headers["Access-Control-Allow-Headers"] = "X-Bot-Secret, Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+@app.route("/bot/login", methods=["POST", "OPTIONS"])
+def bot_login():
+    if request.method == "OPTIONS":
+        return "", 204
+    if not _bot_auth():
+        return json.dumps({"ok": False, "error": "unauthorized"}), 401
+    uname_key = _ensure_bot_account()
+    return json.dumps({"ok": True, "username": uname_key})
+
+
+@app.route("/bot/state", methods=["GET", "OPTIONS"])
+def bot_state():
+    if request.method == "OPTIONS":
+        return "", 204
+    if not _bot_auth():
+        return json.dumps({"ok": False, "error": "unauthorized"}), 401
+
+    uname_key = _ensure_bot_account()
+    uname_up  = uname_key.upper()
+
+    # CR zostatok
+    career = load_jf(KB_CAREER, {})
+    cr = career.get(uname_up, {}).get("career_cr", 0)
+
+    # Leaderboard (top 10)
+    lb_raw = []
+    for k, v in career.items():
+        lb_raw.append({"username": k, "cr": v.get("career_cr", 0)})
+    lb_raw.sort(key=lambda x: x["cr"], reverse=True)
+    leaderboard = lb_raw[:10]
+
+    # Aktuálne trhové ceny
+    prices_raw = _get_market_prices()
+    market = {}
+    for item in NPC_MARKET:
+        cid = item["id"]
+        p = prices_raw.get(cid, {})
+        market[cid] = {
+            "buy_price":  p.get("s"),    # cena, za ktorú NPC predáva (my kupujeme)
+            "sell_price": p.get("b"),    # cena, za ktorú NPC kupuje (my predávame)
+            "npc_buys":   item["npc_buys"] is not None,
+            "npc_sells":  item["npc_sells"] is not None,
+            "unit":       item["unit_en"],
+        }
+
+    # Aktívne aukcie
+    auc_data  = _auction_tick()
+    now_t     = time.time()
+    open_lots = []
+    for lot in auc_data.get("lots", []):
+        if now_t < lot.get("ends_at", 0):
+            open_lots.append({
+                "id":          lot["id"],
+                "name":        lot.get("name_en") or lot.get("name_sk", ""),
+                "current_bid": lot.get("current_bid", 0),
+                "bidder":      lot.get("bidder"),
+                "ends_at":     lot.get("ends_at"),
+            })
+
+    return json.dumps({
+        "ok":          True,
+        "username":    uname_key,
+        "cr":          cr,
+        "leaderboard": leaderboard,
+        "market":      market,
+        "auctions":    open_lots,
+    })
+
+
+@app.route("/bot/action", methods=["POST", "OPTIONS"])
+def bot_action():
+    if request.method == "OPTIONS":
+        return "", 204
+    if not _bot_auth():
+        return json.dumps({"ok": False, "error": "unauthorized"}), 401
+
+    uname_key = _ensure_bot_account()
+    uname_up  = uname_key.upper()
+
+    try:
+        body = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False, "error": "invalid json"}), 400
+
+    action  = body.get("action", "")   # "buy" | "sell" | "bid"
+    item_id = body.get("item_id", "")
+    qty     = body.get("qty", 0)
+    amount  = body.get("amount", 0)    # pre bid
+
+    # ── sell ────────────────────────────────────────────────────────────────
+    if action == "sell":
+        item = next((i for i in NPC_MARKET if i["id"] == item_id), None)
+        if not item or item["npc_buys"] is None:
+            return json.dumps({"ok": False, "error": "item not sellable"}), 400
+        try:
+            qty = max(item["min_qty"], int(qty))
+        except (TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "invalid qty"}), 400
+
+        profile = _energy_tick(uname_key)
+        stock   = _get_commodity_stock(profile, item["source"])
+        if stock < qty:
+            return json.dumps({"ok": False, "error": "insufficient stock",
+                               "have": int(stock)}), 400
+
+        prices   = _get_market_prices()
+        price_b  = (prices.get(item_id) or {}).get("b") or item["npc_buys"]
+        earnings = round(qty * price_b)
+        _set_commodity_stock(profile, item["source"], stock - qty)
+
+        edata = load_jf(KB_ENERGY, {})
+        edata[uname_key] = profile
+        save_jf(KB_ENERGY, edata)
+
+        career = load_jf(KB_CAREER, {})
+        entry  = career.get(uname_up, {})
+        entry["career_cr"] = entry.get("career_cr", 0) + earnings
+        career[uname_up] = entry
+        save_jf(KB_CAREER, career)
+
+        _apply_price_impact(item_id, qty, "sell")
+        return json.dumps({"ok": True, "action": "sell", "item": item_id,
+                           "qty": qty, "earnings": earnings,
+                           "new_cr": entry["career_cr"]})
+
+    # ── buy ─────────────────────────────────────────────────────────────────
+    elif action == "buy":
+        item = next((i for i in NPC_MARKET if i["id"] == item_id), None)
+        if not item or item["npc_sells"] is None:
+            return json.dumps({"ok": False, "error": "item not buyable"}), 400
+        try:
+            qty = max(item["min_qty"], int(qty))
+        except (TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "invalid qty"}), 400
+
+        prices  = _get_market_prices()
+        price_s = (prices.get(item_id) or {}).get("s") or item["npc_sells"]
+        cost    = round(qty * price_s)
+
+        career = load_jf(KB_CAREER, {})
+        entry  = career.get(uname_up, {})
+        cr     = entry.get("career_cr", 0)
+        if cr < cost:
+            return json.dumps({"ok": False, "error": "insufficient CR",
+                               "have": cr, "need": cost}), 400
+
+        entry["career_cr"] = cr - cost
+        career[uname_up] = entry
+        save_jf(KB_CAREER, career)
+
+        profile = _energy_tick(uname_key)
+        stock   = _get_commodity_stock(profile, item["source"])
+        _set_commodity_stock(profile, item["source"], stock + qty)
+
+        edata = load_jf(KB_ENERGY, {})
+        edata[uname_key] = profile
+        save_jf(KB_ENERGY, edata)
+
+        _apply_price_impact(item_id, qty, "buy")
+        return json.dumps({"ok": True, "action": "buy", "item": item_id,
+                           "qty": qty, "cost": cost,
+                           "new_cr": entry["career_cr"]})
+
+    # ── bid ─────────────────────────────────────────────────────────────────
+    elif action == "bid":
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            return json.dumps({"ok": False, "error": "invalid amount"}), 400
+
+        auc  = _auction_tick()
+        lots = auc.get("lots", [])
+        now  = time.time()
+
+        lot = next((l for l in lots if l["id"] == item_id), None)
+        if not lot or now >= lot.get("ends_at", 0):
+            return json.dumps({"ok": False, "error": "lot not found or expired"}), 400
+
+        if amount <= lot["current_bid"]:
+            return json.dumps({"ok": False, "error": "bid too low",
+                               "current": lot["current_bid"]}), 400
+
+        career = load_jf(KB_CAREER, {})
+        cr     = career.get(uname_up, {}).get("career_cr", 0)
+        if cr < amount:
+            return json.dumps({"ok": False, "error": "insufficient CR",
+                               "have": cr, "need": amount}), 400
+
+        if lot.get("bidder") == uname_key:
+            return json.dumps({"ok": False, "error": "already top bidder"}), 400
+
+        lot["current_bid"] = amount
+        lot["bidder"]      = uname_key
+        save_jf(KB_AUCTIONS, auc)
+        return json.dumps({"ok": True, "action": "bid", "lot_id": item_id,
+                           "amount": amount})
+
+    return json.dumps({"ok": False, "error": f"unknown action: {action}"}), 400
+
+
+# ── Seed ClaudeBot account if BOT_SECRET is configured ─────────────────────
+if BOT_SECRET:
+    _ensure_bot_account()
+
+
 # ── Štart ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print(f"\n  KOZMICKÉ BANE v4.7 — Web Server")
+    print(f"\n  KOZMICKÉ BANE — Web Server")
     print(f"  Otvor: http://localhost:{PORT}\n")
     app.run(host="0.0.0.0", port=PORT, debug=False, use_reloader=False)
