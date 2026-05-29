@@ -159,8 +159,10 @@ def _kv_ping():
 
 def _kv_load_all():
     """
-    Startup warm-up: načítaj všetky kľúče z Upstash do lokálnych súborov.
-    Lokálne súbory slúžia ako cache — čítanie beží vždy z lokálneho disku.
+    Startup sync — Redis je primárne úložisko:
+    - Kľúč existuje v Redis  → stiahni do lokálneho cache súboru
+    - Kľúč chýba v Redis, ale lokálny súbor existuje → nahraj do Redis (migrácia)
+    - Ani jedno → nič
     """
     if not _KV_URL:
         print("[KV] Upstash nie je nakonfigurovaný — používajú sa lokálne súbory.")
@@ -168,20 +170,31 @@ def _kv_load_all():
     if not _kv_ping():
         print("[KV] VAROVANIE: Upstash nedostupný pri štarte — používajú sa lokálne súbory.")
         return
-    print("[KV] Upstash dostupný. Načítavam dáta...")
-    loaded = 0
+    print("[KV] Upstash dostupný. Sync dát (Redis primary)...")
+    pulled = pushed = 0
     for path, key in _KV_KEYS.items():
-        data = _kv_get(key)
-        if data is not None:
-            try:
-                _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2))
-                print(f"[KV] ✓ {key}")
-                loaded += 1
-            except Exception as e:
-                print(f"[KV] ✗ {key} zápis zlyhal: {e}")
+        kv_data = _kv_get(key)
+        if kv_data is not None:
+            # Redis má dáta → aktualizuj lokálny cache
+            _atomic_write(path, json.dumps(kv_data, ensure_ascii=False, indent=2))
+            print(f"[KV] ↓ {key} (Redis → lokál)")
+            pulled += 1
         else:
-            print(f"[KV] - {key} (prázdne v Upstash)")
-    print(f"[KV] Warm-up hotový: {loaded}/{len(_KV_KEYS)} kľúčov načítaných.")
+            # Redis prázdny → skús nahrať z lokálneho súboru (jednorazová migrácia)
+            p = pathlib.Path(path)
+            if p.exists():
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        local_data = json.load(f)
+                    if local_data:
+                        _kv_set(key, local_data)
+                        print(f"[KV] ↑ {key} (lokál → Redis, migrácia)")
+                        pushed += 1
+                        continue
+                except Exception:
+                    pass
+            print(f"[KV] - {key} (prázdne)")
+    print(f"[KV] Sync hotový: {pulled} stiahnutých, {pushed} nahratých.")
 
 # Startup: načítaj dáta z Upstash do lokálnych súborov (pred migráciami a seedmi)
 _kv_load_all()
@@ -1046,6 +1059,12 @@ def _uname():
     return session["username"].upper()
 
 def load_users():
+    # Redis primary: čítaj priamo z Upstash
+    if _KV_URL:
+        data = _kv_get("game_users")
+        if data is not None:
+            return data
+    # Fallback: lokálny súbor
     try:
         if DATA_FILE.exists():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -1098,26 +1117,23 @@ def validate_pw(pw):
 
 def load_jf(path, default=None):
     """
-    Načítaj dáta. Primárne z lokálneho súboru (cache po warm-up).
-    Ak lokálny súbor chýba alebo je prázdny → fallback na Upstash.
+    Redis primary: čítaj priamo z Upstash. Lokálny súbor = fallback.
     """
+    if _KV_URL:
+        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
+        kv_data = _kv_get(key)
+        if kv_data is not None:
+            return kv_data
+    # Fallback: lokálny súbor (napr. Upstash nedostupný alebo lokálny vývoj)
     try:
         p = pathlib.Path(path)
         if p.exists():
             with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if data:  # neprázdny → vráť
+            if data:
                 return data
     except Exception:
         pass
-    # Lokálny súbor chýba alebo je prázdny — skús Upstash
-    if _KV_URL:
-        key = _KV_KEYS.get(pathlib.Path(path), pathlib.Path(path).stem)
-        kv_data = _kv_get(key)
-        if kv_data is not None:
-            # Obnov lokálny cache
-            _atomic_write(path, json.dumps(kv_data, ensure_ascii=False, indent=2))
-            return kv_data
     return default if default is not None else {}
 
 def save_jf(path, data):
