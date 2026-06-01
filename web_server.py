@@ -41,6 +41,7 @@ KB_INVESTMENTS  = DATA_DIR / "kb_investments.json"
 KB_POINTS       = DATA_DIR / "kb_points.json"
 KB_SHARDS       = DATA_DIR / "kb_shards.json"
 KB_EPSILON      = DATA_DIR / "kb_epsilon.json"
+KB_HUB          = DATA_DIR / "kb_hub.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -91,6 +92,7 @@ _KV_KEYS = {
     KB_POINTS:      "kb_points",
     KB_SHARDS:      "kb_shards",
     KB_EPSILON:     "kb_epsilon",
+    KB_HUB:         "kb_hub",
 }
 
 
@@ -2713,9 +2715,15 @@ def render_lobby(pilot):
                  f'</a>')
     html += '</div>'
 
+    # ── Hub
+    html += '<div class="card">'
+    html += f'<div class="card-title">&#9711; {L("HUB &mdash; Spoločná stanica","HUB &mdash; Shared Station")}</div>'
+    html += f'<a href="/hub" class="btn" style="border-color:#00ccff;color:#00ccff">&#9711; &nbsp; {L("VSTÚPIŤ DO HUBU","ENTER HUB")}</a>'
+    html += '</div>'
+
     # ── New game KB
     html += '<div class="card">'
-    html += f'<div class="card-title">&#128640; KOZMICK&#201; BANE v4.7</div>'
+    html += f'<div class="card-title">&#128640; KOZMICK&#201; BANE</div>'
     html += f'<a href="/game" class="btn btn-green">&#9654; &nbsp; {L("NOVÁ HRA &mdash; Začni od nuly","NEW GAME &mdash; Start fresh")}</a>'
     html += '</div>'
 
@@ -4211,7 +4219,10 @@ input[type=number],input[type=text],select{{outline:none}}</style>
 <p style="font-size:.82rem;color:#aaa">Top 10 hráčov podľa shardov: {
   " &nbsp;|&nbsp; ".join(
     f'<span style="color:#dd00ff">{u}</span>: {d.get("balance",0)} ◈'
-    for u, d in sorted(load_jf(KB_SHARDS, {}).items(), key=lambda x: -x[1].get("balance",0))[:10]
+    for u, d in sorted(
+      ((k, v) for k, v in load_jf(KB_SHARDS, {}).items() if isinstance(v, dict) and not k.startswith("_")),
+      key=lambda x: -x[1].get("balance", 0)
+    )[:10]
   ) or "—"
 }</p>
 </body></html>"""
@@ -9427,6 +9438,647 @@ def api_epsilon_lost():
     """Vráti zoznam 'Stratených' pilotov pre HUD sny iných hráčov."""
     eps = load_jf(KB_EPSILON, {})
     return json.dumps({"lost": eps.get("lost_pilots", [])})
+
+
+# ── Hub ────────────────────────────────────────────────────────────────────
+
+HUB_ROOMS = {
+    "dock":        {"name_sk": "Dok",        "name_en": "Dock",        "n": "bridge", "s": "bar", "w": "market", "e": "engineering"},
+    "bridge":      {"name_sk": "Mostík",     "name_en": "Bridge",      "s": "dock"},
+    "market":      {"name_sk": "Trhovisko",  "name_en": "Market",      "e": "dock"},
+    "engineering": {"name_sk": "Strojovňa", "name_en": "Engineering",  "w": "dock"},
+    "bar":         {"name_sk": "Kantína",    "name_en": "Bar",         "n": "dock"},
+}
+HUB_PLAYER_TTL      = 90    # sekúnd bez aktivity → offline
+HUB_OFFER_TTL       = 300   # sekúnd platnosti trade ponuky
+_HUB_WRITE_THROTTLE = 10.0  # min. interval Redis zapisu pre pohyb
+
+_hub_mem = {"data": None, "last_write": 0.0}
+
+
+def _hub_load():
+    if _hub_mem["data"] is None:
+        _hub_mem["data"] = load_jf(KB_HUB, {"players": {}, "offers": []})
+    return _hub_mem["data"]
+
+
+def _hub_save(hub, important=False):
+    _hub_mem["data"] = hub
+    now = time.time()
+    if important or (now - _hub_mem["last_write"]) > _HUB_WRITE_THROTTLE:
+        save_jf(KB_HUB, hub)
+        _hub_mem["last_write"] = now
+
+
+def _hub_cleanup(hub):
+    now = time.time()
+    hub["players"] = {u: p for u, p in hub.get("players", {}).items()
+                      if now - p.get("ts", 0) < HUB_PLAYER_TTL}
+    hub["offers"]  = [o for o in hub.get("offers", [])
+                      if now - o.get("ts", 0) < HUB_OFFER_TTL
+                      and o.get("status") == "pending"]
+
+
+def _hub_color(uname):
+    pal = ["#00ccff", "#ff7700", "#39ff14", "#ff00dd", "#ffd700", "#ff4455", "#44eeff", "#88ff44"]
+    return pal[sum(ord(c) for c in uname) % len(pal)]
+
+
+_HUB_CSS = """<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#00ccff;font-family:'VT323',monospace;font-size:1rem;height:100vh;overflow:hidden}
+#wrap{display:flex;flex-direction:column;height:100vh}
+#topbar{display:flex;align-items:center;gap:12px;padding:6px 12px;border-bottom:1px solid #00ccff33;background:#000d14;flex-shrink:0}
+#topbar h1{font-size:1.2em;letter-spacing:.1em;color:#00ccff}
+#topbar a{color:#00ccff66;text-decoration:none;font-size:.85em}
+#topbar a:hover{color:#00ccff}
+#main{display:flex;flex:1;overflow:hidden}
+#room-area{flex:1;position:relative;background:#030a0f;display:flex;flex-direction:column}
+#room-label{padding:6px 14px;font-size:1.3em;letter-spacing:.15em;border-bottom:1px solid #00ccff22;color:#00ccff99;flex-shrink:0}
+#room-canvas{flex:1;position:relative;overflow:hidden;cursor:crosshair}
+.player-dot{position:absolute;transform:translate(-50%,-50%);text-align:center;cursor:pointer;z-index:2}
+.player-dot .dot{width:18px;height:18px;border-radius:50%;margin:0 auto 2px;border:2px solid rgba(255,255,255,.25)}
+.player-dot .lbl{font-size:11px;white-space:nowrap;text-shadow:0 0 5px currentColor;line-height:1}
+.exit-btn{position:absolute;background:#000c14;border:1px solid #00ccff33;color:#00ccff77;font-family:inherit;font-size:.8em;cursor:pointer;padding:3px 10px;letter-spacing:.05em;z-index:3}
+.exit-btn:hover{background:#001a2e;border-color:#00ccff;color:#00ccff}
+.exit-n{top:6px;left:50%;transform:translateX(-50%)}
+.exit-s{bottom:6px;left:50%;transform:translateX(-50%)}
+.exit-w{left:6px;top:50%;transform:translateY(-50%)}
+.exit-e{right:6px;top:50%;transform:translateY(-50%)}
+#sidebar{width:210px;background:#050f15;border-left:1px solid #00ccff22;display:flex;flex-direction:column;overflow:hidden}
+.sb-section{padding:8px 10px;border-bottom:1px solid #00ccff11}
+.sb-title{font-size:.75em;color:#00ccff55;letter-spacing:.1em;margin-bottom:6px}
+.sb-players{flex:1;overflow-y:auto;padding:8px 10px}
+.pitem{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:.82em;cursor:pointer}
+.pitem:hover span.pname{color:#fff}
+.pdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.proom{color:#444;font-size:.75em}
+.sb-offers{padding:8px 10px;border-top:1px solid #00ccff11;max-height:200px;overflow-y:auto}
+.offer-card{background:#0a0f1a;border:1px solid #00ccff22;padding:6px 8px;margin-bottom:6px;font-size:.78em}
+.offer-from{color:#ffd700;margin-bottom:2px}
+.offer-items{color:#aaa;margin-bottom:5px}
+.offer-btns{display:flex;gap:5px}
+.btn-accept{color:#39ff14;border-color:#39ff14}
+.btn-decline{color:#ff4455;border-color:#ff4455}
+.btn-sm{background:#000;border:1px solid currentColor;font-family:inherit;font-size:.8em;padding:2px 8px;cursor:pointer}
+.btn-sm:hover{background:#0a0a0a}
+#overlay{display:none;position:fixed;inset:0;background:#000000bb;z-index:10}
+#modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:18px 20px;min-width:300px;max-width:380px;width:90%;z-index:11}
+#modal h3{font-size:1.2em;margin-bottom:10px;color:#00ccff}
+.tab-btns{display:flex;gap:6px;margin-bottom:12px}
+.tab-btn{background:#000;border:1px solid #00ccff33;color:#00ccff66;font-family:inherit;font-size:.85em;padding:3px 12px;cursor:pointer}
+.tab-btn.active{border-color:#00ccff;color:#00ccff;background:#001a2e}
+.form-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.form-row label{font-size:.8em;color:#00ccff66;min-width:55px}
+.form-row select,.form-row input{background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.85em;padding:3px 6px;outline:none}
+.form-row input[type=number]{width:90px}
+.modal-footer{display:flex;justify-content:space-between;margin-top:12px}
+#toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:#001a2e;border:1px solid #00ccff44;padding:5px 16px;font-size:.85em;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20}
+.ctrl-hint{font-size:.72em;color:#00ccff33;line-height:1.7;padding:8px 10px}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
+
+
+@app.route("/hub")
+def hub_page():
+    if not _require_session():
+        return redirect("/")
+    uname    = session["username"].lower()
+    lang     = session.get("lang", "sk")
+    hub      = _hub_load()
+    _hub_cleanup(hub)
+    # Zaregistruj hráča ak ešte nie je v hube
+    if uname not in hub.get("players", {}):
+        hub.setdefault("players", {})[uname] = {
+            "room": "dock", "x": 50.0, "y": 50.0,
+            "color": _hub_color(uname), "ts": time.time(),
+        }
+        _hub_save(hub, important=True)
+
+    rooms_js = json.dumps({k: {"name": v["name_en"] if lang == "en" else v["name_sk"],
+                                **{d: v[d] for d in ("n","s","w","e") if d in v}}
+                           for k, v in HUB_ROOMS.items()})
+    commodities_js = json.dumps([
+        {"id": i["id"], "label": i["id"].capitalize(), "unit": i["unit_sk"]}
+        for i in NPC_MARKET
+        if i["id"] not in ("pu239",)   # pu239 vynecháme z giftu pre jednoduchosť
+    ])
+
+    return f"""<!DOCTYPE html><html lang="sk"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hub — Kozmické Bane</title>{_HUB_CSS}</head>
+<body>
+<div id="wrap">
+  <div id="topbar">
+    <h1>◉ HUB</h1>
+    <span style="color:#00ccff33">|</span>
+    <span id="room-crumb" style="color:#00ccff99;font-size:.9em">Dok</span>
+    <span style="margin-left:auto;display:flex;gap:10px">
+      <a href="/lobby">← Lobby</a>
+    </span>
+  </div>
+  <div id="main">
+    <div id="room-area">
+      <div id="room-label">★ DOK</div>
+      <div id="room-canvas"></div>
+    </div>
+    <div id="sidebar">
+      <div class="sb-section"><div class="sb-title">ONLINE HRÁČI</div></div>
+      <div class="sb-players" id="sb-players"><span style="color:#333;font-size:.8em">načítavam...</span></div>
+      <div class="sb-offers" id="sb-offers"></div>
+      <div class="ctrl-hint">WASD / ↑↓←→ pohyb<br>Klikni na hráča → trade/gift</div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" onclick="closeModal()"></div>
+<div id="modal">
+  <h3 id="modal-title">● hráč</h3>
+  <div class="tab-btns">
+    <button class="tab-btn active" onclick="switchTab('gift')">🎁 Gift</button>
+    <button class="tab-btn" onclick="switchTab('trade')">🤝 Trade</button>
+  </div>
+
+  <div id="tab-gift">
+    <div class="form-row">
+      <label>Typ:</label>
+      <select id="g-type"><option value="cr">CR</option><option value="shards">◈ Void Shards</option></select>
+    </div>
+    <div class="form-row">
+      <label>Množstvo:</label>
+      <input type="number" id="g-amount" min="1" value="500">
+    </div>
+    <button class="btn-sm" style="color:#39ff14;border-color:#39ff14" onclick="doGift()">🎁 Odoslať</button>
+  </div>
+
+  <div id="tab-trade" style="display:none">
+    <div style="font-size:.75em;color:#00ccff44;margin-bottom:8px">Dávam → Chcem</div>
+    <div class="form-row">
+      <label>Dávam:</label>
+      <select id="t-give-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
+      <input type="number" id="t-give-amt" min="1" value="1000">
+    </div>
+    <div class="form-row">
+      <label>Chcem:</label>
+      <select id="t-want-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
+      <input type="number" id="t-want-amt" min="1" value="100">
+    </div>
+    <button class="btn-sm" style="color:#ffd700;border-color:#ffd700" onclick="doOffer()">🤝 Odoslať ponuku</button>
+  </div>
+
+  <div class="modal-footer">
+    <button class="btn-sm" style="color:#ff4455;border-color:#ff4455" onclick="closeModal()">✕ Zavrieť</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const ME = {json.dumps(uname)};
+const ROOMS = {rooms_js};
+const COMMODITIES = {commodities_js};
+
+// Doplň komodity do selectov
+[document.getElementById('g-type'), document.getElementById('t-give-type'), document.getElementById('t-want-type')].forEach(sel => {{
+  COMMODITIES.forEach(c => {{
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.id.charAt(0).toUpperCase()+c.id.slice(1)+' ('+c.unit+')';
+    sel.appendChild(o);
+  }});
+}});
+
+let myRoom = 'dock', myX = 50, myY = 50;
+let state = {{players:{{}}, offers:[]}};
+let pendingMove = null;
+let selectedPlayer = null;
+
+document.addEventListener('keydown', e => {{
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  const STEP = 4;
+  let moved = true;
+  if      (e.key==='w'||e.key==='ArrowUp')    myY = Math.max(8, myY-STEP);
+  else if (e.key==='s'||e.key==='ArrowDown')  myY = Math.min(92, myY+STEP);
+  else if (e.key==='a'||e.key==='ArrowLeft')  myX = Math.max(8, myX-STEP);
+  else if (e.key==='d'||e.key==='ArrowRight') myX = Math.min(92, myX+STEP);
+  else moved = false;
+  if (moved) {{ e.preventDefault(); pendingMove = {{room:myRoom,x:myX,y:myY}}; renderCanvas(); }}
+}});
+
+setInterval(() => {{
+  if (!pendingMove) return;
+  const m = pendingMove; pendingMove = null;
+  post('/hub/move', m);
+}}, 200);
+
+setInterval(pollState, 2000);
+pollState();
+
+function pollState() {{
+  fetch('/hub/state').then(r=>r.json()).then(d => {{
+    if (!d.ok) return;
+    state = d;
+    renderCanvas();
+    renderSidebar();
+    renderOffers();
+  }}).catch(()=>{{}});
+}}
+
+function changeRoom(room) {{
+  myRoom = room; myX = 50; myY = 50;
+  pendingMove = {{room, x:50, y:50}};
+  renderCanvas();
+  document.getElementById('room-crumb').textContent = ROOMS[room]?.name || room;
+}}
+
+function renderCanvas() {{
+  const canvas = document.getElementById('room-canvas');
+  const room = ROOMS[myRoom] || ROOMS.dock;
+  document.getElementById('room-label').textContent = '★ ' + (room.name||myRoom).toUpperCase();
+  document.getElementById('room-crumb').textContent = room.name || myRoom;
+  canvas.innerHTML = '';
+
+  // Exit tlačidlá
+  ['n','s','w','e'].forEach(dir => {{
+    const target = room[dir];
+    if (!target) return;
+    const tname = ROOMS[target]?.name || target;
+    const dirLabel = {{n:'↑',s:'↓',w:'←',e:'→'}}[dir];
+    const btn = document.createElement('button');
+    btn.className = 'exit-btn exit-'+dir;
+    btn.textContent = dir==='e' ? tname+' →' : dir==='w' ? '← '+tname : dir==='n' ? '↑ '+tname : '↓ '+tname;
+    btn.onclick = () => changeRoom(target);
+    canvas.appendChild(btn);
+  }});
+
+  // Hráči v tejto miestnosti
+  const players = state.players || {{}};
+  for (const [uname, p] of Object.entries(players)) {{
+    if (p.room !== myRoom) continue;
+    const isMe = uname === ME;
+    const el = document.createElement('div');
+    el.className = 'player-dot';
+    el.style.left = (isMe ? myX : p.x) + '%';
+    el.style.top  = (isMe ? myY : p.y) + '%';
+    el.innerHTML = `<div class="dot" style="background:${{p.color}};box-shadow:0 0 8px ${{p.color}}40"></div>`
+                 + `<div class="lbl" style="color:${{p.color}}">${{isMe ? '['+uname+']' : uname}}</div>`;
+    if (!isMe) el.onclick = () => openModal(uname);
+    canvas.appendChild(el);
+  }}
+  // Mňa ak ešte nie som v state
+  if (!players[ME] && myRoom === myRoom) {{
+    const col = '#00ccff';
+    const el = document.createElement('div');
+    el.className = 'player-dot';
+    el.style.left = myX+'%'; el.style.top = myY+'%';
+    el.innerHTML = `<div class="dot" style="background:${{col}};box-shadow:0 0 8px ${{col}}40"></div>`
+                 + `<div class="lbl" style="color:${{col}}">[${ME}]</div>`;
+    canvas.appendChild(el);
+  }}
+}}
+
+function renderSidebar() {{
+  const list = document.getElementById('sb-players');
+  const players = state.players || {{}};
+  const entries = Object.entries(players);
+  if (!entries.length) {{ list.innerHTML='<span style="color:#333;font-size:.8em">nikto online</span>'; return; }}
+  list.innerHTML = entries.map(([uname, p]) => {{
+    const isMe = uname === ME;
+    const rname = ROOMS[p.room]?.name || p.room;
+    return `<div class="pitem" onclick="${{isMe?'void 0':`openModal('${{uname}}')`}}">
+      <span class="pdot" style="background:${{p.color}}"></span>
+      <span class="pname" style="color:${{p.color}}">${{uname}}</span>
+      <span class="proom">${{rname}}</span>
+    </div>`;
+  }}).join('');
+}}
+
+function renderOffers() {{
+  const wrap = document.getElementById('sb-offers');
+  const offers = state.offers || [];
+  if (!offers.length) {{ wrap.innerHTML='<div style="color:#333;font-size:.75em;padding:4px 0">žiadne ponuky</div>'; return; }}
+  wrap.innerHTML = '<div class="sb-title" style="font-size:.72em;color:#ffd70077;margin-bottom:4px">PONUKY PRE MŇA</div>'
+    + offers.map(o => `
+    <div class="offer-card">
+      <div class="offer-from">● ${{o.from}}</div>
+      <div class="offer-items">dáva: ${{fmtItem(o.give_type,o.give_amount)}}<br>chce: ${{fmtItem(o.want_type,o.want_amount)}}</div>
+      <div class="offer-btns">
+        <button class="btn-sm btn-accept" onclick="respondOffer('${{o.id}}',true)">✓ Prijať</button>
+        <button class="btn-sm btn-decline" onclick="respondOffer('${{o.id}}',false)">✗ Nie</button>
+      </div>
+    </div>`).join('');
+}}
+
+function fmtItem(type, amount) {{
+  if (type==='cr')     return amount.toLocaleString()+' CR';
+  if (type==='shards') return amount+' ◈';
+  return amount+'× '+type;
+}}
+
+function openModal(uname) {{
+  selectedPlayer = uname;
+  document.getElementById('modal-title').textContent = '● '+uname;
+  document.getElementById('modal').style.display = 'block';
+  document.getElementById('overlay').style.display = 'block';
+  switchTab('gift');
+}}
+function closeModal() {{
+  document.getElementById('modal').style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
+  selectedPlayer = null;
+}}
+function switchTab(tab) {{
+  document.getElementById('tab-gift').style.display  = tab==='gift'  ? '' : 'none';
+  document.getElementById('tab-trade').style.display = tab==='trade' ? '' : 'none';
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0)====(tab==='gift')));
+}}
+
+function doGift() {{
+  if (!selectedPlayer) return;
+  const type   = document.getElementById('g-type').value;
+  const amount = parseInt(document.getElementById('g-amount').value)||0;
+  if (!amount) {{ toast('Zadaj množstvo'); return; }}
+  post('/hub/gift', {{to:selectedPlayer, type, amount}}).then(d => {{
+    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
+    if (d.ok) closeModal();
+  }});
+}}
+
+function doOffer() {{
+  if (!selectedPlayer) return;
+  const give_type   = document.getElementById('t-give-type').value;
+  const give_amount = parseInt(document.getElementById('t-give-amt').value)||0;
+  const want_type   = document.getElementById('t-want-type').value;
+  const want_amount = parseInt(document.getElementById('t-want-amt').value)||0;
+  if (!give_amount||!want_amount) {{ toast('Zadaj množstvá'); return; }}
+  post('/hub/offer', {{to:selectedPlayer, give_type, give_amount, want_type, want_amount}}).then(d => {{
+    toast(d.ok ? '✓ Ponuka odoslaná!' : '✗ '+(d.error||'Chyba'));
+    if (d.ok) closeModal();
+  }});
+}}
+
+function respondOffer(id, accept) {{
+  post('/hub/offer/respond', {{id, accept}}).then(d => {{
+    toast(d.ok ? '✓ '+(d.msg||'OK') : '✗ '+(d.error||'Chyba'));
+    pollState();
+  }});
+}}
+
+function post(url, body) {{
+  return fetch(url, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(body)}})
+    .then(r => r.json()).catch(()=>({{}}) );
+}}
+
+let _toastTimer;
+function toast(msg) {{
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
+}}
+</script>
+</body></html>"""
+
+
+@app.route("/hub/state")
+def hub_state_route():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    hub   = _hub_load()
+    _hub_cleanup(hub)
+    my_offers = [o for o in hub.get("offers", [])
+                 if o.get("to") == uname and o.get("status") == "pending"]
+    return json.dumps({"ok": True, "players": hub.get("players", {}), "offers": my_offers})
+
+
+@app.route("/hub/move", methods=["POST"])
+def hub_move():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+    room = data.get("room", "dock")
+    if room not in HUB_ROOMS:
+        room = "dock"
+    x = max(5.0, min(95.0, float(data.get("x", 50))))
+    y = max(5.0, min(95.0, float(data.get("y", 50))))
+    hub = _hub_load()
+    hub.setdefault("players", {})[uname] = {
+        "room": room, "x": round(x, 1), "y": round(y, 1),
+        "color": _hub_color(uname), "ts": time.time(),
+    }
+    _hub_save(hub)
+    return json.dumps({"ok": True})
+
+
+@app.route("/hub/gift", methods=["POST"])
+def hub_gift():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+
+    target     = data.get("to", "").lower()
+    gift_type  = data.get("type", "cr")
+    try:
+        amount = int(data.get("amount", 0))
+    except (TypeError, ValueError):
+        return json.dumps({"ok": False, "error": "neplatné množstvo"}), 400
+
+    if amount <= 0 or not target or target == uname:
+        return json.dumps({"ok": False, "error": "neplatný gift"}), 400
+
+    users = load_users()
+    target_key = next((k for k in users if k.lower() == target), None)
+    if not target_key:
+        return json.dumps({"ok": False, "error": "hráč neexistuje"}), 404
+
+    if gift_type == "cr":
+        career   = load_jf(KB_CAREER, {})
+        s_key    = next((k for k in users if k.lower() == uname), uname).upper()
+        t_key    = target_key.upper()
+        s_cr     = career.get(s_key, {}).get("career_cr", 0)
+        if s_cr < amount:
+            return json.dumps({"ok": False, "error": f"nedostatok CR (máš {s_cr:,})"}), 400
+        career.setdefault(s_key, {})["career_cr"] = s_cr - amount
+        career.setdefault(t_key, {})["career_cr"] = career.get(t_key, {}).get("career_cr", 0) + amount
+        save_jf(KB_CAREER, career)
+        send_notification(target_key, f"🎁 {uname} ti daroval {amount:,} CR!", from_role="Hub")
+        return json.dumps({"ok": True, "msg": f"Poslal si {amount:,} CR → {target_key}"})
+
+    elif gift_type == "shards":
+        if not _spend_shards(uname, amount):
+            return json.dumps({"ok": False, "error": "nedostatok Void Shards"}), 400
+        sd  = load_jf(KB_SHARDS, {})
+        rec = sd.get(target, {"balance": 0})
+        rec["balance"] = min(VS_MAX_BALANCE, rec.get("balance", 0) + amount)
+        sd[target] = rec
+        save_jf(KB_SHARDS, sd)
+        send_notification(target_key, f"◈ {uname} ti daroval {amount} Void Shards!", from_role="Hub")
+        return json.dumps({"ok": True, "msg": f"Poslal si {amount} ◈ → {target_key}"})
+
+    else:
+        item = next((i for i in NPC_MARKET if i["id"] == gift_type), None)
+        if not item:
+            return json.dumps({"ok": False, "error": "neznámy typ"}), 400
+        edata    = load_jf(KB_ENERGY, {})
+        s_prof   = _energy_tick(uname)
+        stock    = _get_commodity_stock(s_prof, item["source"])
+        if stock < amount:
+            return json.dumps({"ok": False, "error": f"nedostatok {gift_type} (máš {int(stock)})"}), 400
+        _set_commodity_stock(s_prof, item["source"], stock - amount)
+        edata[uname] = s_prof
+        t_prof   = _energy_tick(target)
+        t_stock  = _get_commodity_stock(t_prof, item["source"])
+        _set_commodity_stock(t_prof, item["source"], t_stock + amount)
+        edata[target] = t_prof
+        save_jf(KB_ENERGY, edata)
+        send_notification(target_key, f"🎁 {uname} ti daroval {amount}× {gift_type}!", from_role="Hub")
+        return json.dumps({"ok": True, "msg": f"Poslal si {amount}× {gift_type} → {target_key}"})
+
+
+@app.route("/hub/offer", methods=["POST"])
+def hub_offer():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+
+    target      = data.get("to", "").lower()
+    give_type   = data.get("give_type", "cr")
+    want_type   = data.get("want_type", "cr")
+    try:
+        give_amount = int(data.get("give_amount", 0))
+        want_amount = int(data.get("want_amount", 0))
+    except (TypeError, ValueError):
+        return json.dumps({"ok": False, "error": "neplatné množstvo"}), 400
+
+    if give_amount <= 0 or want_amount <= 0 or not target or target == uname:
+        return json.dumps({"ok": False, "error": "neplatná ponuka"}), 400
+
+    users = load_users()
+    target_key = next((k for k in users if k.lower() == target), None)
+    if not target_key:
+        return json.dumps({"ok": False, "error": "hráč neexistuje"}), 404
+
+    import uuid as _uuid
+    offer_id = _uuid.uuid4().hex[:8]
+    hub = _hub_load()
+    hub.setdefault("offers", []).append({
+        "id": offer_id, "from": uname, "to": target,
+        "give_type": give_type, "give_amount": give_amount,
+        "want_type": want_type, "want_amount": want_amount,
+        "ts": time.time(), "status": "pending",
+    })
+    _hub_save(hub, important=True)
+    send_notification(target_key, f"🤝 {uname} ti navrhol obchod v Hube!", from_role="Hub")
+    return json.dumps({"ok": True, "offer_id": offer_id})
+
+
+@app.route("/hub/offer/respond", methods=["POST"])
+def hub_offer_respond():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data   = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+
+    offer_id = data.get("id", "")
+    accept   = bool(data.get("accept", False))
+
+    hub   = _hub_load()
+    offer = next((o for o in hub.get("offers", [])
+                  if o["id"] == offer_id and o["to"] == uname and o["status"] == "pending"), None)
+    if not offer:
+        return json.dumps({"ok": False, "error": "ponuka nenájdená"}), 404
+
+    if not accept:
+        offer["status"] = "declined"
+        _hub_save(hub, important=True)
+        return json.dumps({"ok": True, "msg": "Ponuka odmietnutá"})
+
+    sender      = offer["from"]
+    give_type   = offer["give_type"]
+    give_amount = offer["give_amount"]
+    want_type   = offer["want_type"]
+    want_amount = offer["want_amount"]
+
+    # Overenie dostupnosti u oboch strán
+    users      = load_users()
+    career     = load_jf(KB_CAREER, {})
+    edata      = load_jf(KB_ENERGY, {})
+    sender_up  = next((k for k in users if k.lower() == sender), sender).upper()
+    my_up      = next((k for k in users if k.lower() == uname), uname).upper()
+
+    def _cr_of(up):    return career.get(up, {}).get("career_cr", 0)
+    def _shards_of(u): return load_jf(KB_SHARDS, {}).get(u, {}).get("balance", 0)
+    def _comm_of(u, typ):
+        item = next((i for i in NPC_MARKET if i["id"] == typ), None)
+        if not item: return 0
+        return _get_commodity_stock(edata.get(u, {}), item["source"])
+
+    def _have(who, up, typ, amt):
+        if typ == "cr":     return _cr_of(up) >= amt
+        if typ == "shards": return _shards_of(who) >= amt
+        return _comm_of(who, typ) >= amt
+
+    if not _have(sender, sender_up, give_type, give_amount):
+        offer["status"] = "failed"
+        _hub_save(hub, important=True)
+        return json.dumps({"ok": False, "error": "sender už nemá ponúkané veci"}), 400
+
+    if not _have(uname, my_up, want_type, want_amount):
+        offer["status"] = "failed"
+        _hub_save(hub, important=True)
+        return json.dumps({"ok": False, "error": "nemáš dostatok na protiplnenie"}), 400
+
+    # Vykonaj prevody
+    career_dirty = edata_dirty = shards_dirty = False
+
+    def _transfer(from_u, from_up, to_u, to_up, typ, amt):
+        nonlocal career_dirty, edata_dirty, shards_dirty
+        if typ == "cr":
+            career.setdefault(from_up, {})["career_cr"] = _cr_of(from_up) - amt
+            career.setdefault(to_up,   {})["career_cr"] = _cr_of(to_up)   + amt
+            career_dirty = True
+        elif typ == "shards":
+            _spend_shards(from_u, amt)
+            sd  = load_jf(KB_SHARDS, {})
+            rec = sd.get(to_u, {"balance": 0})
+            rec["balance"] = min(VS_MAX_BALANCE, rec.get("balance", 0) + amt)
+            sd[to_u] = rec
+            save_jf(KB_SHARDS, sd)
+        else:
+            item = next((i for i in NPC_MARKET if i["id"] == typ), None)
+            if item:
+                fp = edata.get(from_u, {}); tp = edata.get(to_u, {})
+                _set_commodity_stock(fp, item["source"], _get_commodity_stock(fp, item["source"]) - amt)
+                _set_commodity_stock(tp, item["source"], _get_commodity_stock(tp, item["source"]) + amt)
+                edata[from_u] = fp; edata[to_u] = tp
+                edata_dirty = True
+
+    _transfer(sender, sender_up, uname,  my_up,     give_type, give_amount)
+    _transfer(uname,  my_up,     sender, sender_up, want_type, want_amount)
+
+    if career_dirty: save_jf(KB_CAREER, career)
+    if edata_dirty:  save_jf(KB_ENERGY, edata)
+
+    offer["status"] = "accepted"
+    _hub_save(hub, important=True)
+    sender_key = next((k for k in users if k.lower() == sender), sender)
+    send_notification(sender_key, f"✅ {uname} prijal tvoju obchodnú ponuku!", from_role="Hub")
+    return json.dumps({"ok": True, "msg": "Obchod dokončený!"})
 
 
 # ── ClaudeBot API ──────────────────────────────────────────────────────────
