@@ -9493,7 +9493,7 @@ body{background:#000;color:#00ccff;font-family:'VT323',monospace;font-size:1rem;
 #topbar a{color:#00ccff66;text-decoration:none;font-size:.85em}
 #topbar a:hover{color:#00ccff}
 #main{display:flex;flex:1;overflow:hidden}
-#room-area{flex:1;position:relative;background:#030a0f;display:flex;flex-direction:column}
+#room-area{flex:1;position:relative;background:#0d1e35;display:flex;flex-direction:column;transition:background .4s}
 #room-label{padding:6px 14px;font-size:1.3em;letter-spacing:.15em;border-bottom:1px solid #00ccff22;color:#00ccff99;flex-shrink:0}
 #room-canvas{flex:1;position:relative;overflow:hidden;cursor:crosshair}
 .player-dot{position:absolute;transform:translate(-50%,-50%);text-align:center;cursor:pointer;z-index:2}
@@ -9811,6 +9811,8 @@ const _svgConsole = (accent) => `<svg viewBox="0 0 80 60" width="80" height="60"
 
 const _stationDiv = (label, href, color) =>
   `<a href="${href}" style="display:block;background:#000c14;border:1px solid ${color}66;color:${color};font-family:'VT323',monospace;font-size:.88em;padding:5px 14px;text-align:center;text-decoration:none;white-space:nowrap;letter-spacing:.06em;border-radius:2px">${label}</a>`;
+const _stationBtn = (label, onclick, color) =>
+  `<button onclick="${onclick}" style="display:block;width:100%;background:#000c14;border:1px solid ${color}88;color:${color};font-family:'VT323',monospace;font-size:.9em;padding:6px 16px;text-align:center;white-space:nowrap;letter-spacing:.06em;border-radius:2px;cursor:pointer">${label}</button>`;
 
 const ROOM_DECOR = {
   dock: [
@@ -9932,7 +9934,7 @@ const ROOM_DECOR = {
     {x:2, y:65, html:_svgCrate(38,34)},
     {x:88, y:65, html:_svgBarrel},
     // Station
-    {x:50, y:85, interactive:true, html:_stationDiv('🛒 OTVORIŤ TRH', '/market', '#4a90e2')},
+    {x:50, y:85, interactive:true, html:_stationBtn('🤝 TRADE POST', "openStationModal('trade')", '#4a90e2')},
   ],
   engineering: [
     // Generator left
@@ -10029,16 +10031,32 @@ const ROOM_DECOR = {
       <rect x="18" y="70" width="14" height="14" rx="2" fill="#2a3a4a"/>
     </svg>`},
     // Leaderboard station
-    {x:50, y:87, interactive:true, html:_stationDiv('🏆 LEADERBOARD', '/lobby', '#ffd700')},
+    {x:50, y:87, interactive:true, html:_stationBtn('🎁 GIFT STATION', "openStationModal('gift')", '#ffd700')},
   ],
+};
+
+const ROOM_THEME = {
+  dock:        {bg:'linear-gradient(170deg,#0d2035 0%,#071422 100%)', floor:'#0a1a30', accent:'#00ccff'},
+  bridge:      {bg:'linear-gradient(170deg,#0a0826 0%,#040412 100%)', floor:'#080620', accent:'#8888ff'},
+  market:      {bg:'linear-gradient(170deg,#201400 0%,#0c0800 100%)', floor:'#1c1000', accent:'#ff9900'},
+  engineering: {bg:'linear-gradient(170deg,#001a08 0%,#000d04 100%)', floor:'#001408', accent:'#39ff14'},
+  bar:         {bg:'linear-gradient(170deg,#200e00 0%,#110700 100%)', floor:'#1c0e00', accent:'#ffd700'},
 };
 
 function renderCanvas() {
   const canvas = document.getElementById('room-canvas');
-  const room = ROOMS[myRoom] || ROOMS.dock;
+  const room   = ROOMS[myRoom] || ROOMS.dock;
+  const theme  = ROOM_THEME[myRoom] || ROOM_THEME.dock;
+  document.getElementById('room-area').style.background  = theme.bg;
+  document.getElementById('room-label').style.borderColor = theme.accent + '33';
+  document.getElementById('room-label').style.color       = theme.accent + 'aa';
   document.getElementById('room-label').textContent = '★ ' + (room.name||myRoom).toUpperCase();
   document.getElementById('room-crumb').textContent = room.name || myRoom;
   canvas.innerHTML = '';
+  // Floor strip at bottom
+  const floor = document.createElement('div');
+  floor.style.cssText = `position:absolute;bottom:0;left:0;right:0;height:28%;background:${theme.floor};border-top:1px solid ${theme.accent}22;pointer-events:none;z-index:0`;
+  canvas.appendChild(floor);
   ['n','s','w','e'].forEach(dir => {
     const target = room[dir];
     if (!target) return;
@@ -10174,6 +10192,37 @@ function toast(msg) {
   el.textContent = msg; el.style.opacity = '1';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
+}
+
+// ── Station Interactions ────────────────────────────────────────────────────
+let _stationSel = null;
+
+function openStationModal(type) {
+  const others = Object.keys(state.players||{}).filter(u => u !== ME);
+  if (!others.length) { toast('Nikto iný nie je online'); return; }
+  if (others.length === 1) { openModal(others[0]); switchTab(type); return; }
+  // Remove existing selector
+  document.getElementById('_stn_sel')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = '_stn_sel';
+  wrap.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:16px 20px;z-index:30;min-width:200px;font-family:inherit';
+  wrap.innerHTML = `<div style="color:#00ccff;margin-bottom:10px;font-size:1.15em">${type==='gift'?'🎁 Komu giftnúť':'🤝 S kým obchodovať'}</div>`
+    + others.map(u => {
+        const p = state.players[u];
+        const rname = ROOMS[p?.room]?.name || (p?.room||'');
+        return `<div onclick="selectStation('${u}','${type}')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #00ccff11">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#00ccff'};margin-right:6px;vertical-align:middle"></span>
+          ${u} <span style="color:#555;font-size:.8em">${rname}</span>
+        </div>`;
+      }).join('')
+    + `<button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
+  document.body.appendChild(wrap);
+}
+
+function selectStation(uname, type) {
+  document.getElementById('_stn_sel')?.remove();
+  openModal(uname);
+  switchTab(type);
 }
 
 // ── Skin Shop ──────────────────────────────────────────────────────────────
