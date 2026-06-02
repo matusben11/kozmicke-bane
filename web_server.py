@@ -9777,6 +9777,262 @@ function skinSVG(skinId) {
   return SKIN_SVG[skinId] || SKIN_SVG.default;
 }
 
+// ── Room Decorations ────────────────────────────────────────────────────────
+const _svgCrate = (w,h) => `<svg viewBox="0 0 50 45" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="46" height="41" rx="2" fill="#8B6914" stroke="#5a4410" stroke-width="2"/>
+  <line x1="25" y1="2" x2="25" y2="43" stroke="#5a4410" stroke-width="2"/>
+  <line x1="2" y1="22" x2="48" y2="22" stroke="#5a4410" stroke-width="2"/>
+  <rect x="10" y="8" width="10" height="6" rx="1" fill="#5a4410"/>
+  <rect x="30" y="8" width="10" height="6" rx="1" fill="#5a4410"/>
+  <rect x="10" y="28" width="10" height="6" rx="1" fill="#5a4410"/>
+  <rect x="30" y="28" width="10" height="6" rx="1" fill="#5a4410"/>
+</svg>`;
+
+const _svgBarrel = `<svg viewBox="0 0 40 55" width="34" height="46" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="4" width="32" height="47" rx="8" fill="#a06030"/>
+  <rect x="0" y="12" width="40" height="5" fill="#7a4820"/>
+  <rect x="0" y="24" width="40" height="5" fill="#7a4820"/>
+  <rect x="0" y="36" width="40" height="5" fill="#7a4820"/>
+  <rect x="16" y="2" width="8" height="8" rx="2" fill="#7a4820"/>
+</svg>`;
+
+const _svgConsole = (accent) => `<svg viewBox="0 0 80 60" width="80" height="60" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="80" height="60" rx="3" fill="#0a1520"/>
+  <rect x="4" y="4" width="72" height="44" rx="2" fill="#001a2e"/>
+  <rect x="8" y="8" width="64" height="36" rx="1" fill="#0a2840"/>
+  <rect x="12" y="12" width="42" height="3" fill="${accent}88"/>
+  <rect x="12" y="18" width="28" height="3" fill="${accent}55"/>
+  <rect x="12" y="24" width="52" height="3" fill="${accent}44"/>
+  <rect x="12" y="30" width="18" height="3" fill="#39ff1466"/>
+  <rect x="18" y="50" width="8" height="6" rx="2" fill="#39ff14"/>
+  <rect x="34" y="50" width="8" height="6" rx="2" fill="#ff9900"/>
+  <rect x="50" y="50" width="8" height="6" rx="2" fill="#e04040"/>
+</svg>`;
+
+const _stationDiv = (label, href, color) =>
+  `<a href="${href}" style="display:block;background:#000c14;border:1px solid ${color}66;color:${color};font-family:'VT323',monospace;font-size:.88em;padding:5px 14px;text-align:center;text-decoration:none;white-space:nowrap;letter-spacing:.06em;border-radius:2px">${label}</a>`;
+
+const ROOM_DECOR = {
+  dock: [
+    // Stacked crates top-left
+    {x:2, y:4,  html:`<div style="display:flex;flex-direction:column;gap:2px">${_svgCrate(46,42)}${_svgCrate(46,42)}</div>`},
+    // Barrels top-right
+    {x:82, y:5, html:`<div style="display:flex;gap:3px;align-items:flex-end">${_svgBarrel}${_svgCrate(36,32)}</div>`},
+    // Docking ring — subtle center circle
+    {x:50, y:44, html:`<svg viewBox="0 0 200 80" width="200" height="80" xmlns="http://www.w3.org/2000/svg" style="transform:translate(-50%,-50%)">
+      <ellipse cx="100" cy="40" rx="90" ry="34" fill="none" stroke="#00ccff22" stroke-width="3" stroke-dasharray="10,6"/>
+      <ellipse cx="100" cy="40" rx="60" ry="22" fill="none" stroke="#00ccff14" stroke-width="2" stroke-dasharray="6,8"/>
+      <text x="100" y="44" text-anchor="middle" fill="#00ccff22" font-family="monospace" font-size="9" letter-spacing="3">DOCKING PAD</text>
+    </svg>`},
+    // Landing lights
+    {x:20, y:72, html:`<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="6" fill="#39ff14" opacity=".7"/><circle cx="7" cy="7" r="3" fill="#39ff14"/></svg>`},
+    {x:80, y:72, html:`<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="6" fill="#39ff14" opacity=".7"/><circle cx="7" cy="7" r="3" fill="#39ff14"/></svg>`},
+    // Single crate bottom-right
+    {x:86, y:68, html:_svgCrate(38,34)},
+    // Station
+    {x:50, y:88, interactive:true, html:_stationDiv('⚓ DOCK CONTROL', '/lobby', '#00ccff')},
+  ],
+  bridge: [
+    // Wide navigation console top
+    {x:50, y:3, html:`<svg viewBox="0 0 300 70" width="300" height="70" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
+      <rect x="0" y="8" width="300" height="60" rx="4" fill="#0a1520"/>
+      <rect x="6" y="12" width="288" height="50" rx="3" fill="#001a2e"/>
+      <rect x="12" y="16" width="180" height="38" rx="2" fill="#0a2840"/>
+      <rect x="18" y="20" width="60" height="4" fill="#00ccff77"/>
+      <rect x="18" y="28" width="100" height="3" fill="#00ccff44"/>
+      <rect x="18" y="35" width="80" height="3" fill="#00ccff33"/>
+      <rect x="18" y="42" width="50" height="3" fill="#39ff1444"/>
+      <rect x="200" y="16" width="88" height="38" rx="2" fill="#0a2840"/>
+      <circle cx="224" cy="28" r="8" fill="#0a1a2a" stroke="#00ccff44" stroke-width="1.5"/>
+      <circle cx="250" cy="28" r="8" fill="#0a1a2a" stroke="#ff990044" stroke-width="1.5"/>
+      <circle cx="276" cy="28" r="8" fill="#0a1a2a" stroke="#e0404044" stroke-width="1.5"/>
+      <line x1="224" y1="28" x2="224" y2="21" stroke="#00ccff" stroke-width="1.5"/>
+      <line x1="250" y1="28" x2="255" y2="22" stroke="#ff9900" stroke-width="1.5"/>
+      <line x1="276" y1="28" x2="271" y2="22" stroke="#e04040" stroke-width="1.5"/>
+      <rect x="206" y="42" width="74" height="8" rx="1" fill="#0a1520"/>
+      <rect x="210" y="44" width="8" height="4" fill="#39ff14"/>
+      <rect x="222" y="44" width="8" height="4" fill="#39ff14"/>
+      <rect x="234" y="44" width="8" height="4" fill="#ff9900"/>
+      <rect x="246" y="44" width="8" height="4" fill="#ff9900"/>
+      <rect x="258" y="44" width="8" height="4" fill="#e04040"/>
+      <rect x="270" y="44" width="8" height="4" fill="#e04040"/>
+      <rect x="60" y="0" width="180" height="10" rx="2" fill="#0d1e2e"/>
+    </svg>`},
+    // Captain chair center
+    {x:50, y:42, html:`<svg viewBox="0 0 70 60" width="70" height="60" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
+      <rect x="20" y="0" width="30" height="36" rx="4" fill="#1a2a3a"/>
+      <rect x="15" y="4" width="40" height="28" rx="3" fill="#253545"/>
+      <rect x="0" y="20" width="18" height="24" rx="3" fill="#1a2a3a"/>
+      <rect x="52" y="20" width="18" height="24" rx="3" fill="#1a2a3a"/>
+      <rect x="10" y="44" width="50" height="8" rx="3" fill="#1a2a3a"/>
+      <rect x="18" y="50" width="10" height="10" rx="2" fill="#0d1520"/>
+      <rect x="42" y="50" width="10" height="10" rx="2" fill="#0d1520"/>
+    </svg>`},
+    // Star map right side
+    {x:86, y:22, html:`<svg viewBox="0 0 70 80" width="65" height="75" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="70" height="80" rx="3" fill="#050f1a"/>
+      <rect x="4" y="4" width="62" height="72" rx="2" fill="#020810"/>
+      <circle cx="35" cy="40" r="26" fill="none" stroke="#00ccff14" stroke-width="1"/>
+      <circle cx="35" cy="40" r="16" fill="none" stroke="#00ccff0a" stroke-width="1"/>
+      <circle cx="35" cy="40" r="3" fill="#ff9900" opacity=".8"/>
+      <circle cx="52" cy="28" r="2" fill="#4a90e2" opacity=".7"/>
+      <circle cx="20" cy="55" r="1.5" fill="#e04040" opacity=".6"/>
+      <circle cx="48" cy="52" r="1" fill="#fff" opacity=".5"/>
+      <circle cx="18" cy="25" r="1" fill="#fff" opacity=".4"/>
+      <circle cx="60" cy="60" r="1" fill="#fff" opacity=".3"/>
+      <line x1="35" y1="40" x2="52" y2="28" stroke="#00ccff22" stroke-width="1"/>
+    </svg>`},
+    // Side panel left
+    {x:2, y:22, html:_svgConsole('#00ccff')},
+    // Council station
+    {x:50, y:86, interactive:true, html:_stationDiv('🏛 RADA BEZPEČNOSTI', '/council', '#ff88ff')},
+  ],
+  market: [
+    // Left stall
+    {x:4, y:6, html:`<svg viewBox="0 0 110 75" width="110" height="75" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="110" height="22" rx="3" fill="#4a90e2"/>
+      <rect x="0" y="14" width="110" height="9" fill="#2a5a9a"/>
+      <rect x="5" y="28" width="100" height="36" rx="2" fill="#1a2a3a"/>
+      <rect x="5" y="24" width="100" height="7" rx="2" fill="#2a3a4a"/>
+      <rect x="14" y="32" width="12" height="12" rx="2" fill="#f5a623"/>
+      <rect x="32" y="32" width="12" height="12" rx="2" fill="#39ff14"/>
+      <rect x="50" y="32" width="12" height="12" rx="2" fill="#e04040"/>
+      <rect x="68" y="32" width="12" height="12" rx="2" fill="#dd00ff"/>
+      <rect x="86" y="32" width="12" height="12" rx="2" fill="#4a90e2"/>
+      <text x="55" y="56" text-anchor="middle" fill="#00ccff55" font-family="monospace" font-size="7" letter-spacing="1">STALL A</text>
+    </svg>`},
+    // Right stall
+    {x:58, y:6, html:`<svg viewBox="0 0 110 75" width="110" height="75" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="110" height="22" rx="3" fill="#e07020"/>
+      <rect x="0" y="14" width="110" height="9" fill="#a04010"/>
+      <rect x="5" y="28" width="100" height="36" rx="2" fill="#1a2a3a"/>
+      <rect x="5" y="24" width="100" height="7" rx="2" fill="#2a3a4a"/>
+      <rect x="14" y="32" width="12" height="12" rx="2" fill="#ffd700"/>
+      <rect x="32" y="32" width="12" height="12" rx="2" fill="#00ccff"/>
+      <rect x="50" y="32" width="12" height="12" rx="2" fill="#ff88ff"/>
+      <rect x="68" y="32" width="12" height="12" rx="2" fill="#39ff14"/>
+      <rect x="86" y="32" width="12" height="12" rx="2" fill="#e04040"/>
+      <text x="55" y="56" text-anchor="middle" fill="#ff990055" font-family="monospace" font-size="7" letter-spacing="1">STALL B</text>
+    </svg>`},
+    // Price board
+    {x:50, y:52, html:`<svg viewBox="0 0 160 50" width="160" height="50" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
+      <rect x="0" y="0" width="160" height="50" rx="3" fill="#0a1520"/>
+      <rect x="4" y="4" width="152" height="42" rx="2" fill="#001a2e"/>
+      <text x="80" y="16" text-anchor="middle" fill="#00ccff88" font-family="monospace" font-size="8" letter-spacing="2">LIVE PRICES</text>
+      <rect x="12" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
+      <rect x="50" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
+      <rect x="88" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
+      <rect x="126" y="22" width="28" height="14" rx="1" fill="#0a2840"/>
+      <text x="27" y="32" text-anchor="middle" fill="#39ff14" font-family="monospace" font-size="7">COAL</text>
+      <text x="65" y="32" text-anchor="middle" fill="#ff9900" font-family="monospace" font-size="7">URAN</text>
+      <text x="103" y="32" text-anchor="middle" fill="#4a90e2" font-family="monospace" font-size="7">ENRG</text>
+      <text x="140" y="32" text-anchor="middle" fill="#ffd700" font-family="monospace" font-size="7">GOLD</text>
+    </svg>`},
+    // Crates in corner
+    {x:2, y:65, html:_svgCrate(38,34)},
+    {x:88, y:65, html:_svgBarrel},
+    // Station
+    {x:50, y:85, interactive:true, html:_stationDiv('🛒 OTVORIŤ TRH', '/market', '#4a90e2')},
+  ],
+  engineering: [
+    // Generator left
+    {x:4, y:8, html:`<svg viewBox="0 0 70 90" width="65" height="84" xmlns="http://www.w3.org/2000/svg">
+      <rect x="20" y="10" width="30" height="12" rx="3" fill="#1a2a3a"/>
+      <rect x="28" y="4" width="14" height="8" rx="2" fill="#2a3a4a"/>
+      <rect x="5" y="20" width="60" height="65" rx="4" fill="#2a3a4a"/>
+      <rect x="10" y="25" width="50" height="35" rx="2" fill="#1a2a3a"/>
+      <circle cx="25" cy="35" r="9" fill="#0a1a2a" stroke="#00ccff44" stroke-width="2"/>
+      <circle cx="45" cy="35" r="9" fill="#0a1a2a" stroke="#ff990044" stroke-width="2"/>
+      <line x1="25" y1="35" x2="25" y2="27" stroke="#00ccff" stroke-width="1.5"/>
+      <line x1="45" y1="35" x2="51" y2="30" stroke="#ff9900" stroke-width="1.5"/>
+      <rect x="14" y="48" width="6" height="9" fill="#39ff14"/>
+      <rect x="22" y="44" width="6" height="13" fill="#39ff14"/>
+      <rect x="30" y="41" width="6" height="16" fill="#ff9900"/>
+      <rect x="38" y="38" width="6" height="19" fill="#ff9900"/>
+      <rect x="46" y="35" width="6" height="22" fill="#e04040"/>
+      <rect x="15" y="84" width="12" height="6" rx="1" fill="#1a2a3a"/>
+      <rect x="43" y="84" width="12" height="6" rx="1" fill="#1a2a3a"/>
+    </svg>`},
+    // Pipes right side
+    {x:82, y:5, html:`<svg viewBox="0 0 50 180" width="44" height="160" xmlns="http://www.w3.org/2000/svg">
+      <rect x="16" y="0" width="18" height="180" fill="#2a3a4a"/>
+      <rect x="20" y="0" width="10" height="180" fill="#1a2a3a"/>
+      <rect x="0" y="30" width="50" height="14" rx="4" fill="#2a3a4a"/>
+      <rect x="4" y="33" width="42" height="8" fill="#1a2a3a"/>
+      <rect x="0" y="80" width="50" height="14" rx="4" fill="#2a3a4a"/>
+      <rect x="4" y="83" width="42" height="8" fill="#1a2a3a"/>
+      <rect x="0" y="130" width="50" height="14" rx="4" fill="#2a3a4a"/>
+      <rect x="4" y="133" width="42" height="8" fill="#1a2a3a"/>
+      <circle cx="25" cy="37" r="5" fill="#0a1520" stroke="#00ccff55" stroke-width="1.5"/>
+      <circle cx="25" cy="87" r="5" fill="#0a1520" stroke="#ff990055" stroke-width="1.5"/>
+      <circle cx="25" cy="137" r="5" fill="#0a1520" stroke="#e0404055" stroke-width="1.5"/>
+    </svg>`},
+    // Control terminal center-right
+    {x:52, y:15, html:_svgConsole('#39ff14')},
+    // Warning sign
+    {x:52, y:55, html:`<svg viewBox="0 0 60 30" width="60" height="30" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="60" height="30" rx="2" fill="#1a0a00"/>
+      <rect x="2" y="2" width="56" height="26" rx="1" fill="#2a1200"/>
+      <text x="30" y="19" text-anchor="middle" fill="#ff9900" font-family="monospace" font-size="9" letter-spacing="1">⚠ DANGER</text>
+    </svg>`},
+    // Station
+    {x:50, y:84, interactive:true, html:_stationDiv('⚡ ENERGETICKÁ MINIHRA', '/energy', '#39ff14')},
+  ],
+  bar: [
+    // Bar counter top — wide
+    {x:50, y:4, html:`<svg viewBox="0 0 340 65" width="340" height="65" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
+      <rect x="0" y="18" width="340" height="44" rx="4" fill="#2a1a0a"/>
+      <rect x="0" y="12" width="340" height="10" rx="3" fill="#3a2a1a"/>
+      <!-- bottles shelf -->
+      <rect x="10" y="2" width="8" height="16" rx="2" fill="#e04040"/>
+      <rect x="22" y="4" width="8" height="14" rx="2" fill="#4a90e2"/>
+      <rect x="34" y="2" width="8" height="16" rx="2" fill="#39ff14"/>
+      <rect x="46" y="5" width="8" height="13" rx="2" fill="#dd00ff"/>
+      <rect x="58" y="2" width="8" height="16" rx="2" fill="#ff9900"/>
+      <rect x="70" y="4" width="8" height="14" rx="2" fill="#e04040"/>
+      <rect x="82" y="2" width="8" height="16" rx="2" fill="#ffd700"/>
+      <!-- tap -->
+      <rect x="200" y="12" width="8" height="24" rx="3" fill="#888"/>
+      <rect x="196" y="12" width="16" height="5" rx="2" fill="#aaa"/>
+      <rect x="220" y="12" width="8" height="24" rx="3" fill="#888"/>
+      <rect x="216" y="12" width="16" height="5" rx="2" fill="#aaa"/>
+      <!-- glasses on counter -->
+      <rect x="260" y="26" width="10" height="18" rx="2" fill="#00ccff33" stroke="#00ccff66" stroke-width="1"/>
+      <rect x="276" y="30" width="10" height="14" rx="2" fill="#ff990033" stroke="#ff990066" stroke-width="1"/>
+      <rect x="292" y="26" width="10" height="18" rx="2" fill="#39ff1433" stroke="#39ff1466" stroke-width="1"/>
+    </svg>`},
+    // Left table + chairs
+    {x:8, y:52, html:`<svg viewBox="0 0 90 60" width="90" height="60" xmlns="http://www.w3.org/2000/svg">
+      <rect x="20" y="20" width="50" height="30" rx="3" fill="#2a1a0a"/>
+      <rect x="18" y="16" width="54" height="8" rx="2" fill="#3a2a1a"/>
+      <rect x="4" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
+      <rect x="66" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
+      <circle cx="45" cy="32" r="6" fill="#1a0a00"/>
+    </svg>`},
+    // Right table
+    {x:58, y:52, html:`<svg viewBox="0 0 90 60" width="90" height="60" xmlns="http://www.w3.org/2000/svg">
+      <rect x="20" y="20" width="50" height="30" rx="3" fill="#2a1a0a"/>
+      <rect x="18" y="16" width="54" height="8" rx="2" fill="#3a2a1a"/>
+      <rect x="4" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
+      <rect x="66" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
+      <circle cx="45" cy="32" r="6" fill="#1a0a00"/>
+    </svg>`},
+    // Drinks machine right side
+    {x:88, y:30, html:`<svg viewBox="0 0 50 90" width="44" height="80" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="0" width="42" height="90" rx="4" fill="#1a2a3a"/>
+      <rect x="8" y="6" width="34" height="44" rx="2" fill="#0a1520"/>
+      <rect x="11" y="10" width="12" height="12" rx="2" fill="#e04040aa"/>
+      <rect x="27" y="10" width="12" height="12" rx="2" fill="#4a90e2aa"/>
+      <rect x="11" y="26" width="12" height="12" rx="2" fill="#39ff14aa"/>
+      <rect x="27" y="26" width="12" height="12" rx="2" fill="#dd00ffaa"/>
+      <rect x="10" y="55" width="30" height="8" rx="2" fill="#0a1520"/>
+      <rect x="18" y="70" width="14" height="14" rx="2" fill="#2a3a4a"/>
+    </svg>`},
+    // Leaderboard station
+    {x:50, y:87, interactive:true, html:_stationDiv('🏆 LEADERBOARD', '/lobby', '#ffd700')},
+  ],
+};
+
 function renderCanvas() {
   const canvas = document.getElementById('room-canvas');
   const room = ROOMS[myRoom] || ROOMS.dock;
@@ -9792,6 +10048,13 @@ function renderCanvas() {
     btn.textContent = dir==='e' ? tname+' →' : dir==='w' ? '← '+tname : dir==='n' ? '↑ '+tname : '↓ '+tname;
     btn.onclick = () => changeRoom(target);
     canvas.appendChild(btn);
+  });
+  // Decorations
+  (ROOM_DECOR[myRoom]||[]).forEach(d => {
+    const el = document.createElement('div');
+    el.style.cssText = `position:absolute;left:${d.x}%;top:${d.y}%;z-index:1;${d.interactive?'':'pointer-events:none'}`;
+    el.innerHTML = d.html;
+    canvas.appendChild(el);
   });
   const players = state.players || {};
   for (const [uname, p] of Object.entries(players)) {
