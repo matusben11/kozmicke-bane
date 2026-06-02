@@ -9548,7 +9548,10 @@ _HUB_PAGE = """<!DOCTYPE html><html lang="sk"><head>
     <h1>◉ HUB</h1>
     <span style="color:#00ccff33">|</span>
     <span id="room-crumb" style="color:#00ccff99;font-size:.9em">Dok</span>
-    <span style="margin-left:auto"><a href="/lobby">← Lobby</a></span>
+    <span style="margin-left:auto;display:flex;gap:10px;align-items:center">
+      <button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff;font-size:.85em" onclick="openSkinShop()">🎨 Skiny</button>
+      <a href="/lobby">← Lobby</a>
+    </span>
   </div>
   <div id="main">
     <div id="room-area">
@@ -9596,6 +9599,29 @@ _HUB_PAGE = """<!DOCTYPE html><html lang="sk"><head>
   </div>
 </div>
 <div id="toast"></div>
+
+<!-- Skin Shop Modal -->
+<div id="skin-overlay" style="display:none;position:fixed;inset:0;background:#000000bb;z-index:20" onclick="closeSkinShop()"></div>
+<div id="skin-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #dd00ff55;padding:18px 20px;min-width:340px;max-width:500px;width:95%;z-index:21;max-height:85vh;overflow-y:auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h3 style="color:#dd00ff;font-size:1.2em">🎨 SKIN SHOP</h3>
+    <button class="btn-sm" style="color:#ff4455;border-color:#ff4455" onclick="closeSkinShop()">✕</button>
+  </div>
+  <div style="color:#00ccff66;font-size:.78em;margin-bottom:10px">
+    Môj CR: <strong id="sk-my-cr" style="color:#ffdd44">—</strong> &nbsp;|&nbsp;
+    Môj ◈: <strong id="sk-my-shards" style="color:#dd00ff">—</strong>
+  </div>
+  <div id="skin-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
+  <div style="margin-top:14px;border-top:1px solid #dd00ff22;padding-top:12px">
+    <div style="font-size:.8em;color:#00ccff66;margin-bottom:6px">🎁 Giftnúť skin hráčovi</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <select id="sk-gift-skin" style="background:#000c14;border:1px solid #dd00ff33;color:#dd00ff;font-family:inherit;font-size:.82em;padding:3px 6px"></select>
+      <input type="text" id="sk-gift-to" placeholder="username" style="background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.82em;padding:3px 6px;width:100px;outline:none">
+      <button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff" onclick="doGiftSkin()">🎨 Gift</button>
+    </div>
+  </div>
+</div>
+
 <script>
 __INIT__
 // Doplň komodity do selectov
@@ -9611,6 +9637,8 @@ let myRoom = 'dock', myX = 50, myY = 50;
 let state = {players:{}, offers:[]};
 let pendingMove = null;
 let selectedPlayer = null;
+let mySkin = 'default';
+let skinShopData = null;
 
 document.addEventListener('keydown', e => {
   const tag = document.activeElement?.tagName;
@@ -9651,6 +9679,104 @@ function changeRoom(room) {
   document.getElementById('room-crumb').textContent = ROOMS[room]?.name || room;
 }
 
+const SKIN_SVG = {
+  default: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
+    <rect x="15" y="4" width="50" height="44" rx="5" fill="#ffb5a0"/>
+    <rect x="24" y="16" width="8" height="8" fill="#333"/>
+    <rect x="48" y="16" width="8" height="8" fill="#333"/>
+    <rect x="27" y="34" width="26" height="5" fill="#cc8070"/>
+    <rect x="10" y="50" width="60" height="36" rx="3" fill="#4a90e2"/>
+    <rect x="0" y="52" width="12" height="20" rx="3" fill="#ffb5a0"/>
+    <rect x="68" y="52" width="12" height="20" rx="3" fill="#ffb5a0"/>
+    <rect x="16" y="88" width="21" height="26" fill="#1a3a6e"/>
+    <rect x="43" y="88" width="21" height="26" fill="#1a3a6e"/>
+    <rect x="11" y="110" width="28" height="10" rx="2" fill="#111"/>
+    <rect x="41" y="110" width="28" height="10" rx="2" fill="#111"/>
+  </svg>`,
+  banik: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
+    <rect x="8" y="2" width="64" height="22" rx="5" fill="#f5a623"/>
+    <rect x="18" y="8" width="44" height="7" rx="2" fill="#ffffffaa"/>
+    <rect x="15" y="18" width="50" height="40" rx="5" fill="#d4a574"/>
+    <rect x="24" y="28" width="8" height="8" fill="#333"/>
+    <rect x="48" y="28" width="8" height="8" fill="#333"/>
+    <rect x="27" y="44" width="26" height="5" fill="#8a5030"/>
+    <rect x="10" y="60" width="60" height="36" rx="3" fill="#e07020"/>
+    <rect x="10" y="68" width="60" height="8" fill="#8a3010"/>
+    <rect x="10" y="80" width="60" height="8" fill="#8a3010"/>
+    <rect x="64" y="62" width="14" height="26" rx="3" fill="#60504a"/>
+    <rect x="0" y="62" width="12" height="20" rx="3" fill="#d4a574"/>
+    <rect x="68" y="62" width="12" height="20" rx="3" fill="#d4a574"/>
+    <rect x="16" y="98" width="21" height="22" fill="#5c3a1e"/>
+    <rect x="43" y="98" width="21" height="22" fill="#5c3a1e"/>
+    <rect x="11" y="114" width="28" height="6" rx="2" fill="#3a2010"/>
+    <rect x="41" y="114" width="28" height="6" rx="2" fill="#3a2010"/>
+  </svg>`,
+  astronaut: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
+    <rect x="8" y="2" width="64" height="56" rx="22" fill="#dde2e8"/>
+    <rect x="18" y="12" width="44" height="30" rx="13" fill="#7abbde"/>
+    <rect x="22" y="16" width="14" height="8" rx="4" fill="#ffffffaa"/>
+    <rect x="22" y="34" width="10" height="6" rx="2" fill="#e04040cc"/>
+    <rect x="48" y="34" width="10" height="6" rx="2" fill="#e04040cc"/>
+    <rect x="22" y="58" width="36" height="8" rx="2" fill="#b8bec8"/>
+    <rect x="8" y="64" width="64" height="38" rx="4" fill="#e4e8ec"/>
+    <rect x="24" y="72" width="32" height="18" rx="3" fill="#b0b8c4"/>
+    <rect x="27" y="76" width="8" height="8" fill="#e04040" rx="1"/>
+    <rect x="38" y="76" width="10" height="8" fill="#8a9aaa" rx="1"/>
+    <rect x="0" y="66" width="10" height="26" rx="4" fill="#c8d0d8"/>
+    <rect x="70" y="66" width="10" height="26" rx="4" fill="#c8d0d8"/>
+    <rect x="14" y="104" width="24" height="16" rx="5" fill="#7a9ab0"/>
+    <rect x="42" y="104" width="24" height="16" rx="5" fill="#7a9ab0"/>
+  </svg>`,
+  kapitan: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
+    <rect x="6" y="14" width="68" height="10" rx="2" fill="#1a2a8a"/>
+    <rect x="12" y="2" width="56" height="18" rx="5" fill="#1a2a8a"/>
+    <rect x="14" y="14" width="52" height="7" fill="#f5c842"/>
+    <rect x="15" y="22" width="50" height="42" rx="5" fill="#ffb5a0"/>
+    <rect x="24" y="32" width="8" height="8" fill="#333"/>
+    <rect x="48" y="32" width="8" height="8" fill="#333"/>
+    <rect x="27" y="50" width="26" height="5" fill="#cc8070"/>
+    <rect x="10" y="66" width="60" height="40" rx="3" fill="#1a2a8a"/>
+    <rect x="6" y="66" width="20" height="12" rx="3" fill="#f5c842"/>
+    <rect x="54" y="66" width="20" height="12" rx="3" fill="#f5c842"/>
+    <rect x="35" y="72" width="10" height="10" rx="5" fill="#f5c842"/>
+    <rect x="35" y="84" width="10" height="10" rx="5" fill="#f5c842"/>
+    <rect x="35" y="96" width="10" height="10" rx="5" fill="#f5c842"/>
+    <rect x="0" y="68" width="12" height="20" rx="3" fill="#ffb5a0"/>
+    <rect x="68" y="68" width="12" height="20" rx="3" fill="#ffb5a0"/>
+    <rect x="16" y="108" width="21" height="12" fill="#1a2a8a"/>
+    <rect x="43" y="108" width="21" height="12" fill="#1a2a8a"/>
+    <rect x="11" y="116" width="28" height="4" rx="2" fill="#111"/>
+    <rect x="41" y="116" width="28" height="4" rx="2" fill="#111"/>
+  </svg>`,
+  robot: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
+    <rect x="36" y="0" width="8" height="14" fill="#607080"/>
+    <ellipse cx="40" cy="2" rx="7" ry="5" fill="#e04040"/>
+    <rect x="10" y="12" width="60" height="50" rx="5" fill="#607080"/>
+    <rect x="18" y="22" width="18" height="14" rx="3" fill="#00ccff"/>
+    <rect x="44" y="22" width="18" height="14" rx="3" fill="#00ccff"/>
+    <rect x="20" y="24" width="6" height="4" rx="1" fill="#ffffff66"/>
+    <rect x="46" y="24" width="6" height="4" rx="1" fill="#ffffff66"/>
+    <rect x="20" y="46" width="40" height="6" rx="2" fill="#405060"/>
+    <rect x="24" y="48" width="5" height="2" fill="#607080"/>
+    <rect x="32" y="48" width="5" height="2" fill="#607080"/>
+    <rect x="40" y="48" width="5" height="2" fill="#607080"/>
+    <rect x="26" y="62" width="28" height="8" rx="2" fill="#506070"/>
+    <rect x="8" y="68" width="64" height="38" rx="4" fill="#506070"/>
+    <rect x="14" y="76" width="22" height="14" rx="3" fill="#e04040"/>
+    <rect x="44" y="76" width="22" height="14" rx="3" fill="#00ccff"/>
+    <rect x="0" y="70" width="10" height="28" rx="4" fill="#607080"/>
+    <rect x="70" y="70" width="10" height="28" rx="4" fill="#607080"/>
+    <rect x="2" y="90" width="8" height="6" rx="2" fill="#50606e"/>
+    <rect x="70" y="90" width="8" height="6" rx="2" fill="#50606e"/>
+    <rect x="16" y="108" width="20" height="12" rx="2" fill="#607080"/>
+    <rect x="44" y="108" width="20" height="12" rx="2" fill="#607080"/>
+  </svg>`,
+};
+
+function skinSVG(skinId) {
+  return SKIN_SVG[skinId] || SKIN_SVG.default;
+}
+
 function renderCanvas() {
   const canvas = document.getElementById('room-canvas');
   const room = ROOMS[myRoom] || ROOMS.dock;
@@ -9675,7 +9801,7 @@ function renderCanvas() {
     el.className = 'player-dot';
     el.style.left = (isMe ? myX : p.x) + '%';
     el.style.top  = (isMe ? myY : p.y) + '%';
-    el.innerHTML = `<div class="dot" style="background:${p.color};box-shadow:0 0 8px ${p.color}40"></div>`
+    el.innerHTML = skinSVG(p.skin||'default')
                  + `<div class="lbl" style="color:${p.color}">${isMe ? '['+uname+']' : uname}</div>`;
     if (!isMe) el.onclick = () => openModal(uname);
     canvas.appendChild(el);
@@ -9685,7 +9811,7 @@ function renderCanvas() {
     const el = document.createElement('div');
     el.className = 'player-dot';
     el.style.left = myX+'%'; el.style.top = myY+'%';
-    el.innerHTML = `<div class="dot" style="background:${col};box-shadow:0 0 8px ${col}40"></div>`
+    el.innerHTML = skinSVG(mySkin)
                  + `<div class="lbl" style="color:${col}">[${ME}]</div>`;
     canvas.appendChild(el);
   }
@@ -9786,6 +9912,77 @@ function toast(msg) {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
 }
+
+// ── Skin Shop ──────────────────────────────────────────────────────────────
+const SKIN_ORDER = ['default','banik','astronaut','kapitan','robot'];
+const SKIN_NAMES = {default:'Default', banik:'Baník', astronaut:'Astronaut', kapitan:'Kapitán', robot:'Robot'};
+
+function openSkinShop() {
+  document.getElementById('skin-modal').style.display = 'block';
+  document.getElementById('skin-overlay').style.display = 'block';
+  fetch('/hub/skins/state').then(r=>r.json()).then(d => {
+    if (!d.ok) return;
+    skinShopData = d;
+    mySkin = d.equipped;
+    document.getElementById('sk-my-cr').textContent = d.cr.toLocaleString()+' CR';
+    document.getElementById('sk-my-shards').textContent = d.shards+' ◈';
+    const grid = document.getElementById('skin-grid');
+    grid.innerHTML = SKIN_ORDER.map(id => {
+      const s = d.shop[id];
+      const owned = d.owned.includes(id);
+      const equipped = d.equipped === id;
+      const priceHtml = s.free ? '<span style="color:#39ff14">Zadarmo</span>'
+        : s.price_cr ? `<span style="color:#ffdd44">${s.price_cr.toLocaleString()} CR</span>`
+        : `<span style="color:#dd00ff">${s.price_shards} ◈</span>`;
+      const btnHtml = equipped
+        ? `<button class="btn-sm" style="color:#39ff14;border-color:#39ff14;width:100%;margin-top:6px" disabled>✓ Nasadený</button>`
+        : owned
+        ? `<button class="btn-sm" style="color:#00ccff;border-color:#00ccff;width:100%;margin-top:6px" onclick="doEquipSkin('${id}')">Nasadiť</button>`
+        : s.free
+        ? `<button class="btn-sm" style="color:#39ff14;border-color:#39ff14;width:100%;margin-top:6px" onclick="doBuySkin('${id}','free')">Získať</button>`
+        : s.price_cr
+        ? `<button class="btn-sm" style="color:#ffdd44;border-color:#ffdd44;width:100%;margin-top:6px" onclick="doBuySkin('${id}','cr')">Kúpiť CR</button>`
+        : `<button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff;width:100%;margin-top:6px" onclick="doBuySkin('${id}','shards')">Kúpiť ◈</button>`;
+      return `<div style="background:#000c14;border:1px solid ${equipped?'#39ff14':'#00ccff22'};padding:10px;text-align:center;border-radius:3px">
+        <div style="display:inline-block">${SKIN_SVG[id]||SKIN_SVG.default}</div>
+        <div style="font-size:.85em;margin:4px 0 2px;color:#00ccff">${SKIN_NAMES[id]}</div>
+        <div style="font-size:.75em;margin-bottom:4px">${priceHtml}</div>
+        ${btnHtml}
+      </div>`;
+    }).join('');
+    // Skin select pre gift
+    const sel = document.getElementById('sk-gift-skin');
+    sel.innerHTML = d.owned.map(id => `<option value="${id}">${SKIN_NAMES[id]||id}</option>`).join('');
+  });
+}
+
+function closeSkinShop() {
+  document.getElementById('skin-modal').style.display = 'none';
+  document.getElementById('skin-overlay').style.display = 'none';
+}
+
+function doBuySkin(id, currency) {
+  post('/hub/skins/buy', {skin_id:id, currency}).then(d => {
+    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
+    if (d.ok) openSkinShop();
+  });
+}
+
+function doEquipSkin(id) {
+  post('/hub/skins/equip', {skin_id:id}).then(d => {
+    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
+    if (d.ok) { mySkin = id; openSkinShop(); renderCanvas(); }
+  });
+}
+
+function doGiftSkin() {
+  const skin_id = document.getElementById('sk-gift-skin').value;
+  const to      = document.getElementById('sk-gift-to').value.trim();
+  if (!to) { toast('Zadaj username'); return; }
+  post('/hub/skins/gift', {skin_id, to}).then(d => {
+    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
+  });
+}
 </script>
 </body></html>"""
 
@@ -9798,12 +9995,15 @@ def hub_page():
     lang  = session.get("lang", "sk")
     hub   = _hub_load()
     _hub_cleanup(hub)
+    equipped_skin = _hub_skins_of(uname, hub)["equipped"]
     if uname not in hub.get("players", {}):
         hub.setdefault("players", {})[uname] = {
             "room": "dock", "x": 50.0, "y": 50.0,
-            "color": _hub_color(uname), "ts": time.time(),
+            "color": _hub_color(uname), "skin": equipped_skin, "ts": time.time(),
         }
         _hub_save(hub, important=True)
+    else:
+        hub["players"][uname]["skin"] = equipped_skin
 
     rooms_js = json.dumps({k: {"name": v["name_en"] if lang == "en" else v["name_sk"],
                                 **{d: v[d] for d in ("n", "s", "w", "e") if d in v}}
@@ -9850,9 +10050,10 @@ def hub_move():
     x = max(5.0, min(95.0, float(data.get("x", 50))))
     y = max(5.0, min(95.0, float(data.get("y", 50))))
     hub = _hub_load()
+    equipped = _hub_skins_of(uname, hub)["equipped"]
     hub.setdefault("players", {})[uname] = {
         "room": room, "x": round(x, 1), "y": round(y, 1),
-        "color": _hub_color(uname), "ts": time.time(),
+        "color": _hub_color(uname), "skin": equipped, "ts": time.time(),
     }
     _hub_save(hub)
     return json.dumps({"ok": True})
@@ -10063,6 +10264,170 @@ def hub_offer_respond():
     sender_key = next((k for k in users if k.lower() == sender), sender)
     send_notification(sender_key, f"✅ {uname} prijal tvoju obchodnú ponuku!", from_role="Hub")
     return json.dumps({"ok": True, "msg": "Obchod dokončený!"})
+
+
+# ── Hub Skins ──────────────────────────────────────────────────────────────
+
+HUB_SKINS = {
+    "default":   {"name_sk": "Default",   "name_en": "Default",   "price_cr": 0,     "price_shards": 0,  "free": True},
+    "banik":     {"name_sk": "Baník",     "name_en": "Miner",     "price_cr": 5000,  "price_shards": 0},
+    "astronaut": {"name_sk": "Astronaut", "name_en": "Astronaut", "price_cr": 0,     "price_shards": 10},
+    "kapitan":   {"name_sk": "Kapitán",   "name_en": "Captain",   "price_cr": 25000, "price_shards": 0},
+    "robot":     {"name_sk": "Robot",     "name_en": "Robot",     "price_cr": 0,     "price_shards": 20},
+}
+
+
+def _hub_skins_of(uname, hub=None):
+    if hub is None:
+        hub = _hub_load()
+    rec   = hub.get("skins", {}).get(uname, {})
+    owned = rec.get("owned", ["default"])
+    if "default" not in owned:
+        owned.insert(0, "default")
+    return {"owned": owned, "equipped": rec.get("equipped", "default")}
+
+
+def _hub_give_skin(uname, skin_id, hub=None):
+    """Pridaj skin hráčovi — vráti True ak nový, False ak ho už má."""
+    if hub is None:
+        hub = _hub_load()
+    skins = _hub_skins_of(uname, hub)
+    if skin_id in skins["owned"]:
+        return False
+    skins["owned"].append(skin_id)
+    hub.setdefault("skins", {})[uname] = {
+        **hub.get("skins", {}).get(uname, {}),
+        "owned": skins["owned"],
+    }
+    _hub_save(hub, important=True)
+    return True
+
+
+def _hub_equip_skin(uname, skin_id, hub=None):
+    """Nastav aktívny skin — vráti True ak OK."""
+    if hub is None:
+        hub = _hub_load()
+    skins = _hub_skins_of(uname, hub)
+    if skin_id not in skins["owned"]:
+        return False
+    hub.setdefault("skins", {})[uname] = {
+        **hub.get("skins", {}).get(uname, {}),
+        "owned": skins["owned"],
+        "equipped": skin_id,
+    }
+    if uname in hub.get("players", {}):
+        hub["players"][uname]["skin"] = skin_id
+    _hub_save(hub, important=True)
+    return True
+
+
+@app.route("/hub/skins/state")
+def hub_skins_state():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname  = session["username"].lower()
+    hub    = _hub_load()
+    skins  = _hub_skins_of(uname, hub)
+    users  = load_users()
+    uname_up = next((k for k in users if k.lower() == uname), uname).upper()
+    cr     = load_jf(KB_CAREER, {}).get(uname_up, {}).get("career_cr", 0)
+    shards = _get_shards(uname)
+    shop   = {k: {"name": v["name_sk"], "price_cr": v.get("price_cr", 0),
+                  "price_shards": v.get("price_shards", 0), "free": v.get("free", False)}
+              for k, v in HUB_SKINS.items()}
+    return json.dumps({"ok": True, "owned": skins["owned"],
+                       "equipped": skins["equipped"], "cr": cr, "shards": shards, "shop": shop})
+
+
+@app.route("/hub/skins/buy", methods=["POST"])
+def hub_skins_buy():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+    skin_id  = data.get("skin_id", "")
+    currency = data.get("currency", "cr")
+    if skin_id not in HUB_SKINS:
+        return json.dumps({"ok": False, "error": "neznámy skin"}), 400
+    skin = HUB_SKINS[skin_id]
+    hub  = _hub_load()
+    if skin_id in _hub_skins_of(uname, hub)["owned"]:
+        return json.dumps({"ok": False, "error": "skin už vlastníš"}), 400
+    if skin.get("free"):
+        _hub_give_skin(uname, skin_id, hub)
+        return json.dumps({"ok": True, "msg": f"{skin['name_sk']} pridaný!"})
+    if currency == "cr":
+        price = skin.get("price_cr", 0)
+        if not price:
+            return json.dumps({"ok": False, "error": "skin nie je za CR"}), 400
+        users    = load_users()
+        uname_up = next((k for k in users if k.lower() == uname), uname).upper()
+        career   = load_jf(KB_CAREER, {})
+        cr = career.get(uname_up, {}).get("career_cr", 0)
+        if cr < price:
+            return json.dumps({"ok": False, "error": f"nedostatok CR (máš {cr:,})"}), 400
+        career.setdefault(uname_up, {})["career_cr"] = cr - price
+        save_jf(KB_CAREER, career)
+    elif currency == "shards":
+        price = skin.get("price_shards", 0)
+        if not price:
+            return json.dumps({"ok": False, "error": "skin nie je za ◈"}), 400
+        if not _spend_shards(uname, price):
+            return json.dumps({"ok": False, "error": f"nedostatok ◈ (treba {price})"}), 400
+    else:
+        return json.dumps({"ok": False, "error": "neznáma mena"}), 400
+    _hub_give_skin(uname, skin_id, hub)
+    return json.dumps({"ok": True, "msg": f"{skin['name_sk']} kúpený!"})
+
+
+@app.route("/hub/skins/equip", methods=["POST"])
+def hub_skins_equip():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+    skin_id = data.get("skin_id", "")
+    if skin_id not in HUB_SKINS:
+        return json.dumps({"ok": False, "error": "neznámy skin"}), 400
+    hub = _hub_load()
+    if not _hub_equip_skin(uname, skin_id, hub):
+        return json.dumps({"ok": False, "error": "skin nevlastníš"}), 400
+    return json.dumps({"ok": True, "msg": f"{HUB_SKINS[skin_id]['name_sk']} nasadený!"})
+
+
+@app.route("/hub/skins/gift", methods=["POST"])
+def hub_skins_gift():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+    target  = data.get("to", "").lower()
+    skin_id = data.get("skin_id", "")
+    if not target or target == uname:
+        return json.dumps({"ok": False, "error": "neplatný príjemca"}), 400
+    if skin_id not in HUB_SKINS:
+        return json.dumps({"ok": False, "error": "neznámy skin"}), 400
+    users      = load_users()
+    target_key = next((k for k in users if k.lower() == target), None)
+    if not target_key:
+        return json.dumps({"ok": False, "error": "hráč neexistuje"}), 404
+    hub = _hub_load()
+    if skin_id not in _hub_skins_of(uname, hub)["owned"] and not HUB_SKINS[skin_id].get("free"):
+        return json.dumps({"ok": False, "error": "skin nevlastníš"}), 400
+    if not _hub_give_skin(target, skin_id, hub):
+        return json.dumps({"ok": False, "error": f"{target} tento skin už má"}), 400
+    skin_name = HUB_SKINS[skin_id]["name_sk"]
+    send_notification(target_key, f"🎨 {uname} ti daroval skin {skin_name}!", from_role="Hub")
+    return json.dumps({"ok": True, "msg": f"Skin {skin_name} odoslaný → {target_key}"})
 
 
 # ── ClaudeBot API ──────────────────────────────────────────────────────────
