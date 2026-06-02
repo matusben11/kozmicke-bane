@@ -10198,28 +10198,51 @@ function toast(msg) {
 let _stationSel = null;
 
 function openStationModal(type) {
-  const others = Object.keys(state.players||{}).filter(u => u !== ME);
-  if (!others.length) { toast('Nikto iný nie je online'); return; }
-  if (others.length === 1) { openModal(others[0]); switchTab(type); return; }
-  // Remove existing selector
   document.getElementById('_stn_sel')?.remove();
+  const online = Object.keys(state.players||{}).filter(u => u !== ME);
   const wrap = document.createElement('div');
   wrap.id = '_stn_sel';
-  wrap.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:16px 20px;z-index:30;min-width:200px;font-family:inherit';
-  wrap.innerHTML = `<div style="color:#00ccff;margin-bottom:10px;font-size:1.15em">${type==='gift'?'🎁 Komu giftnúť':'🤝 S kým obchodovať'}</div>`
-    + others.map(u => {
-        const p = state.players[u];
-        const rname = ROOMS[p?.room]?.name || (p?.room||'');
-        return `<div onclick="selectStation('${u}','${type}')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #00ccff11">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#00ccff'};margin-right:6px;vertical-align:middle"></span>
-          ${u} <span style="color:#555;font-size:.8em">${rname}</span>
-        </div>`;
-      }).join('')
-    + `<button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
+  wrap.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:16px 20px;z-index:30;min-width:220px;max-width:300px;font-family:inherit';
+
+  if (type === 'gift') {
+    // Gift works for anyone — show online list + manual input for offline
+    const onlineRows = online.map(u => {
+      const p = state.players[u];
+      return `<div onclick="selectStation('${u}','gift')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #ffd70011">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#ffd700'};margin-right:6px;vertical-align:middle"></span>
+        ${u} <span style="color:#39ff1488;font-size:.75em">● online</span>
+      </div>`;
+    }).join('');
+    wrap.innerHTML = `<div style="color:#ffd700;margin-bottom:10px;font-size:1.15em">🎁 Komu giftnúť</div>`
+      + (onlineRows || `<div style="color:#555;font-size:.8em;margin-bottom:6px">— nikto online —</div>`)
+      + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffd70022">
+           <div style="color:#ffd70066;font-size:.78em;margin-bottom:5px">Alebo zadaj username (aj offline):</div>
+           <div style="display:flex;gap:6px">
+             <input id="_stn_uname" placeholder="username" style="flex:1;background:#000c14;border:1px solid #ffd70044;color:#ffd700;font-family:inherit;font-size:.85em;padding:3px 7px;outline:none">
+             <button onclick="selectStation(document.getElementById('_stn_uname').value.trim(),'gift')" style="background:#000;border:1px solid #ffd700;color:#ffd700;font-family:inherit;font-size:.85em;padding:3px 10px;cursor:pointer">OK</button>
+           </div>
+         </div>
+         <button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
+  } else {
+    // Trade — only online players make sense
+    if (!online.length) { toast('Nikto iný nie je online'); return; }
+    if (online.length === 1) { openModal(online[0]); switchTab('trade'); return; }
+    wrap.innerHTML = `<div style="color:#4a90e2;margin-bottom:10px;font-size:1.15em">🤝 S kým obchodovať</div>`
+      + online.map(u => {
+          const p = state.players[u];
+          const rname = ROOMS[p?.room]?.name || '';
+          return `<div onclick="selectStation('${u}','trade')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #00ccff11">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#00ccff'};margin-right:6px;vertical-align:middle"></span>
+            ${u} <span style="color:#555;font-size:.8em">${rname}</span>
+          </div>`;
+        }).join('')
+      + `<button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
+  }
   document.body.appendChild(wrap);
 }
 
 function selectStation(uname, type) {
+  if (!uname) { toast('Zadaj username'); return; }
   document.getElementById('_stn_sel')?.remove();
   openModal(uname);
   switchTab(type);
