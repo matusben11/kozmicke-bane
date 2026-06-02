@@ -42,6 +42,9 @@ KB_POINTS       = DATA_DIR / "kb_points.json"
 KB_SHARDS       = DATA_DIR / "kb_shards.json"
 KB_EPSILON      = DATA_DIR / "kb_epsilon.json"
 KB_HUB          = DATA_DIR / "kb_hub.json"
+KB_FEED         = DATA_DIR / "kb_feed.json"
+KB_QUESTS       = DATA_DIR / "kb_quests.json"
+KB_WEEKLY       = DATA_DIR / "kb_weekly.json"
 
 # ── Filesystem helper (musí byť pred KV sekciou) ───────────────────────────
 def _atomic_write(path, text):
@@ -93,6 +96,9 @@ _KV_KEYS = {
     KB_SHARDS:      "kb_shards",
     KB_EPSILON:     "kb_epsilon",
     KB_HUB:         "kb_hub",
+    KB_FEED:        "kb_feed",
+    KB_QUESTS:      "kb_quests",
+    KB_WEEKLY:      "kb_weekly",
 }
 
 
@@ -2293,6 +2299,9 @@ input:focus{border-color:#ffb000;}
       <input type="password" name="password">
       <label>__LBL_CONFIRM_PW__</label>
       <input type="password" name="password2">
+      <label style="color:#dd00ff88;font-size:.85em">&#128279; Referral kód (nepovinné)</label>
+      <input type="text" name="ref_code" placeholder="napr. A1B2C3D" maxlength="10"
+        style="background:#0a0012;border-color:#dd00ff33;color:#dd00ff;letter-spacing:.1em;text-transform:uppercase">
       <button class="btn" type="submit">&#10003; &nbsp; __BTN_REGISTER__</button>
     </form>
   </div>
@@ -2768,6 +2777,75 @@ def render_lobby(pilot):
              f'<span style="color:#dd00ff"><strong>{_vs_bal}</strong> / {VS_MAX_BALANCE} ◈</span></a>'
              f'</div>')
 
+    # ── Activity Feed
+    _feed_data  = load_jf(KB_FEED, {"events": []})
+    _feed_items = _feed_data.get("events", [])[:12]
+    if _feed_items:
+        html += '<div class="card" style="border-color:#00ccff22">'
+        html += f'<div class="card-title" style="color:#00ccff88">&#128249; {L("AKTIVITA — čo sa deje","ACTIVITY — what is happening")}</div>'
+        for ev in _feed_items:
+            ts_str = datetime.fromtimestamp(ev.get("ts", 0)).strftime("%H:%M")
+            html += (f'<div style="font-size:.82em;color:#888;padding:2px 0;border-bottom:1px solid #111">'
+                     f'<span style="color:#444">[{ts_str}]</span> {ev.get("text","")}</div>')
+        html += '</div>'
+
+    # ── Týždenný Leaderboard
+    _wdata  = _weekly_check()
+    _wscores = sorted(_wdata.get("scores", {}).items(), key=lambda x: -x[1])[:5]
+    _wprev  = _wdata.get("prev_winner")
+    html += '<div class="card" style="border-color:#ffd70033">'
+    html += f'<div class="card-title" style="color:#ffd700">&#127942; {L("TÝŽDENNÝ LEADERBOARD","WEEKLY LEADERBOARD")}</div>'
+    if _wprev:
+        html += (f'<div style="font-size:.78em;color:#888;margin-bottom:6px">'
+                 f'{L("Minulý víťaz","Last winner")}: <span style="color:#ffd700">{_wprev.get("uname","")}</span>'
+                 f' — {_wprev.get("cr",0):,} CR ({_wprev.get("week","")})</div>')
+    if _wscores:
+        _wmed = ["🥇","🥈","🥉"]
+        for i, (wu, wcr) in enumerate(_wscores):
+            m = _wmed[i] if i < 3 else f"{i+1}."
+            html += (f'<div style="display:flex;justify-content:space-between;font-size:.85em;'
+                     f'padding:2px 0;border-bottom:1px solid #1a1400">'
+                     f'<span>{m} {wu}</span><span style="color:#ffd700">{wcr:,} CR</span></div>')
+    else:
+        html += f'<div style="color:#555;font-size:.82em">{L("Tento týždeň ešte nikto nehral","No games this week yet")}</div>'
+    html += '</div>'
+
+    # ── Denné questy
+    _today_quests = _quests_today(pilot.lower())
+    _done_count   = sum(1 for q in _today_quests if q["done"])
+    html += '<div class="card" style="border-color:#39ff1433">'
+    html += f'<div class="card-title" style="color:#39ff14">&#9654; {L("DENNÉ QUESTY","DAILY QUESTS")} <span style="color:#555;font-size:.8em">({_done_count}/3)</span></div>'
+    for q in _today_quests:
+        done   = q["done"]
+        prog   = q["progress"]
+        target = q["target"]
+        desc   = q.get("desc_sk") if session.get("lang","sk") != "en" else q.get("desc_en", q.get("desc_sk",""))
+        rew    = f'+{q["reward"]:,} CR' if q["reward_type"] == "cr" else f'+{q["reward"]} ◈'
+        bar_w  = int(100 * prog / max(target, 1))
+        color  = "#39ff14" if done else "#00ccff"
+        html += (f'<div style="padding:4px 0;border-bottom:1px solid #0a1a0a">'
+                 f'<div style="display:flex;justify-content:space-between;font-size:.82em">'
+                 f'<span style="color:{"#555" if done else "#aaa"}">'
+                 f'{"✅ " if done else ""}{desc}</span>'
+                 f'<span style="color:{color};font-size:.78em">{rew}</span></div>'
+                 f'<div style="background:#0a1a0a;height:4px;border-radius:2px;margin-top:3px">'
+                 f'<div style="background:{color};width:{bar_w}%;height:4px;border-radius:2px"></div></div>'
+                 f'<div style="font-size:.72em;color:#444;margin-top:1px">{prog}/{target}</div>'
+                 f'</div>')
+    html += '</div>'
+
+    # ── Referral kód
+    _my_ref_code = _ensure_ref_code(pilot.lower())
+    _ref_count   = len(u_data.get("referrals", []))
+    html += '<div class="card" style="border-color:#dd00ff22">'
+    html += f'<div class="card-title" style="color:#dd00ff88">&#128279; {L("REFERRAL — pozvi priateľa","REFERRAL — invite a friend")}</div>'
+    html += (f'<div style="font-size:.82em;color:#aaa;margin-bottom:4px">'
+             f'{L("Tvoj kód","Your code")}: <strong style="color:#dd00ff;letter-spacing:.1em">{_my_ref_code}</strong>'
+             f' &nbsp; <span style="color:#555">({_ref_count} {L("pozvaných","invited")})</span></div>')
+    html += (f'<div style="font-size:.78em;color:#555">'
+             f'{L("Pozvaný hráč: +3 ◈. Ty: +5 ◈ keď vyhrajú prvú hru.","Invited: +3 ◈. You: +5 ◈ when they win their first game.")}</div>')
+    html += '</div>'
+
     # ── Leaderboard top 5
     entries = sorted(career.items(), key=lambda x: -x[1].get("career_cr", 0))
     html += '<div class="card">'
@@ -3231,12 +3309,31 @@ def register():
         return render_login(tab="register", err_reg=msg)
     if password != password2:
         return render_login(tab="register", err_reg=L("Heslá sa nezhodujú.", "Passwords do not match."))
+    ref_code_used = request.form.get("ref_code", "").strip().upper()
     users[username] = {
-        "password":   password,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "password":     password,
+        "created_at":   datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "referral_code": _ref_code(username),
+        "referred_by":  None,
+        "referrals":    [],
+        "tutorial_done": False,
         "score": 0, "games_played": 0, "kb_sessions": 0,
     }
+    # Spracuj referral
+    if ref_code_used:
+        referrer_key = next((k for k, v in users.items()
+                             if v.get("referral_code", "").upper() == ref_code_used
+                             and k != username), None)
+        if referrer_key:
+            users[username]["referred_by"] = referrer_key
+            users[referrer_key].setdefault("referrals", []).append(username)
+            _add_shards(username.lower(), 3, source="referral_new")
     save_users(users)
+    # Vitajte notifikácia
+    send_notification(username,
+        "Vitaj na palube Kozmické Bane! 🚀 Som ClaudeBot. Pozri si Hub, zoznám sa s pilotmi a začni ťažiť!",
+        from_role="ClaudeBot")
+    _feed_add(f"🚀 Nový pilot {username} sa pripojil ku flotile")
     return render_login(tab="login",
                         ok_login=L(f"Účet '{username}' vytvorený! Prihlás sa.", f"Account '{username}' created! Sign in."))
 
@@ -3395,6 +3492,7 @@ def game():
         f"window.__IS_PREMIUM__={'true' if _is_premium else 'false'};"
         f"window.__BETA_FLAGS__={json.dumps(_beta_flags)};"
         f"window.__SESSION_USER__={json.dumps(session['username'].lower())};"
+        f"window.__SHOW_TUTORIAL__={json.dumps(not u_data.get('tutorial_done', False))};"
         f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
@@ -3557,6 +3655,25 @@ def api_session_end():
             _add_shards(pilot, 2, "win_zyrax9")
         elif planet == 2 and _win_shard_flag(pilot, 2):
             _add_shards(pilot, 4, "win_zyrax10")
+        # Quest + feed + weekly
+        done_q = _quest_progress(pilot.lower(), "win")
+        _quest_give_rewards(pilot.lower(), done_q)
+        _feed_add(f"🏆 {pilot} vyhral {earned:,} CR na planéte #{planet}")
+        _weekly_add(pilot, earned)
+        # Referral odmena — ak prvá výhra
+        if e.get("wins", 0) == 1:
+            users_tmp = load_users()
+            referrer  = users_tmp.get(pilot, {}).get("referred_by")
+            if referrer:
+                _add_shards(referrer.lower(), 5, source="referral_win")
+                send_notification(referrer, f"🎉 Tvoj pozvaný hráč {pilot} vyhral prvú hru! +5 ◈", from_role="System")
+    elif earned > 0:
+        _weekly_add(pilot, earned)
+    # Mine quest (amount z klienta)
+    mined_amt = int(d.get("mined", 0))
+    if mined_amt > 0:
+        done_q = _quest_progress(pilot.lower(), "mine", mined_amt)
+        _quest_give_rewards(pilot.lower(), done_q)
     r, rname = kb_rank(e["career_cr"])
     e["rank"] = r; e["rank_name"] = rname
     career[key] = e
@@ -3568,6 +3685,18 @@ def api_session_end():
         users[pilot]["score"]        = users[pilot].get("score", 0) + max(0, earned // 100)
         save_users(users)
     return json.dumps(e)
+
+@app.route("/api/tutorial_done", methods=["POST"])
+def api_tutorial_done():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    users = load_users()
+    pilot = session["username"]
+    if pilot in users:
+        users[pilot]["tutorial_done"] = True
+        save_users(users)
+    return json.dumps({"ok": True})
+
 
 @app.route("/api/get_career")
 def api_get_career():
@@ -6431,6 +6560,7 @@ def market_sell():
     save_jf(KB_CAREER, career)
 
     _apply_price_impact(item_id, qty, "sell")
+    done_q = _quest_progress(uname, "sell"); _quest_give_rewards(uname, done_q)
 
     # Predaj Pu-239 zvyšuje proliferačnú horúčavu
     if item_id == "pu239":
@@ -9562,6 +9692,16 @@ _HUB_PAGE = """<!DOCTYPE html><html lang="sk"><head>
       <div class="sb-section"><div class="sb-title">ONLINE HRÁČI</div></div>
       <div class="sb-players" id="sb-players"><span style="color:#333;font-size:.8em">načítavam...</span></div>
       <div class="sb-offers" id="sb-offers"></div>
+      <div style="border-top:1px solid #00ccff11;padding:6px 10px;display:flex;flex-direction:column;flex:1;min-height:0">
+        <div class="sb-title">CHAT — miestnosť</div>
+        <div id="hub-chat" style="flex:1;overflow-y:auto;font-size:.76em;line-height:1.5;min-height:60px;max-height:160px;color:#aaa"></div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+          <input id="chat-input" placeholder="správa..." maxlength="200"
+            style="flex:1;background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.8em;padding:3px 6px;outline:none"
+            onkeydown="if(event.key==='Enter'){sendChat();event.preventDefault()}">
+          <button onclick="sendChat()" style="background:#000;border:1px solid #00ccff44;color:#00ccff;font-family:inherit;font-size:.8em;padding:2px 8px;cursor:pointer">➤</button>
+        </div>
+      </div>
       <div class="ctrl-hint">WASD / ↑↓←→ pohyb<br>Klikni na hráča → trade/gift</div>
     </div>
   </div>
@@ -9669,6 +9809,7 @@ function pollState() {
     renderCanvas();
     renderSidebar();
     renderOffers();
+    if (d.chat) renderChat(d.chat);
   }).catch(()=>{});
 }
 
@@ -10194,6 +10335,34 @@ function toast(msg) {
   _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
 }
 
+// ── Chat ────────────────────────────────────────────────────────────────────
+let _lastChatTs = 0;
+
+function renderChat(msgs) {
+  if (!msgs || !msgs.length) return;
+  const el = document.getElementById('hub-chat');
+  const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 20;
+  const newMsgs = msgs.filter(m => m.t > _lastChatTs);
+  if (!newMsgs.length) return;
+  _lastChatTs = msgs[msgs.length-1].t;
+  newMsgs.forEach(m => {
+    const div = document.createElement('div');
+    const isMe = m.u === ME;
+    div.style.cssText = `color:${isMe?'#00ccff':'#ccc'};word-break:break-word`;
+    div.innerHTML = `<span style="color:${isMe?'#00ccff88':'#888'};font-size:.85em">${m.u}:</span> ${m.m.replace(/</g,'&lt;')}`;
+    el.appendChild(div);
+  });
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function sendChat() {
+  const inp = document.getElementById('chat-input');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+  post('/hub/chat', {msg}).then(d => { if (!d.ok) toast('✗ '+(d.error||'Chyba')); });
+}
+
 // ── Station Interactions ────────────────────────────────────────────────────
 let _stationSel = null;
 
@@ -10337,6 +10506,7 @@ def hub_page():
             "color": _hub_color(uname), "skin": equipped_skin, "ts": time.time(),
         }
         _hub_save(hub, important=True)
+        done_q = _quest_progress(uname, "hub"); _quest_give_rewards(uname, done_q)
     else:
         hub["players"][uname]["skin"] = equipped_skin
 
@@ -10367,7 +10537,31 @@ def hub_state_route():
     _hub_cleanup(hub)
     my_offers = [o for o in hub.get("offers", [])
                  if o.get("to") == uname and o.get("status") == "pending"]
-    return json.dumps({"ok": True, "players": hub.get("players", {}), "offers": my_offers})
+    room_chat = hub.get("chat", {}).get(hub.get("players", {}).get(uname, {}).get("room", "dock"), [])[-40:]
+    return json.dumps({"ok": True, "players": hub.get("players", {}),
+                       "offers": my_offers, "chat": room_chat})
+
+
+@app.route("/hub/chat", methods=["POST"])
+def hub_chat():
+    if not _require_session():
+        return json.dumps({"ok": False}), 401
+    uname = session["username"].lower()
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return json.dumps({"ok": False}), 400
+    msg  = str(data.get("msg", "")).strip()[:200]
+    if not msg:
+        return json.dumps({"ok": False, "error": "prázdna správa"}), 400
+    hub  = _hub_load()
+    room = hub.get("players", {}).get(uname, {}).get("room", "dock")
+    hub.setdefault("chat", {}).setdefault(room, []).append({
+        "u": uname, "m": msg, "t": round(time.time()),
+    })
+    hub["chat"][room] = hub["chat"][room][-50:]
+    _hub_save(hub, important=True)
+    return json.dumps({"ok": True})
 
 
 @app.route("/hub/move", methods=["POST"])
@@ -10430,6 +10624,8 @@ def hub_gift():
         career.setdefault(t_key, {})["career_cr"] = career.get(t_key, {}).get("career_cr", 0) + amount
         save_jf(KB_CAREER, career)
         send_notification(target_key, f"🎁 {uname} ti daroval {amount:,} CR!", from_role="Hub")
+        _feed_add(f"🎁 {uname} daroval {amount:,} CR hráčovi {target_key}")
+        done_q = _quest_progress(uname, "gift"); _quest_give_rewards(uname, done_q)
         return json.dumps({"ok": True, "msg": f"Poslal si {amount:,} CR → {target_key}"})
 
     elif gift_type == "shards":
@@ -10501,6 +10697,7 @@ def hub_offer():
     })
     _hub_save(hub, important=True)
     send_notification(target_key, f"🤝 {uname} ti navrhol obchod v Hube!", from_role="Hub")
+    done_q = _quest_progress(uname, "offer"); _quest_give_rewards(uname, done_q)
     return json.dumps({"ok": True, "offer_id": offer_id})
 
 
@@ -10599,6 +10796,138 @@ def hub_offer_respond():
     sender_key = next((k for k in users if k.lower() == sender), sender)
     send_notification(sender_key, f"✅ {uname} prijal tvoju obchodnú ponuku!", from_role="Hub")
     return json.dumps({"ok": True, "msg": "Obchod dokončený!"})
+
+
+# ── Community helpers ──────────────────────────────────────────────────────
+
+# Activity Feed
+def _feed_add(text):
+    feed = load_jf(KB_FEED, {"events": []})
+    feed["events"].insert(0, {"ts": time.time(), "text": text})
+    feed["events"] = feed["events"][:100]
+    save_jf(KB_FEED, feed)
+
+# Daily Quests
+QUEST_POOL = [
+    {"id": "win_game",    "desc_sk": "Vyhraj hru na ľubovoľnej planéte",  "desc_en": "Win any game",           "type": "win",   "target": 1,   "reward_type": "cr",     "reward": 5000},
+    {"id": "mine_300",    "desc_sk": "Vydolob 300 jednotiek minerálov",   "desc_en": "Mine 300 mineral units", "type": "mine",  "target": 300, "reward_type": "shards", "reward": 2},
+    {"id": "gift_player", "desc_sk": "Pošli gift inému hráčovi v Hube",   "desc_en": "Send a gift in Hub",     "type": "gift",  "target": 1,   "reward_type": "shards", "reward": 1},
+    {"id": "hub_visit",   "desc_sk": "Navštív Hub stanicu",               "desc_en": "Visit the Hub",          "type": "hub",   "target": 1,   "reward_type": "shards", "reward": 1},
+    {"id": "reach_l3",    "desc_sk": "Dostaň sa na hĺbku L3 pri ťažbe",  "desc_en": "Reach depth L3",         "type": "depth", "target": 3,   "reward_type": "cr",     "reward": 3000},
+    {"id": "send_offer",  "desc_sk": "Pošli obchodnú ponuku hráčovi",    "desc_en": "Send a trade offer",     "type": "offer", "target": 1,   "reward_type": "shards", "reward": 2},
+    {"id": "sell_market", "desc_sk": "Predaj suroviny na trhu",           "desc_en": "Sell on the market",     "type": "sell",  "target": 1,   "reward_type": "cr",     "reward": 2000},
+]
+
+def _quests_today(uname):
+    today = datetime.now().strftime("%Y-%m-%d")
+    data  = load_jf(KB_QUESTS, {})
+    rec   = data.get(uname, {})
+    if rec.get("date") == today:
+        return rec["quests"]
+    import hashlib as _hl
+    day_seed = int(_hl.md5(today.encode()).hexdigest(), 16)
+    random.seed(day_seed % (2**32))
+    chosen = random.sample(QUEST_POOL, min(3, len(QUEST_POOL)))
+    random.seed()
+    quests = [{"id": q["id"], "desc_sk": q["desc_sk"], "desc_en": q["desc_en"],
+               "type": q["type"], "target": q["target"],
+               "reward_type": q["reward_type"], "reward": q["reward"],
+               "progress": 0, "done": False}
+              for q in chosen]
+    data[uname] = {"date": today, "quests": quests}
+    save_jf(KB_QUESTS, data)
+    return quests
+
+def _quest_progress(uname, quest_type, amount=1):
+    """Aktualizuj progress questu. Vracia list dokončených questov."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    data  = load_jf(KB_QUESTS, {})
+    rec   = data.get(uname, {})
+    if rec.get("date") != today:
+        _quests_today(uname)
+        data = load_jf(KB_QUESTS, {})
+        rec  = data.get(uname, {})
+    completed = []
+    changed   = False
+    for q in rec.get("quests", []):
+        if q["done"] or q["type"] != quest_type:
+            continue
+        q["progress"] = min(q["target"], q["progress"] + amount)
+        changed = True
+        if q["progress"] >= q["target"]:
+            q["done"] = True
+            completed.append(q)
+    if changed:
+        data[uname] = rec
+        save_jf(KB_QUESTS, data)
+    return completed
+
+def _quest_give_rewards(uname, completed_quests):
+    if not completed_quests:
+        return
+    users    = load_users()
+    uname_up = next((k for k in users if k.lower() == uname), uname).upper()
+    career   = load_jf(KB_CAREER, {})
+    for q in completed_quests:
+        if q["reward_type"] == "shards":
+            _add_shards(uname, q["reward"], source="quest")
+        elif q["reward_type"] == "cr":
+            career.setdefault(uname_up, {})["career_cr"] = (
+                career.get(uname_up, {}).get("career_cr", 0) + q["reward"])
+    save_jf(KB_CAREER, career)
+    user_key = next((k for k in users if k.lower() == uname), None)
+    if user_key:
+        for q in completed_quests:
+            reward_str = f"{q['reward']:,} CR" if q["reward_type"] == "cr" else f"{q['reward']} ◈"
+            send_notification(user_key, f"✅ Quest dokončený: {q['desc_sk']} → +{reward_str}", from_role="Quest")
+
+# Weekly Leaderboard
+def _weekly_check():
+    """Skontroluj týždenný reset. Vracia aktuálne weekly data."""
+    import datetime as _dt
+    now  = _dt.datetime.utcnow()
+    week = now.strftime("%Y-W%V")
+    data = load_jf(KB_WEEKLY, {"week": "", "scores": {}, "prev_winner": None})
+    if data.get("week") != week:
+        scores = data.get("scores", {})
+        if scores:
+            winner = max(scores, key=lambda u: scores[u])
+            data["prev_winner"] = {"uname": winner, "cr": scores[winner], "week": data.get("week", "")}
+            users = load_users()
+            w_key = next((k for k in users if k.lower() == winner), None)
+            if w_key:
+                send_notification(w_key,
+                    f"🏆 Vyhral si týždenný leaderboard s {scores[winner]:,} CR! Rank Šampión na 7 dní.",
+                    from_role="System")
+                sp = get_sp_ranks(users[w_key])
+                champ = "🏆 Šampión"
+                if champ not in sp:
+                    users[w_key]["special_ranks"] = ([champ] + [s for s in sp if s != champ])[:2]
+                    save_users(users)
+        data["week"]   = week
+        data["scores"] = {}
+        save_jf(KB_WEEKLY, data)
+    return data
+
+def _weekly_add(uname, cr_amount):
+    data = _weekly_check()
+    key  = uname.lower()
+    data["scores"][key] = data["scores"].get(key, 0) + cr_amount
+    save_jf(KB_WEEKLY, data)
+
+# Referral
+def _ref_code(uname):
+    import hashlib as _hl
+    return _hl.sha256(uname.lower().encode()).hexdigest()[:7].upper()
+
+def _ensure_ref_code(uname, users=None):
+    if users is None:
+        users = load_users()
+    key = next((k for k in users if k.lower() == uname), None)
+    if key and not users[key].get("referral_code"):
+        users[key]["referral_code"] = _ref_code(uname)
+        save_users(users)
+    return users[key]["referral_code"] if key else _ref_code(uname)
 
 
 # ── Hub Skins ──────────────────────────────────────────────────────────────

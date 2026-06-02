@@ -3252,6 +3252,53 @@ if (_startSlot) {
   } else {
     sceneBoot(PILOT);
   }
+  // Onboarding tutorial
+  if(window.__SHOW_TUTORIAL__){
+    setTimeout(_showTutorial, 800);
+  }
+}
+
+// ── Tutorial overlay ────────────────────────────────────────────────────────
+const _tutSteps = [
+  {title:'Vitaj, pilot! 🚀', body:'Toto je Kozmické Bane — vesmírna ťažobná hra. Ovládaš loď a ťažíš minerály na rôznych planétach.'},
+  {title:'Ako hrať ⛏', body:'Použi WASD alebo šípky na pohyb po mape. Enter/Space = ťaž. Escape = odleť domov. Čím hlbšie, tým lepšie rudy!'},
+  {title:'Zarob CR 💰', body:'Za každý zisk dostaneš Career Credits (CR). Kúp upgrady, preskúmaj Hub, obchoduj s inými pilotmi a šplhaj na leaderboard.'},
+  {title:'Hub & Komunita 🌐', body:'V Hube sa stretneš s ostatnými pilotmi — chatuj, giftuj CR, obchoduj so surovinami a nakupuj skiny. Navštív ho z lobby!'},
+];
+let _tutStep = 0;
+
+function _showTutorial() {
+  if(document.getElementById('_tut_overlay')) return;
+  const ov = document.createElement('div');
+  ov.id = '_tut_overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:"VT323",monospace';
+  document.body.appendChild(ov);
+  _renderTutStep();
+}
+
+function _renderTutStep() {
+  const ov = document.getElementById('_tut_overlay');
+  if(!ov) return;
+  const s = _tutSteps[_tutStep];
+  const isLast = _tutStep === _tutSteps.length - 1;
+  ov.innerHTML = `<div style="background:#050f15;border:1px solid #00ccff55;padding:28px 32px;max-width:420px;width:90%;text-align:center">
+    <div style="color:#00ccff;font-size:1.4em;margin-bottom:10px">${s.title}</div>
+    <div style="color:#aaa;font-size:1em;line-height:1.5;margin-bottom:20px">${s.body}</div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="_tutSkip()" style="background:#000;border:1px solid #444;color:#555;font-family:inherit;font-size:.9em;padding:4px 14px;cursor:pointer">Preskočiť</button>
+      ${_tutStep > 0 ? '<button onclick="_tutPrev()" style="background:#000;border:1px solid #00ccff33;color:#00ccff77;font-family:inherit;font-size:.9em;padding:4px 14px;cursor:pointer">← Späť</button>' : ''}
+      <button onclick="${isLast ? '_tutFinish()' : '_tutNext()'}" style="background:#001a2e;border:1px solid #00ccff;color:#00ccff;font-family:inherit;font-size:.95em;padding:4px 18px;cursor:pointer">${isLast ? '✓ Začať hrať!' : 'Ďalej →'}</button>
+    </div>
+    <div style="color:#333;font-size:.75em;margin-top:12px">${_tutStep+1} / ${_tutSteps.length}</div>
+  </div>`;
+}
+
+function _tutNext() { _tutStep = Math.min(_tutStep+1, _tutSteps.length-1); _renderTutStep(); }
+function _tutPrev() { _tutStep = Math.max(_tutStep-1, 0); _renderTutStep(); }
+function _tutSkip() { _tutFinish(); }
+function _tutFinish() {
+  document.getElementById('_tut_overlay')?.remove();
+  fetch('/api/tutorial_done', {method:'POST'}).catch(()=>{});
 }
 </script>
 </body>
