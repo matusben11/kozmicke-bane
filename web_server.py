@@ -9538,44 +9538,17 @@ body{background:#000;color:#00ccff;font-family:'VT323',monospace;font-size:1rem;
 </style>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
 
-
-@app.route("/hub")
-def hub_page():
-    if not _require_session():
-        return redirect("/")
-    uname    = session["username"].lower()
-    lang     = session.get("lang", "sk")
-    hub      = _hub_load()
-    _hub_cleanup(hub)
-    # Zaregistruj hráča ak ešte nie je v hube
-    if uname not in hub.get("players", {}):
-        hub.setdefault("players", {})[uname] = {
-            "room": "dock", "x": 50.0, "y": 50.0,
-            "color": _hub_color(uname), "ts": time.time(),
-        }
-        _hub_save(hub, important=True)
-
-    rooms_js = json.dumps({k: {"name": v["name_en"] if lang == "en" else v["name_sk"],
-                                **{d: v[d] for d in ("n","s","w","e") if d in v}}
-                           for k, v in HUB_ROOMS.items()})
-    commodities_js = json.dumps([
-        {"id": i["id"], "label": i["id"].capitalize(), "unit": i["unit_sk"]}
-        for i in NPC_MARKET
-        if i["id"] not in ("pu239",)   # pu239 vynecháme z giftu pre jednoduchosť
-    ])
-
-    return f"""<!DOCTYPE html><html lang="sk"><head>
+# Statický HTML+JS pre hub — regular string (nie f-string), žiadne {{ }} escapovanie
+_HUB_PAGE = """<!DOCTYPE html><html lang="sk"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hub — Kozmické Bane</title>{_HUB_CSS}</head>
+<title>Hub — Kozmické Bane</title>__CSS__</head>
 <body>
 <div id="wrap">
   <div id="topbar">
     <h1>◉ HUB</h1>
     <span style="color:#00ccff33">|</span>
     <span id="room-crumb" style="color:#00ccff99;font-size:.9em">Dok</span>
-    <span style="margin-left:auto;display:flex;gap:10px">
-      <a href="/lobby">← Lobby</a>
-    </span>
+    <span style="margin-left:auto"><a href="/lobby">← Lobby</a></span>
   </div>
   <div id="main">
     <div id="room-area">
@@ -9590,7 +9563,6 @@ def hub_page():
     </div>
   </div>
 </div>
-
 <div id="overlay" onclick="closeModal()"></div>
 <div id="modal">
   <h3 id="modal-title">● hráč</h3>
@@ -9598,60 +9570,49 @@ def hub_page():
     <button class="tab-btn active" onclick="switchTab('gift')">🎁 Gift</button>
     <button class="tab-btn" onclick="switchTab('trade')">🤝 Trade</button>
   </div>
-
   <div id="tab-gift">
-    <div class="form-row">
-      <label>Typ:</label>
+    <div class="form-row"><label>Typ:</label>
       <select id="g-type"><option value="cr">CR</option><option value="shards">◈ Void Shards</option></select>
     </div>
-    <div class="form-row">
-      <label>Množstvo:</label>
+    <div class="form-row"><label>Množstvo:</label>
       <input type="number" id="g-amount" min="1" value="500">
     </div>
     <button class="btn-sm" style="color:#39ff14;border-color:#39ff14" onclick="doGift()">🎁 Odoslať</button>
   </div>
-
   <div id="tab-trade" style="display:none">
     <div style="font-size:.75em;color:#00ccff44;margin-bottom:8px">Dávam → Chcem</div>
-    <div class="form-row">
-      <label>Dávam:</label>
+    <div class="form-row"><label>Dávam:</label>
       <select id="t-give-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
       <input type="number" id="t-give-amt" min="1" value="1000">
     </div>
-    <div class="form-row">
-      <label>Chcem:</label>
+    <div class="form-row"><label>Chcem:</label>
       <select id="t-want-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
       <input type="number" id="t-want-amt" min="1" value="100">
     </div>
     <button class="btn-sm" style="color:#ffd700;border-color:#ffd700" onclick="doOffer()">🤝 Odoslať ponuku</button>
   </div>
-
   <div class="modal-footer">
     <button class="btn-sm" style="color:#ff4455;border-color:#ff4455" onclick="closeModal()">✕ Zavrieť</button>
   </div>
 </div>
 <div id="toast"></div>
-
 <script>
-const ME = {json.dumps(uname)};
-const ROOMS = {rooms_js};
-const COMMODITIES = {commodities_js};
-
+__INIT__
 // Doplň komodity do selectov
-[document.getElementById('g-type'), document.getElementById('t-give-type'), document.getElementById('t-want-type')].forEach(sel => {{
-  COMMODITIES.forEach(c => {{
+[document.getElementById('g-type'), document.getElementById('t-give-type'), document.getElementById('t-want-type')].forEach(sel => {
+  COMMODITIES.forEach(c => {
     const o = document.createElement('option');
     o.value = c.id; o.textContent = c.id.charAt(0).toUpperCase()+c.id.slice(1)+' ('+c.unit+')';
     sel.appendChild(o);
-  }});
-}});
+  });
+});
 
 let myRoom = 'dock', myX = 50, myY = 50;
-let state = {{players:{{}}, offers:[]}};
+let state = {players:{}, offers:[]};
 let pendingMove = null;
 let selectedPlayer = null;
 
-document.addEventListener('keydown', e => {{
+document.addEventListener('keydown', e => {
   const tag = document.activeElement?.tagName;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
   const STEP = 4;
@@ -9661,182 +9622,205 @@ document.addEventListener('keydown', e => {{
   else if (e.key==='a'||e.key==='ArrowLeft')  myX = Math.max(8, myX-STEP);
   else if (e.key==='d'||e.key==='ArrowRight') myX = Math.min(92, myX+STEP);
   else moved = false;
-  if (moved) {{ e.preventDefault(); pendingMove = {{room:myRoom,x:myX,y:myY}}; renderCanvas(); }}
-}});
+  if (moved) { e.preventDefault(); pendingMove = {room:myRoom,x:myX,y:myY}; renderCanvas(); }
+});
 
-setInterval(() => {{
+setInterval(() => {
   if (!pendingMove) return;
   const m = pendingMove; pendingMove = null;
   post('/hub/move', m);
-}}, 200);
+}, 200);
 
 setInterval(pollState, 2000);
 pollState();
 
-function pollState() {{
-  fetch('/hub/state').then(r=>r.json()).then(d => {{
+function pollState() {
+  fetch('/hub/state').then(r=>r.json()).then(d => {
     if (!d.ok) return;
     state = d;
     renderCanvas();
     renderSidebar();
     renderOffers();
-  }}).catch(()=>{{}});
-}}
+  }).catch(()=>{});
+}
 
-function changeRoom(room) {{
+function changeRoom(room) {
   myRoom = room; myX = 50; myY = 50;
-  pendingMove = {{room, x:50, y:50}};
+  pendingMove = {room, x:50, y:50};
   renderCanvas();
   document.getElementById('room-crumb').textContent = ROOMS[room]?.name || room;
-}}
+}
 
-function renderCanvas() {{
+function renderCanvas() {
   const canvas = document.getElementById('room-canvas');
   const room = ROOMS[myRoom] || ROOMS.dock;
   document.getElementById('room-label').textContent = '★ ' + (room.name||myRoom).toUpperCase();
   document.getElementById('room-crumb').textContent = room.name || myRoom;
   canvas.innerHTML = '';
-
-  // Exit tlačidlá
-  ['n','s','w','e'].forEach(dir => {{
+  ['n','s','w','e'].forEach(dir => {
     const target = room[dir];
     if (!target) return;
     const tname = ROOMS[target]?.name || target;
-    const dirLabel = {{n:'↑',s:'↓',w:'←',e:'→'}}[dir];
     const btn = document.createElement('button');
     btn.className = 'exit-btn exit-'+dir;
     btn.textContent = dir==='e' ? tname+' →' : dir==='w' ? '← '+tname : dir==='n' ? '↑ '+tname : '↓ '+tname;
     btn.onclick = () => changeRoom(target);
     canvas.appendChild(btn);
-  }});
-
-  // Hráči v tejto miestnosti
-  const players = state.players || {{}};
-  for (const [uname, p] of Object.entries(players)) {{
+  });
+  const players = state.players || {};
+  for (const [uname, p] of Object.entries(players)) {
     if (p.room !== myRoom) continue;
     const isMe = uname === ME;
     const el = document.createElement('div');
     el.className = 'player-dot';
     el.style.left = (isMe ? myX : p.x) + '%';
     el.style.top  = (isMe ? myY : p.y) + '%';
-    el.innerHTML = `<div class="dot" style="background:${{p.color}};box-shadow:0 0 8px ${{p.color}}40"></div>`
-                 + `<div class="lbl" style="color:${{p.color}}">${{isMe ? '['+uname+']' : uname}}</div>`;
+    el.innerHTML = `<div class="dot" style="background:${p.color};box-shadow:0 0 8px ${p.color}40"></div>`
+                 + `<div class="lbl" style="color:${p.color}">${isMe ? '['+uname+']' : uname}</div>`;
     if (!isMe) el.onclick = () => openModal(uname);
     canvas.appendChild(el);
-  }}
-  // Mňa ak ešte nie som v state
-  if (!players[ME] && myRoom === myRoom) {{
+  }
+  if (!players[ME]) {
     const col = '#00ccff';
     const el = document.createElement('div');
     el.className = 'player-dot';
     el.style.left = myX+'%'; el.style.top = myY+'%';
-    el.innerHTML = `<div class="dot" style="background:${{col}};box-shadow:0 0 8px ${{col}}40"></div>`
-                 + `<div class="lbl" style="color:${{col}}">[${ME}]</div>`;
+    el.innerHTML = `<div class="dot" style="background:${col};box-shadow:0 0 8px ${col}40"></div>`
+                 + `<div class="lbl" style="color:${col}">[${ME}]</div>`;
     canvas.appendChild(el);
-  }}
-}}
+  }
+}
 
-function renderSidebar() {{
+function renderSidebar() {
   const list = document.getElementById('sb-players');
-  const players = state.players || {{}};
+  const players = state.players || {};
   const entries = Object.entries(players);
-  if (!entries.length) {{ list.innerHTML='<span style="color:#333;font-size:.8em">nikto online</span>'; return; }}
-  list.innerHTML = entries.map(([uname, p]) => {{
+  if (!entries.length) { list.innerHTML='<span style="color:#333;font-size:.8em">nikto online</span>'; return; }
+  list.innerHTML = entries.map(([uname, p]) => {
     const isMe = uname === ME;
     const rname = ROOMS[p.room]?.name || p.room;
-    return `<div class="pitem" onclick="${{isMe?'void 0':`openModal('${{uname}}')`}}">
-      <span class="pdot" style="background:${{p.color}}"></span>
-      <span class="pname" style="color:${{p.color}}">${{uname}}</span>
-      <span class="proom">${{rname}}</span>
+    const clickAttr = isMe ? '' : ` onclick="openModal('${uname}')"`;
+    return `<div class="pitem"${clickAttr}>
+      <span class="pdot" style="background:${p.color}"></span>
+      <span class="pname" style="color:${p.color}">${uname}</span>
+      <span class="proom">${rname}</span>
     </div>`;
-  }}).join('');
-}}
+  }).join('');
+}
 
-function renderOffers() {{
+function renderOffers() {
   const wrap = document.getElementById('sb-offers');
   const offers = state.offers || [];
-  if (!offers.length) {{ wrap.innerHTML='<div style="color:#333;font-size:.75em;padding:4px 0">žiadne ponuky</div>'; return; }}
+  if (!offers.length) { wrap.innerHTML='<div style="color:#333;font-size:.75em;padding:4px 0">žiadne ponuky</div>'; return; }
   wrap.innerHTML = '<div class="sb-title" style="font-size:.72em;color:#ffd70077;margin-bottom:4px">PONUKY PRE MŇA</div>'
     + offers.map(o => `
     <div class="offer-card">
-      <div class="offer-from">● ${{o.from}}</div>
-      <div class="offer-items">dáva: ${{fmtItem(o.give_type,o.give_amount)}}<br>chce: ${{fmtItem(o.want_type,o.want_amount)}}</div>
+      <div class="offer-from">● ${o.from}</div>
+      <div class="offer-items">dáva: ${fmtItem(o.give_type,o.give_amount)}<br>chce: ${fmtItem(o.want_type,o.want_amount)}</div>
       <div class="offer-btns">
-        <button class="btn-sm btn-accept" onclick="respondOffer('${{o.id}}',true)">✓ Prijať</button>
-        <button class="btn-sm btn-decline" onclick="respondOffer('${{o.id}}',false)">✗ Nie</button>
+        <button class="btn-sm btn-accept" onclick="respondOffer('${o.id}',true)">✓ Prijať</button>
+        <button class="btn-sm btn-decline" onclick="respondOffer('${o.id}',false)">✗ Nie</button>
       </div>
     </div>`).join('');
-}}
+}
 
-function fmtItem(type, amount) {{
+function fmtItem(type, amount) {
   if (type==='cr')     return amount.toLocaleString()+' CR';
   if (type==='shards') return amount+' ◈';
   return amount+'× '+type;
-}}
+}
 
-function openModal(uname) {{
+function openModal(uname) {
   selectedPlayer = uname;
   document.getElementById('modal-title').textContent = '● '+uname;
   document.getElementById('modal').style.display = 'block';
   document.getElementById('overlay').style.display = 'block';
   switchTab('gift');
-}}
-function closeModal() {{
+}
+function closeModal() {
   document.getElementById('modal').style.display = 'none';
   document.getElementById('overlay').style.display = 'none';
   selectedPlayer = null;
-}}
-function switchTab(tab) {{
+}
+function switchTab(tab) {
   document.getElementById('tab-gift').style.display  = tab==='gift'  ? '' : 'none';
   document.getElementById('tab-trade').style.display = tab==='trade' ? '' : 'none';
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0)====(tab==='gift')));
-}}
-
-function doGift() {{
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0)===(tab==='gift')));
+}
+function doGift() {
   if (!selectedPlayer) return;
   const type   = document.getElementById('g-type').value;
   const amount = parseInt(document.getElementById('g-amount').value)||0;
-  if (!amount) {{ toast('Zadaj množstvo'); return; }}
-  post('/hub/gift', {{to:selectedPlayer, type, amount}}).then(d => {{
+  if (!amount) { toast('Zadaj množstvo'); return; }
+  post('/hub/gift', {to:selectedPlayer, type, amount}).then(d => {
     toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
     if (d.ok) closeModal();
-  }});
-}}
-
-function doOffer() {{
+  });
+}
+function doOffer() {
   if (!selectedPlayer) return;
   const give_type   = document.getElementById('t-give-type').value;
   const give_amount = parseInt(document.getElementById('t-give-amt').value)||0;
   const want_type   = document.getElementById('t-want-type').value;
   const want_amount = parseInt(document.getElementById('t-want-amt').value)||0;
-  if (!give_amount||!want_amount) {{ toast('Zadaj množstvá'); return; }}
-  post('/hub/offer', {{to:selectedPlayer, give_type, give_amount, want_type, want_amount}}).then(d => {{
+  if (!give_amount||!want_amount) { toast('Zadaj množstvá'); return; }
+  post('/hub/offer', {to:selectedPlayer, give_type, give_amount, want_type, want_amount}).then(d => {
     toast(d.ok ? '✓ Ponuka odoslaná!' : '✗ '+(d.error||'Chyba'));
     if (d.ok) closeModal();
-  }});
-}}
-
-function respondOffer(id, accept) {{
-  post('/hub/offer/respond', {{id, accept}}).then(d => {{
+  });
+}
+function respondOffer(id, accept) {
+  post('/hub/offer/respond', {id, accept}).then(d => {
     toast(d.ok ? '✓ '+(d.msg||'OK') : '✗ '+(d.error||'Chyba'));
     pollState();
-  }});
-}}
-
-function post(url, body) {{
-  return fetch(url, {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(body)}})
-    .then(r => r.json()).catch(()=>({{}}) );
-}}
-
+  });
+}
+function post(url, body) {
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(r => r.json()).catch(()=>({}));
+}
 let _toastTimer;
-function toast(msg) {{
+function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.style.opacity = '1';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
-}}
+}
 </script>
 </body></html>"""
+
+
+@app.route("/hub")
+def hub_page():
+    if not _require_session():
+        return redirect("/")
+    uname = session["username"].lower()
+    lang  = session.get("lang", "sk")
+    hub   = _hub_load()
+    _hub_cleanup(hub)
+    if uname not in hub.get("players", {}):
+        hub.setdefault("players", {})[uname] = {
+            "room": "dock", "x": 50.0, "y": 50.0,
+            "color": _hub_color(uname), "ts": time.time(),
+        }
+        _hub_save(hub, important=True)
+
+    rooms_js = json.dumps({k: {"name": v["name_en"] if lang == "en" else v["name_sk"],
+                                **{d: v[d] for d in ("n", "s", "w", "e") if d in v}}
+                           for k, v in HUB_ROOMS.items()})
+    commodities_js = json.dumps([
+        {"id": i["id"], "label": i["id"].capitalize(), "unit": i["unit_sk"]}
+        for i in NPC_MARKET if i["id"] != "pu239"
+    ])
+
+    init_js = (
+        "const ME=" + json.dumps(uname) + ";\n"
+        "const ROOMS=" + rooms_js + ";\n"
+        "const COMMODITIES=" + commodities_js + ";"
+    )
+    return (_HUB_PAGE
+            .replace("__CSS__", _HUB_CSS)
+            .replace("__INIT__", init_js))
 
 
 @app.route("/hub/state")
