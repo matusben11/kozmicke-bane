@@ -9794,6 +9794,14 @@ function toast(msg) {
 def hub_page():
     if not _require_session():
         return redirect("/")
+    try:
+        return _hub_page_inner()
+    except Exception as _hub_exc:
+        import traceback as _tb
+        return f"<pre>HUB ERROR:\n{_tb.format_exc()}</pre>", 500
+
+
+def _hub_page_inner():
     uname = session["username"].lower()
     lang  = session.get("lang", "sk")
     hub   = _hub_load()
