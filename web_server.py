@@ -9837,11 +9837,17 @@ window.addEventListener('resize', () => {
 });
 
 // Lighting
-const ambLight = new THREE.AmbientLight(0x334455, 0.8);
+const ambLight = new THREE.AmbientLight(0xffffff, 0.55);
 scene.add(ambLight);
-const roomLight = new THREE.PointLight(0x00ccff, 1.2, 25);
+const roomLight = new THREE.PointLight(0xffffff, 1.8, 30);
 roomLight.position.set(0, 3.2, 0);
 scene.add(roomLight);
+const roomLight2 = new THREE.PointLight(0xffffff, 0.8, 20);
+roomLight2.position.set(0, 0.5, 0);
+scene.add(roomLight2);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(3, 8, 5);
+scene.add(dirLight);
 
 // ── FPS Controls ────────────────────────────────────────────────────────────
 let camYaw = 0, camPitch = 0, ptrLocked = false;
@@ -9895,11 +9901,11 @@ function updateMovement(dt) {
 
 // ── Room Building ────────────────────────────────────────────────────────────
 const ROOM_THEMES = {
-  dock:        {bg:0x091422, floor:0x0a1828, ceil:0x050d14, light:0x00ccff, name:'Dok'},
-  bridge:      {bg:0x060515, floor:0x080620, ceil:0x040310, light:0x8888ff, name:'Mostík'},
-  market:      {bg:0x0c0800, floor:0x1a1200, ceil:0x090600, light:0xff9900, name:'Trhovisko'},
-  engineering: {bg:0x000d05, floor:0x001408, ceil:0x000804, light:0x39ff14, name:'Strojovňa'},
-  bar:         {bg:0x110700, floor:0x1c0e00, ceil:0x0c0500, light:0xffd700, name:'Kantína'},
+  dock:        {bg:0x091422, floor:0x1e4060, ceil:0x0d2030, wall:0x183050, light:0x00ccff, name:'Dok'},
+  bridge:      {bg:0x060515, floor:0x1a1855, ceil:0x0e0c35, wall:0x141445, light:0x8899ff, name:'Mostík'},
+  market:      {bg:0x100a00, floor:0x3a2800, ceil:0x1e1400, wall:0x2e2000, light:0xff9900, name:'Trhovisko'},
+  engineering: {bg:0x000d05, floor:0x0f3018, ceil:0x081a0c, wall:0x0c2812, light:0x39ff14, name:'Strojovňa'},
+  bar:         {bg:0x120800, floor:0x2e1800, ceil:0x180d00, wall:0x261400, light:0xffd700, name:'Kantína'},
 };
 const EXIT_XZ = {n:{x:0,z:-6.5}, s:{x:0,z:6.5}, w:{x:-6.5,z:0}, e:{x:6.5,z:0}};
 const ENTRY_XZ = {n:{x:0,z:5.5}, s:{x:0,z:-5.5}, w:{x:5.5,z:0}, e:{x:-5.5,z:0}};
@@ -9935,11 +9941,12 @@ function buildRoom(roomId, entryDir) {
   scene.background = new THREE.Color(t.bg);
   scene.fog = new THREE.FogExp2(t.bg, 0.04);
   roomLight.color.setHex(t.light);
-  ambLight.color.setHex(t.bg);
+  roomLight2.color.setHex(t.light);
 
-  const floorMat  = new THREE.MeshLambertMaterial({color: t.floor});
-  const ceilMat   = new THREE.MeshLambertMaterial({color: t.ceil});
-  const wallMat   = new THREE.MeshLambertMaterial({color: lerp3(t.bg, t.floor, 0.5), side:THREE.DoubleSide});
+  // MeshBasicMaterial pre štruktúry — nepotrebujú svetlo, vždy viditeľné
+  const floorMat = new THREE.MeshBasicMaterial({color: t.floor});
+  const ceilMat  = new THREE.MeshBasicMaterial({color: t.ceil});
+  const wallMat  = new THREE.MeshBasicMaterial({color: t.wall || t.floor, side:THREE.DoubleSide});
   const doorMat   = new THREE.MeshBasicMaterial({color: t.light, transparent:true, opacity:0.18, side:THREE.DoubleSide});
   const frameMat  = new THREE.MeshBasicMaterial({color: t.light, transparent:true, opacity:0.7});
 
@@ -10020,7 +10027,7 @@ function addMesh(geo, mat, x, y, z) {
 function buildDecorations(roomId, t) {
   const bx = (w,h,d) => new THREE.BoxGeometry(w,h,d);
   const cy = (r,h) => new THREE.CylinderGeometry(r,r,h,10);
-  const c = n => new THREE.MeshLambertMaterial({color:n});
+  const c = n => new THREE.MeshStandardMaterial({color:n, roughness:0.7, metalness:0.1});
 
   if (roomId === 'dock') {
     addMesh(bx(1,1,1), c(0x8B6914), -5.5, 0.5, -5.5);
