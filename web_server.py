@@ -9668,617 +9668,650 @@ body{background:#000;color:#00ccff;font-family:'VT323',monospace;font-size:1rem;
 </style>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
 
-# Statický HTML+JS pre hub — regular string (nie f-string), žiadne {{ }} escapovanie
-_HUB_PAGE = """<!DOCTYPE html><html lang="sk"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hub — Kozmické Bane</title>__CSS__</head>
-<body>
-<div id="wrap">
-  <div id="topbar">
-    <h1>◉ HUB</h1>
-    <span style="color:#00ccff33">|</span>
-    <span id="room-crumb" style="color:#00ccff99;font-size:.9em">Dok</span>
-    <span style="margin-left:auto;display:flex;gap:10px;align-items:center">
-      <button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff;font-size:.85em" onclick="openSkinShop()">🎨 Skiny</button>
-      <a href="/lobby">← Lobby</a>
+# 3D Hub — Three.js FPS s billboard sprites
+_HUB_PAGE = """<!DOCTYPE html><html lang='sk'><head>
+<meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Hub — Kozmické Bane</title>__CSS__
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#00ccff}
+#c3d{display:block;width:100vw;height:100vh}
+#hud{position:fixed;inset:0;pointer-events:none}
+#topbar{pointer-events:all;position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:5px 12px;background:#00000099;border-bottom:1px solid #00ccff22;backdrop-filter:blur(4px)}
+#topbar h1{font-size:1.15em;letter-spacing:.1em}
+#topbar a,#topbar button{pointer-events:all}
+#room-label{position:fixed;bottom:40px;left:14px;font-size:1.1em;color:#00ccff88;letter-spacing:.12em}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:1.4em;color:#ffffff66;pointer-events:none;user-select:none}
+#lock-hint{position:fixed;top:50%;left:50%;transform:translate(-50%,40px);font-size:1em;color:#00ccff66;text-align:center;pointer-events:none}
+#interact-hint{display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#00000099;border:1px solid #00ccff44;padding:4px 14px;font-size:.88em;color:#00ccff;pointer-events:none}
+#sidebar{pointer-events:all;position:fixed;right:0;top:38px;bottom:0;width:210px;background:#050f15dd;border-left:1px solid #00ccff22;display:flex;flex-direction:column;overflow:hidden}
+.sb-section{padding:6px 10px;border-bottom:1px solid #00ccff11}
+.sb-title{font-size:.72em;color:#00ccff55;letter-spacing:.1em;margin-bottom:4px}
+.sb-players{flex:0 0 auto;max-height:140px;overflow-y:auto;padding:6px 10px}
+.pitem{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:.8em;cursor:pointer}
+.pitem:hover span.pname{color:#fff}
+.pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.proom{color:#444;font-size:.75em}
+.sb-offers{padding:6px 10px;border-top:1px solid #00ccff11;max-height:120px;overflow-y:auto;flex-shrink:0}
+.offer-card{background:#0a0f1a;border:1px solid #00ccff22;padding:5px 7px;margin-bottom:5px;font-size:.76em}
+.offer-btns{display:flex;gap:4px;margin-top:4px}
+.btn-sm{background:#000;border:1px solid currentColor;font-family:inherit;font-size:.78em;padding:2px 7px;cursor:pointer}
+#hub-chat{flex:1;overflow-y:auto;font-size:.74em;line-height:1.45;min-height:50px;color:#aaa;padding:4px 10px}
+#chat-wrap{padding:5px 10px;border-top:1px solid #00ccff11;display:flex;gap:4px;flex-shrink:0}
+#chat-input{flex:1;background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.78em;padding:2px 5px;outline:none}
+.ctrl-hint{font-size:.68em;color:#00ccff22;line-height:1.6;padding:5px 10px;flex-shrink:0}
+#overlay{display:none;position:fixed;inset:0;background:#000000bb;z-index:10}
+#modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:16px 18px;min-width:280px;max-width:360px;width:90%;z-index:11}
+#modal h3{font-size:1.15em;margin-bottom:8px;color:#00ccff}
+.tab-btns{display:flex;gap:5px;margin-bottom:10px}
+.tab-btn{background:#000;border:1px solid #00ccff33;color:#00ccff66;font-family:inherit;font-size:.82em;padding:2px 10px;cursor:pointer}
+.tab-btn.active{border-color:#00ccff;color:#00ccff;background:#001a2e}
+.form-row{display:flex;align-items:center;gap:7px;margin-bottom:7px;flex-wrap:wrap}
+.form-row label{font-size:.78em;color:#00ccff66;min-width:52px}
+.form-row select,.form-row input{background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.82em;padding:2px 5px;outline:none}
+.form-row input[type=number]{width:85px}
+.modal-footer{display:flex;justify-content:space-between;margin-top:10px}
+#skin-overlay{display:none;position:fixed;inset:0;background:#000000bb;z-index:20}
+#skin-modal{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #dd00ff55;padding:16px 18px;min-width:320px;max-width:480px;width:95%;z-index:21;max-height:85vh;overflow-y:auto}
+#toast{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#001a2e;border:1px solid #00ccff44;padding:4px 14px;font-size:.82em;opacity:0;transition:opacity .3s;pointer-events:none;z-index:30}
+</style>
+</head><body>
+<canvas id='c3d'></canvas>
+
+<div id='hud'>
+  <div id='topbar'>
+    <h1>◉ HUB 3D</h1>
+    <span style='color:#00ccff33'>|</span>
+    <span id='room-crumb' style='color:#00ccff99;font-size:.9em'>Dok</span>
+    <span style='margin-left:auto;display:flex;gap:8px;align-items:center'>
+      <button class='btn-sm' style='color:#dd00ff;border-color:#dd00ff;font-size:.82em' onclick='openSkinShop()'>🎨 Skiny</button>
+      <a href='/lobby' style='color:#00ccff66;text-decoration:none;font-size:.85em'>← Lobby</a>
     </span>
   </div>
-  <div id="main">
-    <div id="room-area">
-      <div id="room-label">★ DOK</div>
-      <div id="room-canvas"></div>
+  <div id='crosshair'>·</div>
+  <div id='lock-hint'>Klikni pre ovládanie<br><span style='font-size:.8em;color:#00ccff44'>WASD pohyb · myš pohľad · F interakcia · Esc uvoľniť</span></div>
+  <div id='interact-hint'></div>
+  <div id='room-label'></div>
+</div>
+
+<div id='sidebar'>
+  <div class='sb-section'><div class='sb-title'>ONLINE HRÁČI</div></div>
+  <div class='sb-players' id='sb-players'><span style='color:#333;font-size:.78em'>načítavam...</span></div>
+  <div class='sb-offers' id='sb-offers'></div>
+  <div style='border-top:1px solid #00ccff11;display:flex;flex-direction:column;flex:1;min-height:0'>
+    <div style='padding:4px 10px'><div class='sb-title'>CHAT — miestnosť</div></div>
+    <div id='hub-chat'></div>
+    <div id='chat-wrap'>
+      <input id='chat-input' placeholder='správa...' maxlength='200'
+        onkeydown="if(event.key==='Enter'){sendChat();event.preventDefault()}">
+      <button onclick='sendChat()' style='background:#000;border:1px solid #00ccff44;color:#00ccff;font-family:inherit;font-size:.78em;padding:2px 7px;cursor:pointer'>➤</button>
     </div>
-    <div id="sidebar">
-      <div class="sb-section"><div class="sb-title">ONLINE HRÁČI</div></div>
-      <div class="sb-players" id="sb-players"><span style="color:#333;font-size:.8em">načítavam...</span></div>
-      <div class="sb-offers" id="sb-offers"></div>
-      <div style="border-top:1px solid #00ccff11;padding:6px 10px;display:flex;flex-direction:column;flex:1;min-height:0">
-        <div class="sb-title">CHAT — miestnosť</div>
-        <div id="hub-chat" style="flex:1;overflow-y:auto;font-size:.76em;line-height:1.5;min-height:60px;max-height:160px;color:#aaa"></div>
-        <div style="display:flex;gap:4px;margin-top:4px">
-          <input id="chat-input" placeholder="správa..." maxlength="200"
-            style="flex:1;background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.8em;padding:3px 6px;outline:none"
-            onkeydown="if(event.key==='Enter'){sendChat();event.preventDefault()}">
-          <button onclick="sendChat()" style="background:#000;border:1px solid #00ccff44;color:#00ccff;font-family:inherit;font-size:.8em;padding:2px 8px;cursor:pointer">➤</button>
-        </div>
-      </div>
-      <div class="ctrl-hint">WASD / ↑↓←→ pohyb<br>Klikni na hráča → trade/gift</div>
+  </div>
+  <div class='ctrl-hint'>WASD pohyb · myš pohľad<br>F = interakcia · Esc = uvoľniť</div>
+</div>
+
+<!-- Gift/Trade Modal -->
+<div id='overlay' onclick='closeModal()'></div>
+<div id='modal'>
+  <h3 id='modal-title'>● hráč</h3>
+  <div class='tab-btns'>
+    <button class='tab-btn active' onclick="switchTab('gift')">🎁 Gift</button>
+    <button class='tab-btn' onclick="switchTab('trade')">🤝 Trade</button>
+  </div>
+  <div id='tab-gift'>
+    <div class='form-row'><label>Typ:</label>
+      <select id='g-type'><option value='cr'>CR</option><option value='shards'>◈ Void Shards</option></select>
     </div>
+    <div class='form-row'><label>Množstvo:</label><input type='number' id='g-amount' min='1' value='500'></div>
+    <button class='btn-sm' style='color:#39ff14;border-color:#39ff14' onclick='doGift()'>🎁 Odoslať</button>
+  </div>
+  <div id='tab-trade' style='display:none'>
+    <div style='font-size:.73em;color:#00ccff44;margin-bottom:7px'>Dávam → Chcem</div>
+    <div class='form-row'><label>Dávam:</label>
+      <select id='t-give-type'><option value='cr'>CR</option><option value='shards'>◈</option></select>
+      <input type='number' id='t-give-amt' min='1' value='1000'>
+    </div>
+    <div class='form-row'><label>Chcem:</label>
+      <select id='t-want-type'><option value='cr'>CR</option><option value='shards'>◈</option></select>
+      <input type='number' id='t-want-amt' min='1' value='100'>
+    </div>
+    <button class='btn-sm' style='color:#ffd700;border-color:#ffd700' onclick='doOffer()'>🤝 Odoslať ponuku</button>
+  </div>
+  <div class='modal-footer'>
+    <button class='btn-sm' style='color:#ff4455;border-color:#ff4455' onclick='closeModal()'>✕ Zavrieť</button>
   </div>
 </div>
-<div id="overlay" onclick="closeModal()"></div>
-<div id="modal">
-  <h3 id="modal-title">● hráč</h3>
-  <div class="tab-btns">
-    <button class="tab-btn active" onclick="switchTab('gift')">🎁 Gift</button>
-    <button class="tab-btn" onclick="switchTab('trade')">🤝 Trade</button>
-  </div>
-  <div id="tab-gift">
-    <div class="form-row"><label>Typ:</label>
-      <select id="g-type"><option value="cr">CR</option><option value="shards">◈ Void Shards</option></select>
-    </div>
-    <div class="form-row"><label>Množstvo:</label>
-      <input type="number" id="g-amount" min="1" value="500">
-    </div>
-    <button class="btn-sm" style="color:#39ff14;border-color:#39ff14" onclick="doGift()">🎁 Odoslať</button>
-  </div>
-  <div id="tab-trade" style="display:none">
-    <div style="font-size:.75em;color:#00ccff44;margin-bottom:8px">Dávam → Chcem</div>
-    <div class="form-row"><label>Dávam:</label>
-      <select id="t-give-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
-      <input type="number" id="t-give-amt" min="1" value="1000">
-    </div>
-    <div class="form-row"><label>Chcem:</label>
-      <select id="t-want-type"><option value="cr">CR</option><option value="shards">◈ Shards</option></select>
-      <input type="number" id="t-want-amt" min="1" value="100">
-    </div>
-    <button class="btn-sm" style="color:#ffd700;border-color:#ffd700" onclick="doOffer()">🤝 Odoslať ponuku</button>
-  </div>
-  <div class="modal-footer">
-    <button class="btn-sm" style="color:#ff4455;border-color:#ff4455" onclick="closeModal()">✕ Zavrieť</button>
-  </div>
-</div>
-<div id="toast"></div>
 
 <!-- Skin Shop Modal -->
-<div id="skin-overlay" style="display:none;position:fixed;inset:0;background:#000000bb;z-index:20" onclick="closeSkinShop()"></div>
-<div id="skin-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #dd00ff55;padding:18px 20px;min-width:340px;max-width:500px;width:95%;z-index:21;max-height:85vh;overflow-y:auto">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h3 style="color:#dd00ff;font-size:1.2em">🎨 SKIN SHOP</h3>
-    <button class="btn-sm" style="color:#ff4455;border-color:#ff4455" onclick="closeSkinShop()">✕</button>
+<div id='skin-overlay' onclick='closeSkinShop()'></div>
+<div id='skin-modal'>
+  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px'>
+    <h3 style='color:#dd00ff;font-size:1.15em'>🎨 SKIN SHOP</h3>
+    <button class='btn-sm' style='color:#ff4455;border-color:#ff4455' onclick='closeSkinShop()'>✕</button>
   </div>
-  <div style="color:#00ccff66;font-size:.78em;margin-bottom:10px">
-    Môj CR: <strong id="sk-my-cr" style="color:#ffdd44">—</strong> &nbsp;|&nbsp;
-    Môj ◈: <strong id="sk-my-shards" style="color:#dd00ff">—</strong>
+  <div style='color:#00ccff66;font-size:.76em;margin-bottom:8px'>
+    CR: <strong id='sk-my-cr' style='color:#ffdd44'>—</strong> &nbsp;|&nbsp; ◈: <strong id='sk-my-shards' style='color:#dd00ff'>—</strong>
   </div>
-  <div id="skin-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px"></div>
-  <div style="margin-top:14px;border-top:1px solid #dd00ff22;padding-top:12px">
-    <div style="font-size:.8em;color:#00ccff66;margin-bottom:6px">🎁 Giftnúť skin hráčovi</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <select id="sk-gift-skin" style="background:#000c14;border:1px solid #dd00ff33;color:#dd00ff;font-family:inherit;font-size:.82em;padding:3px 6px"></select>
-      <input type="text" id="sk-gift-to" placeholder="username" style="background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.82em;padding:3px 6px;width:100px;outline:none">
-      <button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff" onclick="doGiftSkin()">🎨 Gift</button>
+  <div id='skin-grid' style='display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px'></div>
+  <div style='margin-top:12px;border-top:1px solid #dd00ff22;padding-top:10px'>
+    <div style='font-size:.78em;color:#00ccff66;margin-bottom:5px'>🎁 Giftnúť skin hráčovi</div>
+    <div style='display:flex;gap:5px;flex-wrap:wrap'>
+      <select id='sk-gift-skin' style='background:#000c14;border:1px solid #dd00ff33;color:#dd00ff;font-family:inherit;font-size:.8em;padding:2px 5px'></select>
+      <input type='text' id='sk-gift-to' placeholder='username' style='background:#000c14;border:1px solid #00ccff33;color:#00ccff;font-family:inherit;font-size:.8em;padding:2px 5px;width:90px;outline:none'>
+      <button class='btn-sm' style='color:#dd00ff;border-color:#dd00ff' onclick='doGiftSkin()'>🎨 Gift</button>
     </div>
   </div>
 </div>
+<div id='toast'></div>
 
+<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js'></script>
 <script>
 __INIT__
-// Doplň komodity do selectov
-[document.getElementById('g-type'), document.getElementById('t-give-type'), document.getElementById('t-want-type')].forEach(sel => {
-  COMMODITIES.forEach(c => {
-    const o = document.createElement('option');
-    o.value = c.id; o.textContent = c.id.charAt(0).toUpperCase()+c.id.slice(1)+' ('+c.unit+')';
-    sel.appendChild(o);
-  });
+
+// ── Skin SVGs (billboard textures) ─────────────────────────────────────────
+const SKIN_SVG = {
+  default: `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='15' y='4' width='50' height='44' rx='5' fill='#ffb5a0'/><rect x='24' y='16' width='8' height='8' fill='#333'/><rect x='48' y='16' width='8' height='8' fill='#333'/><rect x='27' y='34' width='26' height='5' fill='#cc8070'/><rect x='10' y='50' width='60' height='36' rx='3' fill='#4a90e2'/><rect x='0' y='52' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='68' y='52' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='16' y='88' width='21' height='26' fill='#1a3a6e'/><rect x='43' y='88' width='21' height='26' fill='#1a3a6e'/><rect x='11' y='110' width='28' height='10' rx='2' fill='#111'/><rect x='41' y='110' width='28' height='10' rx='2' fill='#111'/></svg>`,
+  banik:   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='8' y='2' width='64' height='22' rx='5' fill='#f5a623'/><rect x='18' y='8' width='44' height='7' rx='2' fill='#ffffffaa'/><rect x='15' y='18' width='50' height='40' rx='5' fill='#d4a574'/><rect x='24' y='28' width='8' height='8' fill='#333'/><rect x='48' y='28' width='8' height='8' fill='#333'/><rect x='27' y='44' width='26' height='5' fill='#8a5030'/><rect x='10' y='60' width='60' height='36' rx='3' fill='#e07020'/><rect x='10' y='68' width='60' height='8' fill='#8a3010'/><rect x='10' y='80' width='60' height='8' fill='#8a3010'/><rect x='64' y='62' width='14' height='26' rx='3' fill='#60504a'/><rect x='0' y='62' width='12' height='20' rx='3' fill='#d4a574'/><rect x='68' y='62' width='12' height='20' rx='3' fill='#d4a574'/><rect x='16' y='98' width='21' height='22' fill='#5c3a1e'/><rect x='43' y='98' width='21' height='22' fill='#5c3a1e'/><rect x='11' y='114' width='28' height='6' rx='2' fill='#3a2010'/><rect x='41' y='114' width='28' height='6' rx='2' fill='#3a2010'/></svg>`,
+  astronaut:`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='8' y='2' width='64' height='56' rx='22' fill='#dde2e8'/><rect x='18' y='12' width='44' height='30' rx='13' fill='#7abbde'/><rect x='22' y='16' width='14' height='8' rx='4' fill='#ffffffaa'/><rect x='22' y='34' width='10' height='6' rx='2' fill='#e04040cc'/><rect x='48' y='34' width='10' height='6' rx='2' fill='#e04040cc'/><rect x='22' y='58' width='36' height='8' rx='2' fill='#b8bec8'/><rect x='8' y='64' width='64' height='38' rx='4' fill='#e4e8ec'/><rect x='24' y='72' width='32' height='18' rx='3' fill='#b0b8c4'/><rect x='27' y='76' width='8' height='8' fill='#e04040' rx='1'/><rect x='38' y='76' width='10' height='8' fill='#8a9aaa' rx='1'/><rect x='0' y='66' width='10' height='26' rx='4' fill='#c8d0d8'/><rect x='70' y='66' width='10' height='26' rx='4' fill='#c8d0d8'/><rect x='14' y='104' width='24' height='16' rx='5' fill='#7a9ab0'/><rect x='42' y='104' width='24' height='16' rx='5' fill='#7a9ab0'/></svg>`,
+  kapitan: `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='6' y='14' width='68' height='10' rx='2' fill='#1a2a8a'/><rect x='12' y='2' width='56' height='18' rx='5' fill='#1a2a8a'/><rect x='14' y='14' width='52' height='7' fill='#f5c842'/><rect x='15' y='22' width='50' height='42' rx='5' fill='#ffb5a0'/><rect x='24' y='32' width='8' height='8' fill='#333'/><rect x='48' y='32' width='8' height='8' fill='#333'/><rect x='27' y='50' width='26' height='5' fill='#cc8070'/><rect x='10' y='66' width='60' height='40' rx='3' fill='#1a2a8a'/><rect x='6' y='66' width='20' height='12' rx='3' fill='#f5c842'/><rect x='54' y='66' width='20' height='12' rx='3' fill='#f5c842'/><rect x='35' y='72' width='10' height='10' rx='5' fill='#f5c842'/><rect x='35' y='84' width='10' height='10' rx='5' fill='#f5c842'/><rect x='35' y='96' width='10' height='10' rx='5' fill='#f5c842'/><rect x='0' y='68' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='68' y='68' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='16' y='108' width='21' height='12' fill='#1a2a8a'/><rect x='43' y='108' width='21' height='12' fill='#1a2a8a'/><rect x='11' y='116' width='28' height='4' rx='2' fill='#111'/><rect x='41' y='116' width='28' height='4' rx='2' fill='#111'/></svg>`,
+  robot:   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='36' y='0' width='8' height='14' fill='#607080'/><ellipse cx='40' cy='2' rx='7' ry='5' fill='#e04040'/><rect x='10' y='12' width='60' height='50' rx='5' fill='#607080'/><rect x='18' y='22' width='18' height='14' rx='3' fill='#00ccff'/><rect x='44' y='22' width='18' height='14' rx='3' fill='#00ccff'/><rect x='20' y='24' width='6' height='4' rx='1' fill='#ffffff66'/><rect x='46' y='24' width='6' height='4' rx='1' fill='#ffffff66'/><rect x='20' y='46' width='40' height='6' rx='2' fill='#405060'/><rect x='26' y='62' width='28' height='8' rx='2' fill='#506070'/><rect x='8' y='68' width='64' height='38' rx='4' fill='#506070'/><rect x='14' y='76' width='22' height='14' rx='3' fill='#e04040'/><rect x='44' y='76' width='22' height='14' rx='3' fill='#00ccff'/><rect x='0' y='70' width='10' height='28' rx='4' fill='#607080'/><rect x='70' y='70' width='10' height='28' rx='4' fill='#607080'/><rect x='16' y='108' width='20' height='12' rx='2' fill='#607080'/><rect x='44' y='108' width='20' height='12' rx='2' fill='#607080'/></svg>`,
+};
+const SKIN_NAMES = {default:'Default',banik:'Baník',astronaut:'Astronaut',kapitan:'Kapitán',robot:'Robot'};
+const SKIN_ORDER = ['default','banik','astronaut','kapitan','robot'];
+
+// ── Three.js Setup ──────────────────────────────────────────────────────────
+const canvas3d = document.getElementById('c3d');
+const renderer = new THREE.WebGLRenderer({canvas:canvas3d, antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth/window.innerHeight, 0.05, 60);
+camera.position.set(0, 1.7, 0);
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
 });
 
-let myRoom = 'dock', myX = 50, myY = 50;
-let state = {players:{}, offers:[]};
-let pendingMove = null;
-let selectedPlayer = null;
-let mySkin = 'default';
-let skinShopData = null;
+// Lighting
+const ambLight = new THREE.AmbientLight(0x334455, 0.8);
+scene.add(ambLight);
+const roomLight = new THREE.PointLight(0x00ccff, 1.2, 25);
+roomLight.position.set(0, 3.2, 0);
+scene.add(roomLight);
 
-document.addEventListener('keydown', e => {
+// ── FPS Controls ────────────────────────────────────────────────────────────
+let camYaw = 0, camPitch = 0, ptrLocked = false;
+
+function uiActive() {
   const tag = document.activeElement?.tagName;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  const STEP = 4;
-  let moved = true;
-  if      (e.key==='w'||e.key==='ArrowUp')    myY = Math.max(8, myY-STEP);
-  else if (e.key==='s'||e.key==='ArrowDown')  myY = Math.min(92, myY+STEP);
-  else if (e.key==='a'||e.key==='ArrowLeft')  myX = Math.max(8, myX-STEP);
-  else if (e.key==='d'||e.key==='ArrowRight') myX = Math.min(92, myX+STEP);
-  else moved = false;
-  if (moved) { e.preventDefault(); pendingMove = {room:myRoom,x:myX,y:myY}; renderCanvas(); }
+  return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
+      || document.getElementById('modal').style.display !== 'none'
+      || document.getElementById('skin-modal').style.display !== 'none';
+}
+
+canvas3d.addEventListener('click', () => { if (!uiActive()) canvas3d.requestPointerLock(); });
+document.addEventListener('pointerlockchange', () => {
+  ptrLocked = document.pointerLockElement === canvas3d;
+  document.getElementById('lock-hint').style.display = ptrLocked ? 'none' : 'block';
+  document.getElementById('crosshair').style.display = ptrLocked ? 'block' : 'none';
 });
+document.addEventListener('mousemove', e => {
+  if (!ptrLocked) return;
+  camYaw   -= e.movementX * 0.0022;
+  camPitch  = Math.max(-1.1, Math.min(0.6, camPitch - e.movementY * 0.0022));
+});
+const moveKeys = {};
+document.addEventListener('keydown', e => {
+  if (document.activeElement?.tagName === 'INPUT') return;
+  moveKeys[e.code] = true;
+  if (e.code === 'KeyF' && hoveredPlayer && ptrLocked) openModal(hoveredPlayer);
+  if (e.code === 'Escape' && ptrLocked) document.exitPointerLock();
+});
+document.addEventListener('keyup', e => delete moveKeys[e.code]);
 
-setInterval(() => {
-  if (!pendingMove) return;
-  const m = pendingMove; pendingMove = null;
-  post('/hub/move', m);
-}, 200);
+const ROOM_HALF = 7, ROOM_H = 4, DOOR_W = 2.6, DOOR_H = 3.1;
 
-setInterval(pollState, 2000);
-pollState();
+function updateMovement(dt) {
+  const spd = 5.5 * dt;
+  const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+  const rgt = new THREE.Vector3( Math.cos(camYaw), 0, -Math.sin(camYaw));
+  const dir = new THREE.Vector3();
+  if (moveKeys.KeyW || moveKeys.ArrowUp)    dir.addScaledVector(fwd,  1);
+  if (moveKeys.KeyS || moveKeys.ArrowDown)  dir.addScaledVector(fwd, -1);
+  if (moveKeys.KeyA || moveKeys.ArrowLeft)  dir.addScaledVector(rgt, -1);
+  if (moveKeys.KeyD || moveKeys.ArrowRight) dir.addScaledVector(rgt,  1);
+  if (dir.lengthSq() > 0) dir.normalize().multiplyScalar(spd);
+  const LIM = ROOM_HALF - 0.4;
+  camera.position.x = Math.max(-LIM, Math.min(LIM, camera.position.x + dir.x));
+  camera.position.z = Math.max(-LIM, Math.min(LIM, camera.position.z + dir.z));
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = camYaw;
+  camera.rotation.x = camPitch;
+}
+
+// ── Room Building ────────────────────────────────────────────────────────────
+const ROOM_THEMES = {
+  dock:        {bg:0x091422, floor:0x0a1828, ceil:0x050d14, light:0x00ccff, name:'Dok'},
+  bridge:      {bg:0x060515, floor:0x080620, ceil:0x040310, light:0x8888ff, name:'Mostík'},
+  market:      {bg:0x0c0800, floor:0x1a1200, ceil:0x090600, light:0xff9900, name:'Trhovisko'},
+  engineering: {bg:0x000d05, floor:0x001408, ceil:0x000804, light:0x39ff14, name:'Strojovňa'},
+  bar:         {bg:0x110700, floor:0x1c0e00, ceil:0x0c0500, light:0xffd700, name:'Kantína'},
+};
+const EXIT_XZ = {n:{x:0,z:-6.5}, s:{x:0,z:6.5}, w:{x:-6.5,z:0}, e:{x:6.5,z:0}};
+const ENTRY_XZ = {n:{x:0,z:5.5}, s:{x:0,z:-5.5}, w:{x:5.5,z:0}, e:{x:-5.5,z:0}};
+const OPP = {n:'s',s:'n',w:'e',e:'w'};
+
+let roomObjs = [], doorTriggers = [], hoveredPlayer = null, otherSprites = {};
+let myRoom = 'dock', mySkin = 'default';
+
+function hexColor(n) { return '#'+n.toString(16).padStart(6,'0'); }
+
+function makeWallShape(hasDoor, side) {
+  const S = ROOM_HALF*2, H = ROOM_H;
+  const sh = new THREE.Shape();
+  sh.moveTo(-S/2,0); sh.lineTo(S/2,0); sh.lineTo(S/2,H); sh.lineTo(-S/2,H); sh.closePath();
+  if (hasDoor) {
+    const hole = new THREE.Path();
+    const dw = DOOR_W/2;
+    hole.moveTo(-dw,0); hole.lineTo(dw,0); hole.lineTo(dw,DOOR_H); hole.lineTo(-dw,DOOR_H); hole.closePath();
+    sh.holes.push(hole);
+  }
+  return new THREE.ShapeGeometry(sh);
+}
+
+function buildRoom(roomId, entryDir) {
+  // Clear previous
+  roomObjs.forEach(o => { scene.remove(o); if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
+  roomObjs = []; doorTriggers = [];
+  Object.values(otherSprites).forEach(s => scene.remove(s));
+  otherSprites = {};
+
+  const t = ROOM_THEMES[roomId] || ROOM_THEMES.dock;
+  const exits = ROOMS[roomId] || {};
+  scene.background = new THREE.Color(t.bg);
+  scene.fog = new THREE.FogExp2(t.bg, 0.04);
+  roomLight.color.setHex(t.light);
+  ambLight.color.setHex(t.bg);
+
+  const floorMat  = new THREE.MeshLambertMaterial({color: t.floor});
+  const ceilMat   = new THREE.MeshLambertMaterial({color: t.ceil});
+  const wallMat   = new THREE.MeshLambertMaterial({color: lerp3(t.bg, t.floor, 0.5), side:THREE.DoubleSide});
+  const doorMat   = new THREE.MeshBasicMaterial({color: t.light, transparent:true, opacity:0.18, side:THREE.DoubleSide});
+  const frameMat  = new THREE.MeshBasicMaterial({color: t.light, transparent:true, opacity:0.7});
+
+  // Floor with grid lines
+  const floorGeo = new THREE.PlaneGeometry(ROOM_HALF*2, ROOM_HALF*2, 8, 8);
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2; floor.position.y = 0;
+  scene.add(floor); roomObjs.push(floor);
+
+  // Ceiling
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_HALF*2, ROOM_HALF*2), ceilMat);
+  ceil.rotation.x = Math.PI/2; ceil.position.y = ROOM_H;
+  scene.add(ceil); roomObjs.push(ceil);
+
+  // 4 walls
+  const wallDefs = [
+    {dir:'n', pos:[0, ROOM_H/2, -ROOM_HALF], ry:0},
+    {dir:'s', pos:[0, ROOM_H/2,  ROOM_HALF], ry:Math.PI},
+    {dir:'w', pos:[-ROOM_HALF, ROOM_H/2, 0], ry:Math.PI/2},
+    {dir:'e', pos:[ ROOM_HALF, ROOM_H/2, 0], ry:-Math.PI/2},
+  ];
+  wallDefs.forEach(({dir, pos, ry}) => {
+    const hasDoor = dir in exits;
+    const geo = makeWallShape(hasDoor);
+    const mesh = new THREE.Mesh(geo, wallMat);
+    mesh.position.set(pos[0], 0, pos[2]);
+    mesh.rotation.y = ry;
+    scene.add(mesh); roomObjs.push(mesh);
+
+    if (hasDoor) {
+      // Glowing door fill
+      const dGeo = new THREE.PlaneGeometry(DOOR_W, DOOR_H);
+      const dMesh = new THREE.Mesh(dGeo, doorMat);
+      const ep = EXIT_XZ[dir];
+      dMesh.position.set(ep.x * 0.99, DOOR_H/2, ep.z * 0.99);
+      dMesh.rotation.y = ry;
+      scene.add(dMesh); roomObjs.push(dMesh);
+
+      // Door frame lines
+      const edgeGeo = new THREE.EdgesGeometry(dGeo);
+      const edgeMesh = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({color: t.light}));
+      edgeMesh.position.copy(dMesh.position); edgeMesh.rotation.copy(dMesh.rotation);
+      scene.add(edgeMesh); roomObjs.push(edgeMesh);
+
+      // Room label at door
+      doorTriggers.push({target: exits[dir], cx: ep.x, cz: ep.z, r: 1.8});
+    }
+  });
+
+  // Room decorations
+  buildDecorations(roomId, t);
+
+  // Set camera entry position
+  const epos = entryDir ? ENTRY_XZ[OPP[entryDir]] : {x:0, z:0};
+  camera.position.set(epos.x, 1.7, epos.z);
+  if (entryDir) {
+    const facing = {n: Math.PI, s:0, w: Math.PI/2, e:-Math.PI/2};
+    camYaw = facing[OPP[entryDir]] || 0;
+  }
+
+  myRoom = roomId;
+  document.getElementById('room-crumb').textContent = t.name;
+  document.getElementById('room-label').textContent = '★ ' + t.name.toUpperCase();
+  document.getElementById('room-label').style.color = hexColor(t.light) + '99';
+}
+
+function lerp3(hex1, hex2, t) {
+  const r1=(hex1>>16)&0xff, g1=(hex1>>8)&0xff, b1=hex1&0xff;
+  const r2=(hex2>>16)&0xff, g2=(hex2>>8)&0xff, b2=hex2&0xff;
+  return ((Math.round(r1+(r2-r1)*t))<<16)|((Math.round(g1+(g2-g1)*t))<<8)|(Math.round(b1+(b2-b1)*t));
+}
+
+function addMesh(geo, mat, x, y, z) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(x,y,z);
+  scene.add(m); roomObjs.push(m); return m;
+}
+
+function buildDecorations(roomId, t) {
+  const bx = (w,h,d) => new THREE.BoxGeometry(w,h,d);
+  const cy = (r,h) => new THREE.CylinderGeometry(r,r,h,10);
+  const c = n => new THREE.MeshLambertMaterial({color:n});
+
+  if (roomId === 'dock') {
+    addMesh(bx(1,1,1), c(0x8B6914), -5.5, 0.5, -5.5);
+    addMesh(bx(1,1,1), c(0x7a5c10), -5.5, 1.5, -5.5);
+    addMesh(bx(0.8,1.2,0.8), c(0x7a5c10), -4.5, 0.6, -5.5);
+    addMesh(cy(0.45,1.0), c(0xa06030),  5.5, 0.5,  -5.5);
+    addMesh(cy(0.45,1.0), c(0xa06030),  5.5, 0.5,  -4.5);
+    // Docking ring (torus on floor)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3,0.06,8,40), new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.5}));
+    ring.rotation.x = Math.PI/2; ring.position.y = 0.01;
+    scene.add(ring); roomObjs.push(ring);
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.8,0.04,8,40), new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.3}));
+    ring2.rotation.x = Math.PI/2; ring2.position.y = 0.01;
+    scene.add(ring2); roomObjs.push(ring2);
+  }
+  else if (roomId === 'bridge') {
+    // Navigation console desk
+    addMesh(bx(5,0.15,1.0), c(0x1a2a3a), 0, 1.2, -5.8);
+    addMesh(bx(5,1.1,0.8),  c(0x0f1e2e), 0, 0.55,-5.8);
+    // Console screens (glowing)
+    const scrMat = new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.6});
+    addMesh(bx(1.4,0.9,0.05), scrMat, -1.5, 1.3, -5.7);
+    addMesh(bx(1.4,0.9,0.05), scrMat,  1.5, 1.3, -5.7);
+    addMesh(bx(0.9,0.9,0.05), scrMat,  0,   1.3, -5.7);
+    // Captain chair
+    addMesh(bx(0.8,0.1,0.8), c(0x1a2a3a), 0, 0.85, 0);
+    addMesh(bx(0.7,0.85,0.12),c(0x253545), 0, 1.25, -0.44);
+    addMesh(bx(0.2,0.5,0.55), c(0x1a2a3a), -0.5,1.1,0);
+    addMesh(bx(0.2,0.5,0.55), c(0x1a2a3a),  0.5,1.1,0);
+  }
+  else if (roomId === 'market') {
+    // Left stall
+    addMesh(bx(3.5,0.12,1.2), c(0x4a90e2), -3, 1.8, -5.5);
+    addMesh(bx(3.5,1.7,1.0),  c(0x1a2a3a), -3, 0.85,-5.5);
+    addMesh(bx(0.4,0.4,0.4),  c(0xf5a623), -4.2,2.1,-5.2);
+    addMesh(bx(0.4,0.4,0.4),  c(0x39ff14), -3.5,2.1,-5.2);
+    addMesh(bx(0.4,0.4,0.4),  c(0xe04040), -2.8,2.1,-5.2);
+    // Right stall
+    addMesh(bx(3.5,0.12,1.2), c(0xe07020),  3, 1.8, -5.5);
+    addMesh(bx(3.5,1.7,1.0),  c(0x1a2a3a),  3, 0.85,-5.5);
+    addMesh(bx(0.4,0.4,0.4),  c(0xffd700),  2, 2.1, -5.2);
+    addMesh(bx(0.4,0.4,0.4),  c(0x00ccff),  2.7,2.1,-5.2);
+    addMesh(bx(0.4,0.4,0.4),  c(0xdd00ff),  3.4,2.1,-5.2);
+    // Price board
+    addMesh(bx(3,0.05,1.4),   c(0x0a1520), 0, 1.5, -5.9);
+  }
+  else if (roomId === 'engineering') {
+    // Generator
+    addMesh(bx(1.0,2.0,0.9),  c(0x2a3a4a), -5.5, 1.0, 0);
+    addMesh(bx(0.8,0.12,0.8), c(0x1a2a3a), -5.5, 2.06,0);
+    const dialMat = new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.8});
+    addMesh(bx(0.2,0.2,0.05),  dialMat, -5.5, 1.5, -0.46);
+    // Pipes
+    for(let i=0;i<4;i++) {
+      addMesh(cy(0.08, ROOM_H), new THREE.MeshLambertMaterial({color:0x2a3a4a}), 5.5, ROOM_H/2, -2+i*1.3);
+    }
+    addMesh(bx(0.25, 0.25, 4.5), c(0x1a2a3a), 5.5, 1.2, 0);
+    addMesh(bx(0.25, 0.25, 4.5), c(0x1a2a3a), 5.5, 2.5, 0);
+    // Control terminal
+    addMesh(bx(1.2,0.1,0.7),  c(0x1a2a3a), 0, 1.2, -5.8);
+    addMesh(bx(1.2,1.1,0.6),  c(0x0f1e2e), 0, 0.55,-5.8);
+    const scrE = new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.7});
+    addMesh(bx(0.9,0.7,0.05), scrE, 0, 1.1, -5.6);
+  }
+  else if (roomId === 'bar') {
+    // Bar counter
+    addMesh(bx(10,0.12,1.2), c(0x3a2a1a), 0, 1.2, -5.5);
+    addMesh(bx(10,1.1,1.0),  c(0x2a1a0a), 0, 0.55,-5.5);
+    // Bottles
+    const colors = [0xe04040,0x4a90e2,0x39ff14,0xdd00ff,0xff9900];
+    colors.forEach((col,i) => {
+      addMesh(cy(0.07,0.45), new THREE.MeshLambertMaterial({color:col}), -4+i, 1.5, -5.5);
+    });
+    // Tables
+    addMesh(bx(1.4,0.08,1.4), c(0x2a1a0a), -4, 0.9,  2);
+    addMesh(cy(0.06,0.9),      c(0x1a0a00), -4, 0.45, 2);
+    addMesh(bx(1.4,0.08,1.4), c(0x2a1a0a),  4, 0.9,  2);
+    addMesh(cy(0.06,0.9),      c(0x1a0a00),  4, 0.45, 2);
+    // Stools
+    addMesh(cy(0.2,0.05), c(0x1a0a00), -4.5,0.75, 2);
+    addMesh(cy(0.2,0.05), c(0x1a0a00), -3.5,0.75, 2);
+    addMesh(cy(0.2,0.05), c(0x1a0a00),  3.5,0.75, 2);
+    addMesh(cy(0.2,0.05), c(0x1a0a00),  4.5,0.75, 2);
+    // Drinks machine
+    addMesh(bx(0.8,2.2,0.6), c(0x1a2a3a), 5.8, 1.1, -2);
+    const dm = new THREE.MeshBasicMaterial({color:t.light,transparent:true,opacity:0.4});
+    addMesh(bx(0.5,0.4,0.05), dm, 5.8, 1.5, -1.7);
+  }
+}
+
+// Door check
+function checkDoors() {
+  const px = camera.position.x, pz = camera.position.z;
+  for (const {target, cx, cz, r} of doorTriggers) {
+    if ((px-cx)*(px-cx)+(pz-cz)*(pz-cz) < r*r) {
+      const entryDir = Object.keys(ROOMS[myRoom]||{}).find(d => doorTriggers.find(dt=>dt.target===target && dt.cx===cx && dt.cz===cz) && ROOMS[myRoom][d]===target);
+      changeRoom(target, entryDir||'n');
+      return;
+    }
+  }
+}
+
+function changeRoom(roomId, dir) {
+  post('/hub/move', {room:roomId, x:50, y:50});
+  buildRoom(roomId, dir);
+  pollState();
+}
+
+// ── Player sprites ──────────────────────────────────────────────────────────
+const _texCache = {};
+
+function getTexture(uname, skinId, col) {
+  const k = `${uname}_${skinId}`;
+  if (_texCache[k]) return _texCache[k];
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 200;
+  const ctx = cv.getContext('2d');
+  const tex = new THREE.CanvasTexture(cv);
+  _texCache[k] = tex;
+
+  const svgStr = (SKIN_SVG[skinId]||SKIN_SVG.default)
+    .replace('width="44"','width="128"').replace('height="66"','height="160"')
+    .replace(/width="\d+"/, 'width="128"').replace(/height="\d+"/, 'height="160"');
+  const blob = new Blob([svgStr], {type:'image/svg+xml'});
+  const url  = URL.createObjectURL(blob);
+  const img  = new Image();
+  img.onload = () => {
+    ctx.clearRect(0,0,128,200);
+    ctx.drawImage(img, 0, 0, 128, 168);
+    ctx.fillStyle = col||'#00ccff';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 5;
+    ctx.fillText(uname, 64, 192);
+    URL.revokeObjectURL(url);
+    tex.needsUpdate = true;
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+  return tex;
+}
+
+function updatePlayerSprites(players) {
+  const inRoom = Object.entries(players).filter(([u,p]) => u !== ME && p.room === myRoom);
+  const seen = new Set(inRoom.map(([u])=>u));
+
+  // Remove stale sprites
+  for (const [u, sp] of Object.entries(otherSprites)) {
+    if (!seen.has(u)) { scene.remove(sp); sp.material.dispose(); delete otherSprites[u]; }
+  }
+
+  // Add/update sprites
+  inRoom.forEach(([uname, p]) => {
+    const tex = getTexture(uname, p.skin||'default', p.color||'#00ccff');
+    if (!otherSprites[uname]) {
+      const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+      const sp  = new THREE.Sprite(mat);
+      sp.scale.set(1.3, 2.0, 1);
+      scene.add(sp);
+      otherSprites[uname] = sp;
+    } else {
+      otherSprites[uname].material.map = tex;
+      otherSprites[uname].material.needsUpdate = true;
+    }
+    const HALF = ROOM_HALF - 0.5;
+    const wx = (p.x/100 - 0.5) * HALF * 2;
+    const wz = (p.y/100 - 0.5) * HALF * 2;
+    otherSprites[uname].position.set(wx, 1.0, wz);
+  });
+}
+
+// ── Raycasting (interaction) ────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const center2d  = new THREE.Vector2(0,0);
+
+function checkInteraction() {
+  if (!ptrLocked) { hoveredPlayer = null; document.getElementById('interact-hint').style.display='none'; return; }
+  raycaster.setFromCamera(center2d, camera);
+  const sArr = Object.entries(otherSprites);
+  const hits = raycaster.intersectObjects(sArr.map(([,s])=>s));
+  const newHov = hits.length ? (sArr.find(([,s])=>s===hits[0].object)?.[0]) : null;
+  if (newHov !== hoveredPlayer) {
+    hoveredPlayer = newHov;
+    const hint = document.getElementById('interact-hint');
+    hint.style.display = newHov ? 'block' : 'none';
+    if (newHov) hint.textContent = `[F] Interakcia s ${newHov}`;
+  }
+}
+
+// ── Game Loop ────────────────────────────────────────────────────────────────
+let lastT = performance.now();
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now(), dt = Math.min((now-lastT)/1000, 0.05); lastT = now;
+  updateMovement(dt);
+  checkDoors();
+  checkInteraction();
+  renderer.render(scene, camera);
+}
+
+// ── State Polling ────────────────────────────────────────────────────────────
+let state = {players:{}, offers:[], chat:[]};
+let _lastChatTs = 0;
+let _movTimer   = 0;
 
 function pollState() {
   fetch('/hub/state').then(r=>r.json()).then(d => {
     if (!d.ok) return;
     state = d;
-    renderCanvas();
+    updatePlayerSprites(d.players||{});
     renderSidebar();
     renderOffers();
     if (d.chat) renderChat(d.chat);
   }).catch(()=>{});
 }
 
-function changeRoom(room) {
-  myRoom = room; myX = 50; myY = 50;
-  pendingMove = {room, x:50, y:50};
-  renderCanvas();
-  document.getElementById('room-crumb').textContent = ROOMS[room]?.name || room;
+function sendMove() {
+  const HALF = ROOM_HALF - 0.5;
+  const px = camera.position.x, pz = camera.position.z;
+  const x = Math.round(50 + 50 * px / HALF);
+  const y = Math.round(50 + 50 * pz / HALF);
+  post('/hub/move', {room:myRoom, x:Math.max(0,Math.min(100,x)), y:Math.max(0,Math.min(100,y))});
 }
 
-const SKIN_SVG = {
-  default: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
-    <rect x="15" y="4" width="50" height="44" rx="5" fill="#ffb5a0"/>
-    <rect x="24" y="16" width="8" height="8" fill="#333"/>
-    <rect x="48" y="16" width="8" height="8" fill="#333"/>
-    <rect x="27" y="34" width="26" height="5" fill="#cc8070"/>
-    <rect x="10" y="50" width="60" height="36" rx="3" fill="#4a90e2"/>
-    <rect x="0" y="52" width="12" height="20" rx="3" fill="#ffb5a0"/>
-    <rect x="68" y="52" width="12" height="20" rx="3" fill="#ffb5a0"/>
-    <rect x="16" y="88" width="21" height="26" fill="#1a3a6e"/>
-    <rect x="43" y="88" width="21" height="26" fill="#1a3a6e"/>
-    <rect x="11" y="110" width="28" height="10" rx="2" fill="#111"/>
-    <rect x="41" y="110" width="28" height="10" rx="2" fill="#111"/>
-  </svg>`,
-  banik: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
-    <rect x="8" y="2" width="64" height="22" rx="5" fill="#f5a623"/>
-    <rect x="18" y="8" width="44" height="7" rx="2" fill="#ffffffaa"/>
-    <rect x="15" y="18" width="50" height="40" rx="5" fill="#d4a574"/>
-    <rect x="24" y="28" width="8" height="8" fill="#333"/>
-    <rect x="48" y="28" width="8" height="8" fill="#333"/>
-    <rect x="27" y="44" width="26" height="5" fill="#8a5030"/>
-    <rect x="10" y="60" width="60" height="36" rx="3" fill="#e07020"/>
-    <rect x="10" y="68" width="60" height="8" fill="#8a3010"/>
-    <rect x="10" y="80" width="60" height="8" fill="#8a3010"/>
-    <rect x="64" y="62" width="14" height="26" rx="3" fill="#60504a"/>
-    <rect x="0" y="62" width="12" height="20" rx="3" fill="#d4a574"/>
-    <rect x="68" y="62" width="12" height="20" rx="3" fill="#d4a574"/>
-    <rect x="16" y="98" width="21" height="22" fill="#5c3a1e"/>
-    <rect x="43" y="98" width="21" height="22" fill="#5c3a1e"/>
-    <rect x="11" y="114" width="28" height="6" rx="2" fill="#3a2010"/>
-    <rect x="41" y="114" width="28" height="6" rx="2" fill="#3a2010"/>
-  </svg>`,
-  astronaut: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
-    <rect x="8" y="2" width="64" height="56" rx="22" fill="#dde2e8"/>
-    <rect x="18" y="12" width="44" height="30" rx="13" fill="#7abbde"/>
-    <rect x="22" y="16" width="14" height="8" rx="4" fill="#ffffffaa"/>
-    <rect x="22" y="34" width="10" height="6" rx="2" fill="#e04040cc"/>
-    <rect x="48" y="34" width="10" height="6" rx="2" fill="#e04040cc"/>
-    <rect x="22" y="58" width="36" height="8" rx="2" fill="#b8bec8"/>
-    <rect x="8" y="64" width="64" height="38" rx="4" fill="#e4e8ec"/>
-    <rect x="24" y="72" width="32" height="18" rx="3" fill="#b0b8c4"/>
-    <rect x="27" y="76" width="8" height="8" fill="#e04040" rx="1"/>
-    <rect x="38" y="76" width="10" height="8" fill="#8a9aaa" rx="1"/>
-    <rect x="0" y="66" width="10" height="26" rx="4" fill="#c8d0d8"/>
-    <rect x="70" y="66" width="10" height="26" rx="4" fill="#c8d0d8"/>
-    <rect x="14" y="104" width="24" height="16" rx="5" fill="#7a9ab0"/>
-    <rect x="42" y="104" width="24" height="16" rx="5" fill="#7a9ab0"/>
-  </svg>`,
-  kapitan: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
-    <rect x="6" y="14" width="68" height="10" rx="2" fill="#1a2a8a"/>
-    <rect x="12" y="2" width="56" height="18" rx="5" fill="#1a2a8a"/>
-    <rect x="14" y="14" width="52" height="7" fill="#f5c842"/>
-    <rect x="15" y="22" width="50" height="42" rx="5" fill="#ffb5a0"/>
-    <rect x="24" y="32" width="8" height="8" fill="#333"/>
-    <rect x="48" y="32" width="8" height="8" fill="#333"/>
-    <rect x="27" y="50" width="26" height="5" fill="#cc8070"/>
-    <rect x="10" y="66" width="60" height="40" rx="3" fill="#1a2a8a"/>
-    <rect x="6" y="66" width="20" height="12" rx="3" fill="#f5c842"/>
-    <rect x="54" y="66" width="20" height="12" rx="3" fill="#f5c842"/>
-    <rect x="35" y="72" width="10" height="10" rx="5" fill="#f5c842"/>
-    <rect x="35" y="84" width="10" height="10" rx="5" fill="#f5c842"/>
-    <rect x="35" y="96" width="10" height="10" rx="5" fill="#f5c842"/>
-    <rect x="0" y="68" width="12" height="20" rx="3" fill="#ffb5a0"/>
-    <rect x="68" y="68" width="12" height="20" rx="3" fill="#ffb5a0"/>
-    <rect x="16" y="108" width="21" height="12" fill="#1a2a8a"/>
-    <rect x="43" y="108" width="21" height="12" fill="#1a2a8a"/>
-    <rect x="11" y="116" width="28" height="4" rx="2" fill="#111"/>
-    <rect x="41" y="116" width="28" height="4" rx="2" fill="#111"/>
-  </svg>`,
-  robot: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120" width="44" height="66">
-    <rect x="36" y="0" width="8" height="14" fill="#607080"/>
-    <ellipse cx="40" cy="2" rx="7" ry="5" fill="#e04040"/>
-    <rect x="10" y="12" width="60" height="50" rx="5" fill="#607080"/>
-    <rect x="18" y="22" width="18" height="14" rx="3" fill="#00ccff"/>
-    <rect x="44" y="22" width="18" height="14" rx="3" fill="#00ccff"/>
-    <rect x="20" y="24" width="6" height="4" rx="1" fill="#ffffff66"/>
-    <rect x="46" y="24" width="6" height="4" rx="1" fill="#ffffff66"/>
-    <rect x="20" y="46" width="40" height="6" rx="2" fill="#405060"/>
-    <rect x="24" y="48" width="5" height="2" fill="#607080"/>
-    <rect x="32" y="48" width="5" height="2" fill="#607080"/>
-    <rect x="40" y="48" width="5" height="2" fill="#607080"/>
-    <rect x="26" y="62" width="28" height="8" rx="2" fill="#506070"/>
-    <rect x="8" y="68" width="64" height="38" rx="4" fill="#506070"/>
-    <rect x="14" y="76" width="22" height="14" rx="3" fill="#e04040"/>
-    <rect x="44" y="76" width="22" height="14" rx="3" fill="#00ccff"/>
-    <rect x="0" y="70" width="10" height="28" rx="4" fill="#607080"/>
-    <rect x="70" y="70" width="10" height="28" rx="4" fill="#607080"/>
-    <rect x="2" y="90" width="8" height="6" rx="2" fill="#50606e"/>
-    <rect x="70" y="90" width="8" height="6" rx="2" fill="#50606e"/>
-    <rect x="16" y="108" width="20" height="12" rx="2" fill="#607080"/>
-    <rect x="44" y="108" width="20" height="12" rx="2" fill="#607080"/>
-  </svg>`,
-};
+setInterval(pollState, 2000);
+setInterval(sendMove, 500);
 
-function skinSVG(skinId) {
-  return SKIN_SVG[skinId] || SKIN_SVG.default;
-}
-
-// ── Room Decorations ────────────────────────────────────────────────────────
-const _svgCrate = (w,h) => `<svg viewBox="0 0 50 45" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="46" height="41" rx="2" fill="#8B6914" stroke="#5a4410" stroke-width="2"/>
-  <line x1="25" y1="2" x2="25" y2="43" stroke="#5a4410" stroke-width="2"/>
-  <line x1="2" y1="22" x2="48" y2="22" stroke="#5a4410" stroke-width="2"/>
-  <rect x="10" y="8" width="10" height="6" rx="1" fill="#5a4410"/>
-  <rect x="30" y="8" width="10" height="6" rx="1" fill="#5a4410"/>
-  <rect x="10" y="28" width="10" height="6" rx="1" fill="#5a4410"/>
-  <rect x="30" y="28" width="10" height="6" rx="1" fill="#5a4410"/>
-</svg>`;
-
-const _svgBarrel = `<svg viewBox="0 0 40 55" width="34" height="46" xmlns="http://www.w3.org/2000/svg">
-  <rect x="4" y="4" width="32" height="47" rx="8" fill="#a06030"/>
-  <rect x="0" y="12" width="40" height="5" fill="#7a4820"/>
-  <rect x="0" y="24" width="40" height="5" fill="#7a4820"/>
-  <rect x="0" y="36" width="40" height="5" fill="#7a4820"/>
-  <rect x="16" y="2" width="8" height="8" rx="2" fill="#7a4820"/>
-</svg>`;
-
-const _svgConsole = (accent) => `<svg viewBox="0 0 80 60" width="80" height="60" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="80" height="60" rx="3" fill="#0a1520"/>
-  <rect x="4" y="4" width="72" height="44" rx="2" fill="#001a2e"/>
-  <rect x="8" y="8" width="64" height="36" rx="1" fill="#0a2840"/>
-  <rect x="12" y="12" width="42" height="3" fill="${accent}88"/>
-  <rect x="12" y="18" width="28" height="3" fill="${accent}55"/>
-  <rect x="12" y="24" width="52" height="3" fill="${accent}44"/>
-  <rect x="12" y="30" width="18" height="3" fill="#39ff1466"/>
-  <rect x="18" y="50" width="8" height="6" rx="2" fill="#39ff14"/>
-  <rect x="34" y="50" width="8" height="6" rx="2" fill="#ff9900"/>
-  <rect x="50" y="50" width="8" height="6" rx="2" fill="#e04040"/>
-</svg>`;
-
-const _stationDiv = (label, href, color) =>
-  `<a href="${href}" style="display:block;background:#000c14;border:1px solid ${color}66;color:${color};font-family:'VT323',monospace;font-size:.88em;padding:5px 14px;text-align:center;text-decoration:none;white-space:nowrap;letter-spacing:.06em;border-radius:2px">${label}</a>`;
-const _stationBtn = (label, onclick, color) =>
-  `<button onclick="${onclick}" style="display:block;width:100%;background:#000c14;border:1px solid ${color}88;color:${color};font-family:'VT323',monospace;font-size:.9em;padding:6px 16px;text-align:center;white-space:nowrap;letter-spacing:.06em;border-radius:2px;cursor:pointer">${label}</button>`;
-
-const ROOM_DECOR = {
-  dock: [
-    // Stacked crates top-left
-    {x:2, y:4,  html:`<div style="display:flex;flex-direction:column;gap:2px">${_svgCrate(46,42)}${_svgCrate(46,42)}</div>`},
-    // Barrels top-right
-    {x:82, y:5, html:`<div style="display:flex;gap:3px;align-items:flex-end">${_svgBarrel}${_svgCrate(36,32)}</div>`},
-    // Docking ring — subtle center circle
-    {x:50, y:44, html:`<svg viewBox="0 0 200 80" width="200" height="80" xmlns="http://www.w3.org/2000/svg" style="transform:translate(-50%,-50%)">
-      <ellipse cx="100" cy="40" rx="90" ry="34" fill="none" stroke="#00ccff22" stroke-width="3" stroke-dasharray="10,6"/>
-      <ellipse cx="100" cy="40" rx="60" ry="22" fill="none" stroke="#00ccff14" stroke-width="2" stroke-dasharray="6,8"/>
-      <text x="100" y="44" text-anchor="middle" fill="#00ccff22" font-family="monospace" font-size="9" letter-spacing="3">DOCKING PAD</text>
-    </svg>`},
-    // Landing lights
-    {x:20, y:72, html:`<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="6" fill="#39ff14" opacity=".7"/><circle cx="7" cy="7" r="3" fill="#39ff14"/></svg>`},
-    {x:80, y:72, html:`<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="6" fill="#39ff14" opacity=".7"/><circle cx="7" cy="7" r="3" fill="#39ff14"/></svg>`},
-    // Single crate bottom-right
-    {x:86, y:68, html:_svgCrate(38,34)},
-    // Station
-    {x:50, y:88, interactive:true, html:_stationDiv('⚓ DOCK CONTROL', '/lobby', '#00ccff')},
-  ],
-  bridge: [
-    // Wide navigation console top
-    {x:50, y:3, html:`<svg viewBox="0 0 300 70" width="300" height="70" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
-      <rect x="0" y="8" width="300" height="60" rx="4" fill="#0a1520"/>
-      <rect x="6" y="12" width="288" height="50" rx="3" fill="#001a2e"/>
-      <rect x="12" y="16" width="180" height="38" rx="2" fill="#0a2840"/>
-      <rect x="18" y="20" width="60" height="4" fill="#00ccff77"/>
-      <rect x="18" y="28" width="100" height="3" fill="#00ccff44"/>
-      <rect x="18" y="35" width="80" height="3" fill="#00ccff33"/>
-      <rect x="18" y="42" width="50" height="3" fill="#39ff1444"/>
-      <rect x="200" y="16" width="88" height="38" rx="2" fill="#0a2840"/>
-      <circle cx="224" cy="28" r="8" fill="#0a1a2a" stroke="#00ccff44" stroke-width="1.5"/>
-      <circle cx="250" cy="28" r="8" fill="#0a1a2a" stroke="#ff990044" stroke-width="1.5"/>
-      <circle cx="276" cy="28" r="8" fill="#0a1a2a" stroke="#e0404044" stroke-width="1.5"/>
-      <line x1="224" y1="28" x2="224" y2="21" stroke="#00ccff" stroke-width="1.5"/>
-      <line x1="250" y1="28" x2="255" y2="22" stroke="#ff9900" stroke-width="1.5"/>
-      <line x1="276" y1="28" x2="271" y2="22" stroke="#e04040" stroke-width="1.5"/>
-      <rect x="206" y="42" width="74" height="8" rx="1" fill="#0a1520"/>
-      <rect x="210" y="44" width="8" height="4" fill="#39ff14"/>
-      <rect x="222" y="44" width="8" height="4" fill="#39ff14"/>
-      <rect x="234" y="44" width="8" height="4" fill="#ff9900"/>
-      <rect x="246" y="44" width="8" height="4" fill="#ff9900"/>
-      <rect x="258" y="44" width="8" height="4" fill="#e04040"/>
-      <rect x="270" y="44" width="8" height="4" fill="#e04040"/>
-      <rect x="60" y="0" width="180" height="10" rx="2" fill="#0d1e2e"/>
-    </svg>`},
-    // Captain chair center
-    {x:50, y:42, html:`<svg viewBox="0 0 70 60" width="70" height="60" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
-      <rect x="20" y="0" width="30" height="36" rx="4" fill="#1a2a3a"/>
-      <rect x="15" y="4" width="40" height="28" rx="3" fill="#253545"/>
-      <rect x="0" y="20" width="18" height="24" rx="3" fill="#1a2a3a"/>
-      <rect x="52" y="20" width="18" height="24" rx="3" fill="#1a2a3a"/>
-      <rect x="10" y="44" width="50" height="8" rx="3" fill="#1a2a3a"/>
-      <rect x="18" y="50" width="10" height="10" rx="2" fill="#0d1520"/>
-      <rect x="42" y="50" width="10" height="10" rx="2" fill="#0d1520"/>
-    </svg>`},
-    // Star map right side
-    {x:86, y:22, html:`<svg viewBox="0 0 70 80" width="65" height="75" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="70" height="80" rx="3" fill="#050f1a"/>
-      <rect x="4" y="4" width="62" height="72" rx="2" fill="#020810"/>
-      <circle cx="35" cy="40" r="26" fill="none" stroke="#00ccff14" stroke-width="1"/>
-      <circle cx="35" cy="40" r="16" fill="none" stroke="#00ccff0a" stroke-width="1"/>
-      <circle cx="35" cy="40" r="3" fill="#ff9900" opacity=".8"/>
-      <circle cx="52" cy="28" r="2" fill="#4a90e2" opacity=".7"/>
-      <circle cx="20" cy="55" r="1.5" fill="#e04040" opacity=".6"/>
-      <circle cx="48" cy="52" r="1" fill="#fff" opacity=".5"/>
-      <circle cx="18" cy="25" r="1" fill="#fff" opacity=".4"/>
-      <circle cx="60" cy="60" r="1" fill="#fff" opacity=".3"/>
-      <line x1="35" y1="40" x2="52" y2="28" stroke="#00ccff22" stroke-width="1"/>
-    </svg>`},
-    // Side panel left
-    {x:2, y:22, html:_svgConsole('#00ccff')},
-    // Council station
-    {x:50, y:86, interactive:true, html:_stationDiv('🏛 RADA BEZPEČNOSTI', '/council', '#ff88ff')},
-  ],
-  market: [
-    // Left stall
-    {x:4, y:6, html:`<svg viewBox="0 0 110 75" width="110" height="75" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="110" height="22" rx="3" fill="#4a90e2"/>
-      <rect x="0" y="14" width="110" height="9" fill="#2a5a9a"/>
-      <rect x="5" y="28" width="100" height="36" rx="2" fill="#1a2a3a"/>
-      <rect x="5" y="24" width="100" height="7" rx="2" fill="#2a3a4a"/>
-      <rect x="14" y="32" width="12" height="12" rx="2" fill="#f5a623"/>
-      <rect x="32" y="32" width="12" height="12" rx="2" fill="#39ff14"/>
-      <rect x="50" y="32" width="12" height="12" rx="2" fill="#e04040"/>
-      <rect x="68" y="32" width="12" height="12" rx="2" fill="#dd00ff"/>
-      <rect x="86" y="32" width="12" height="12" rx="2" fill="#4a90e2"/>
-      <text x="55" y="56" text-anchor="middle" fill="#00ccff55" font-family="monospace" font-size="7" letter-spacing="1">STALL A</text>
-    </svg>`},
-    // Right stall
-    {x:58, y:6, html:`<svg viewBox="0 0 110 75" width="110" height="75" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="110" height="22" rx="3" fill="#e07020"/>
-      <rect x="0" y="14" width="110" height="9" fill="#a04010"/>
-      <rect x="5" y="28" width="100" height="36" rx="2" fill="#1a2a3a"/>
-      <rect x="5" y="24" width="100" height="7" rx="2" fill="#2a3a4a"/>
-      <rect x="14" y="32" width="12" height="12" rx="2" fill="#ffd700"/>
-      <rect x="32" y="32" width="12" height="12" rx="2" fill="#00ccff"/>
-      <rect x="50" y="32" width="12" height="12" rx="2" fill="#ff88ff"/>
-      <rect x="68" y="32" width="12" height="12" rx="2" fill="#39ff14"/>
-      <rect x="86" y="32" width="12" height="12" rx="2" fill="#e04040"/>
-      <text x="55" y="56" text-anchor="middle" fill="#ff990055" font-family="monospace" font-size="7" letter-spacing="1">STALL B</text>
-    </svg>`},
-    // Price board
-    {x:50, y:52, html:`<svg viewBox="0 0 160 50" width="160" height="50" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
-      <rect x="0" y="0" width="160" height="50" rx="3" fill="#0a1520"/>
-      <rect x="4" y="4" width="152" height="42" rx="2" fill="#001a2e"/>
-      <text x="80" y="16" text-anchor="middle" fill="#00ccff88" font-family="monospace" font-size="8" letter-spacing="2">LIVE PRICES</text>
-      <rect x="12" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
-      <rect x="50" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
-      <rect x="88" y="22" width="30" height="14" rx="1" fill="#0a2840"/>
-      <rect x="126" y="22" width="28" height="14" rx="1" fill="#0a2840"/>
-      <text x="27" y="32" text-anchor="middle" fill="#39ff14" font-family="monospace" font-size="7">COAL</text>
-      <text x="65" y="32" text-anchor="middle" fill="#ff9900" font-family="monospace" font-size="7">URAN</text>
-      <text x="103" y="32" text-anchor="middle" fill="#4a90e2" font-family="monospace" font-size="7">ENRG</text>
-      <text x="140" y="32" text-anchor="middle" fill="#ffd700" font-family="monospace" font-size="7">GOLD</text>
-    </svg>`},
-    // Crates in corner
-    {x:2, y:65, html:_svgCrate(38,34)},
-    {x:88, y:65, html:_svgBarrel},
-    // Station
-    {x:50, y:85, interactive:true, html:_stationBtn('🤝 TRADE POST', "openStationModal('trade')", '#4a90e2')},
-  ],
-  engineering: [
-    // Generator left
-    {x:4, y:8, html:`<svg viewBox="0 0 70 90" width="65" height="84" xmlns="http://www.w3.org/2000/svg">
-      <rect x="20" y="10" width="30" height="12" rx="3" fill="#1a2a3a"/>
-      <rect x="28" y="4" width="14" height="8" rx="2" fill="#2a3a4a"/>
-      <rect x="5" y="20" width="60" height="65" rx="4" fill="#2a3a4a"/>
-      <rect x="10" y="25" width="50" height="35" rx="2" fill="#1a2a3a"/>
-      <circle cx="25" cy="35" r="9" fill="#0a1a2a" stroke="#00ccff44" stroke-width="2"/>
-      <circle cx="45" cy="35" r="9" fill="#0a1a2a" stroke="#ff990044" stroke-width="2"/>
-      <line x1="25" y1="35" x2="25" y2="27" stroke="#00ccff" stroke-width="1.5"/>
-      <line x1="45" y1="35" x2="51" y2="30" stroke="#ff9900" stroke-width="1.5"/>
-      <rect x="14" y="48" width="6" height="9" fill="#39ff14"/>
-      <rect x="22" y="44" width="6" height="13" fill="#39ff14"/>
-      <rect x="30" y="41" width="6" height="16" fill="#ff9900"/>
-      <rect x="38" y="38" width="6" height="19" fill="#ff9900"/>
-      <rect x="46" y="35" width="6" height="22" fill="#e04040"/>
-      <rect x="15" y="84" width="12" height="6" rx="1" fill="#1a2a3a"/>
-      <rect x="43" y="84" width="12" height="6" rx="1" fill="#1a2a3a"/>
-    </svg>`},
-    // Pipes right side
-    {x:82, y:5, html:`<svg viewBox="0 0 50 180" width="44" height="160" xmlns="http://www.w3.org/2000/svg">
-      <rect x="16" y="0" width="18" height="180" fill="#2a3a4a"/>
-      <rect x="20" y="0" width="10" height="180" fill="#1a2a3a"/>
-      <rect x="0" y="30" width="50" height="14" rx="4" fill="#2a3a4a"/>
-      <rect x="4" y="33" width="42" height="8" fill="#1a2a3a"/>
-      <rect x="0" y="80" width="50" height="14" rx="4" fill="#2a3a4a"/>
-      <rect x="4" y="83" width="42" height="8" fill="#1a2a3a"/>
-      <rect x="0" y="130" width="50" height="14" rx="4" fill="#2a3a4a"/>
-      <rect x="4" y="133" width="42" height="8" fill="#1a2a3a"/>
-      <circle cx="25" cy="37" r="5" fill="#0a1520" stroke="#00ccff55" stroke-width="1.5"/>
-      <circle cx="25" cy="87" r="5" fill="#0a1520" stroke="#ff990055" stroke-width="1.5"/>
-      <circle cx="25" cy="137" r="5" fill="#0a1520" stroke="#e0404055" stroke-width="1.5"/>
-    </svg>`},
-    // Control terminal center-right
-    {x:52, y:15, html:_svgConsole('#39ff14')},
-    // Warning sign
-    {x:52, y:55, html:`<svg viewBox="0 0 60 30" width="60" height="30" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="60" height="30" rx="2" fill="#1a0a00"/>
-      <rect x="2" y="2" width="56" height="26" rx="1" fill="#2a1200"/>
-      <text x="30" y="19" text-anchor="middle" fill="#ff9900" font-family="monospace" font-size="9" letter-spacing="1">⚠ DANGER</text>
-    </svg>`},
-    // Station
-    {x:50, y:84, interactive:true, html:_stationDiv('⚡ ENERGETICKÁ MINIHRA', '/energy', '#39ff14')},
-  ],
-  bar: [
-    // Bar counter top — wide
-    {x:50, y:4, html:`<svg viewBox="0 0 340 65" width="340" height="65" xmlns="http://www.w3.org/2000/svg" style="transform:translateX(-50%)">
-      <rect x="0" y="18" width="340" height="44" rx="4" fill="#2a1a0a"/>
-      <rect x="0" y="12" width="340" height="10" rx="3" fill="#3a2a1a"/>
-      <!-- bottles shelf -->
-      <rect x="10" y="2" width="8" height="16" rx="2" fill="#e04040"/>
-      <rect x="22" y="4" width="8" height="14" rx="2" fill="#4a90e2"/>
-      <rect x="34" y="2" width="8" height="16" rx="2" fill="#39ff14"/>
-      <rect x="46" y="5" width="8" height="13" rx="2" fill="#dd00ff"/>
-      <rect x="58" y="2" width="8" height="16" rx="2" fill="#ff9900"/>
-      <rect x="70" y="4" width="8" height="14" rx="2" fill="#e04040"/>
-      <rect x="82" y="2" width="8" height="16" rx="2" fill="#ffd700"/>
-      <!-- tap -->
-      <rect x="200" y="12" width="8" height="24" rx="3" fill="#888"/>
-      <rect x="196" y="12" width="16" height="5" rx="2" fill="#aaa"/>
-      <rect x="220" y="12" width="8" height="24" rx="3" fill="#888"/>
-      <rect x="216" y="12" width="16" height="5" rx="2" fill="#aaa"/>
-      <!-- glasses on counter -->
-      <rect x="260" y="26" width="10" height="18" rx="2" fill="#00ccff33" stroke="#00ccff66" stroke-width="1"/>
-      <rect x="276" y="30" width="10" height="14" rx="2" fill="#ff990033" stroke="#ff990066" stroke-width="1"/>
-      <rect x="292" y="26" width="10" height="18" rx="2" fill="#39ff1433" stroke="#39ff1466" stroke-width="1"/>
-    </svg>`},
-    // Left table + chairs
-    {x:8, y:52, html:`<svg viewBox="0 0 90 60" width="90" height="60" xmlns="http://www.w3.org/2000/svg">
-      <rect x="20" y="20" width="50" height="30" rx="3" fill="#2a1a0a"/>
-      <rect x="18" y="16" width="54" height="8" rx="2" fill="#3a2a1a"/>
-      <rect x="4" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
-      <rect x="66" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
-      <circle cx="45" cy="32" r="6" fill="#1a0a00"/>
-    </svg>`},
-    // Right table
-    {x:58, y:52, html:`<svg viewBox="0 0 90 60" width="90" height="60" xmlns="http://www.w3.org/2000/svg">
-      <rect x="20" y="20" width="50" height="30" rx="3" fill="#2a1a0a"/>
-      <rect x="18" y="16" width="54" height="8" rx="2" fill="#3a2a1a"/>
-      <rect x="4" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
-      <rect x="66" y="4" width="20" height="26" rx="3" fill="#1a1208"/>
-      <circle cx="45" cy="32" r="6" fill="#1a0a00"/>
-    </svg>`},
-    // Drinks machine right side
-    {x:88, y:30, html:`<svg viewBox="0 0 50 90" width="44" height="80" xmlns="http://www.w3.org/2000/svg">
-      <rect x="4" y="0" width="42" height="90" rx="4" fill="#1a2a3a"/>
-      <rect x="8" y="6" width="34" height="44" rx="2" fill="#0a1520"/>
-      <rect x="11" y="10" width="12" height="12" rx="2" fill="#e04040aa"/>
-      <rect x="27" y="10" width="12" height="12" rx="2" fill="#4a90e2aa"/>
-      <rect x="11" y="26" width="12" height="12" rx="2" fill="#39ff14aa"/>
-      <rect x="27" y="26" width="12" height="12" rx="2" fill="#dd00ffaa"/>
-      <rect x="10" y="55" width="30" height="8" rx="2" fill="#0a1520"/>
-      <rect x="18" y="70" width="14" height="14" rx="2" fill="#2a3a4a"/>
-    </svg>`},
-    // Leaderboard station
-    {x:50, y:87, interactive:true, html:_stationBtn('🎁 GIFT STATION', "openStationModal('gift')", '#ffd700')},
-  ],
-};
-
-const ROOM_THEME = {
-  dock:        {bg:'linear-gradient(170deg,#0d2035 0%,#071422 100%)', floor:'#0a1a30', accent:'#00ccff'},
-  bridge:      {bg:'linear-gradient(170deg,#0a0826 0%,#040412 100%)', floor:'#080620', accent:'#8888ff'},
-  market:      {bg:'linear-gradient(170deg,#201400 0%,#0c0800 100%)', floor:'#1c1000', accent:'#ff9900'},
-  engineering: {bg:'linear-gradient(170deg,#001a08 0%,#000d04 100%)', floor:'#001408', accent:'#39ff14'},
-  bar:         {bg:'linear-gradient(170deg,#200e00 0%,#110700 100%)', floor:'#1c0e00', accent:'#ffd700'},
-};
-
-function renderCanvas() {
-  const canvas = document.getElementById('room-canvas');
-  const room   = ROOMS[myRoom] || ROOMS.dock;
-  const theme  = ROOM_THEME[myRoom] || ROOM_THEME.dock;
-  document.getElementById('room-area').style.background  = theme.bg;
-  document.getElementById('room-label').style.borderColor = theme.accent + '33';
-  document.getElementById('room-label').style.color       = theme.accent + 'aa';
-  document.getElementById('room-label').textContent = '★ ' + (room.name||myRoom).toUpperCase();
-  document.getElementById('room-crumb').textContent = room.name || myRoom;
-  canvas.innerHTML = '';
-  // Floor strip at bottom
-  const floor = document.createElement('div');
-  floor.style.cssText = `position:absolute;bottom:0;left:0;right:0;height:28%;background:${theme.floor};border-top:1px solid ${theme.accent}22;pointer-events:none;z-index:0`;
-  canvas.appendChild(floor);
-  ['n','s','w','e'].forEach(dir => {
-    const target = room[dir];
-    if (!target) return;
-    const tname = ROOMS[target]?.name || target;
-    const btn = document.createElement('button');
-    btn.className = 'exit-btn exit-'+dir;
-    btn.textContent = dir==='e' ? tname+' →' : dir==='w' ? '← '+tname : dir==='n' ? '↑ '+tname : '↓ '+tname;
-    btn.onclick = () => changeRoom(target);
-    canvas.appendChild(btn);
+// ── Chat ─────────────────────────────────────────────────────────────────────
+function renderChat(msgs) {
+  if (!msgs || !msgs.length) return;
+  const el = document.getElementById('hub-chat');
+  const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 30;
+  const newMsgs = msgs.filter(m => m.t > _lastChatTs);
+  if (!newMsgs.length) return;
+  _lastChatTs = msgs[msgs.length-1].t;
+  newMsgs.forEach(m => {
+    const d = document.createElement('div');
+    d.style.cssText = `color:${m.u===ME?'#00ccff':'#ccc'};word-break:break-word`;
+    d.innerHTML = `<span style='color:${m.u===ME?'#00ccff77':'#666'};font-size:.85em'>${m.u}:</span> ${m.m.replace(/</g,'&lt;')}`;
+    el.appendChild(d);
   });
-  // Decorations
-  (ROOM_DECOR[myRoom]||[]).forEach(d => {
-    const el = document.createElement('div');
-    el.style.cssText = `position:absolute;left:${d.x}%;top:${d.y}%;z-index:1;${d.interactive?'':'pointer-events:none'}`;
-    el.innerHTML = d.html;
-    canvas.appendChild(el);
-  });
-  const players = state.players || {};
-  for (const [uname, p] of Object.entries(players)) {
-    if (p.room !== myRoom) continue;
-    const isMe = uname === ME;
-    const el = document.createElement('div');
-    el.className = 'player-dot';
-    el.style.left = (isMe ? myX : p.x) + '%';
-    el.style.top  = (isMe ? myY : p.y) + '%';
-    el.innerHTML = skinSVG(p.skin||'default')
-                 + `<div class="lbl" style="color:${p.color}">${isMe ? '['+uname+']' : uname}</div>`;
-    if (!isMe) el.onclick = () => openModal(uname);
-    canvas.appendChild(el);
-  }
-  if (!players[ME]) {
-    const col = '#00ccff';
-    const el = document.createElement('div');
-    el.className = 'player-dot';
-    el.style.left = myX+'%'; el.style.top = myY+'%';
-    el.innerHTML = skinSVG(mySkin)
-                 + `<div class="lbl" style="color:${col}">[${ME}]</div>`;
-    canvas.appendChild(el);
-  }
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function sendChat() {
+  const inp = document.getElementById('chat-input');
+  const msg = inp.value.trim(); if (!msg) return; inp.value='';
+  post('/hub/chat', {msg}).then(d=>{ if(!d.ok) toast('✗ '+(d.error||'Chyba')); });
 }
 
+// ── Sidebar ──────────────────────────────────────────────────────────────────
 function renderSidebar() {
   const list = document.getElementById('sb-players');
-  const players = state.players || {};
+  const players = state.players||{};
   const entries = Object.entries(players);
-  if (!entries.length) { list.innerHTML='<span style="color:#333;font-size:.8em">nikto online</span>'; return; }
-  list.innerHTML = entries.map(([uname, p]) => {
-    const isMe = uname === ME;
+  if (!entries.length) { list.innerHTML='<span style="color:#333;font-size:.78em">nikto online</span>'; return; }
+  list.innerHTML = entries.map(([uname,p]) => {
     const rname = ROOMS[p.room]?.name || p.room;
-    const clickAttr = isMe ? '' : ` onclick="openModal('${uname}')"`;
-    return `<div class="pitem"${clickAttr}>
-      <span class="pdot" style="background:${p.color}"></span>
-      <span class="pname" style="color:${p.color}">${uname}</span>
-      <span class="proom">${rname}</span>
+    const me = uname===ME;
+    return `<div class='pitem' ${me?'':'onclick="openModal(\''+uname+'\')"'}>
+      <span class='pdot' style='background:${p.color||'#00ccff'}'></span>
+      <span class='pname' style='color:${p.color||'#00ccff'}'>${uname}${me?' (ja)':''}</span>
+      <span class='proom'>${rname}</span>
     </div>`;
   }).join('');
 }
-
 function renderOffers() {
   const wrap = document.getElementById('sb-offers');
-  const offers = state.offers || [];
-  if (!offers.length) { wrap.innerHTML='<div style="color:#333;font-size:.75em;padding:4px 0">žiadne ponuky</div>'; return; }
-  wrap.innerHTML = '<div class="sb-title" style="font-size:.72em;color:#ffd70077;margin-bottom:4px">PONUKY PRE MŇA</div>'
-    + offers.map(o => `
-    <div class="offer-card">
-      <div class="offer-from">● ${o.from}</div>
-      <div class="offer-items">dáva: ${fmtItem(o.give_type,o.give_amount)}<br>chce: ${fmtItem(o.want_type,o.want_amount)}</div>
-      <div class="offer-btns">
-        <button class="btn-sm btn-accept" onclick="respondOffer('${o.id}',true)">✓ Prijať</button>
-        <button class="btn-sm btn-decline" onclick="respondOffer('${o.id}',false)">✗ Nie</button>
+  const offers = state.offers||[];
+  if (!offers.length) { wrap.innerHTML='<div style="color:#333;font-size:.73em;padding:3px 0">žiadne ponuky</div>'; return; }
+  wrap.innerHTML='<div class="sb-title" style="font-size:.7em;color:#ffd70077">PONUKY PRE MŇA</div>'
+    +offers.map(o=>`<div class='offer-card'>
+      <div style='color:#ffd700'>● ${o.from}</div>
+      <div style='color:#aaa'>${fmtItem(o.give_type,o.give_amount)} → ${fmtItem(o.want_type,o.want_amount)}</div>
+      <div class='offer-btns'>
+        <button class='btn-sm' style='color:#39ff14;border-color:#39ff14' onclick="respondOffer('${o.id}',true)">✓</button>
+        <button class='btn-sm' style='color:#ff4455;border-color:#ff4455' onclick="respondOffer('${o.id}',false)">✗</button>
       </div>
     </div>`).join('');
 }
-
 function fmtItem(type, amount) {
-  if (type==='cr')     return amount.toLocaleString()+' CR';
+  if (type==='cr') return amount.toLocaleString()+' CR';
   if (type==='shards') return amount+' ◈';
   return amount+'× '+type;
 }
 
+// ── Modal (Gift/Trade) ───────────────────────────────────────────────────────
+let selectedPlayer = null;
+let mySkin_local = 'default';
+
 function openModal(uname) {
+  if (ptrLocked) document.exitPointerLock();
   selectedPlayer = uname;
   document.getElementById('modal-title').textContent = '● '+uname;
   document.getElementById('modal').style.display = 'block';
@@ -10291,202 +10324,99 @@ function closeModal() {
   selectedPlayer = null;
 }
 function switchTab(tab) {
-  document.getElementById('tab-gift').style.display  = tab==='gift'  ? '' : 'none';
-  document.getElementById('tab-trade').style.display = tab==='trade' ? '' : 'none';
-  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (i===0)===(tab==='gift')));
+  document.getElementById('tab-gift').style.display  = tab==='gift'  ? '':'none';
+  document.getElementById('tab-trade').style.display = tab==='trade' ? '':'none';
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0)===(tab==='gift')));
 }
 function doGift() {
   if (!selectedPlayer) return;
-  const type   = document.getElementById('g-type').value;
-  const amount = parseInt(document.getElementById('g-amount').value)||0;
+  const type=document.getElementById('g-type').value, amount=parseInt(document.getElementById('g-amount').value)||0;
   if (!amount) { toast('Zadaj množstvo'); return; }
-  post('/hub/gift', {to:selectedPlayer, type, amount}).then(d => {
-    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
+  post('/hub/gift', {to:selectedPlayer, type, amount}).then(d=>{
+    toast(d.ok?'✓ '+d.msg:'✗ '+(d.error||'Chyba'));
     if (d.ok) closeModal();
   });
 }
 function doOffer() {
   if (!selectedPlayer) return;
-  const give_type   = document.getElementById('t-give-type').value;
-  const give_amount = parseInt(document.getElementById('t-give-amt').value)||0;
-  const want_type   = document.getElementById('t-want-type').value;
-  const want_amount = parseInt(document.getElementById('t-want-amt').value)||0;
+  const give_type=document.getElementById('t-give-type').value, give_amount=parseInt(document.getElementById('t-give-amt').value)||0;
+  const want_type=document.getElementById('t-want-type').value, want_amount=parseInt(document.getElementById('t-want-amt').value)||0;
   if (!give_amount||!want_amount) { toast('Zadaj množstvá'); return; }
-  post('/hub/offer', {to:selectedPlayer, give_type, give_amount, want_type, want_amount}).then(d => {
-    toast(d.ok ? '✓ Ponuka odoslaná!' : '✗ '+(d.error||'Chyba'));
+  post('/hub/offer', {to:selectedPlayer, give_type, give_amount, want_type, want_amount}).then(d=>{
+    toast(d.ok?'✓ Ponuka odoslaná!':'✗ '+(d.error||'Chyba'));
     if (d.ok) closeModal();
   });
 }
 function respondOffer(id, accept) {
-  post('/hub/offer/respond', {id, accept}).then(d => {
-    toast(d.ok ? '✓ '+(d.msg||'OK') : '✗ '+(d.error||'Chyba'));
+  post('/hub/offer/respond', {id, accept}).then(d=>{
+    toast(d.ok?'✓ '+(d.msg||'OK'):'✗ '+(d.error||'Chyba'));
     pollState();
   });
 }
+
+// ── Skin Shop ────────────────────────────────────────────────────────────────
+let skinShopData = null;
+function openSkinShop() {
+  if (ptrLocked) document.exitPointerLock();
+  document.getElementById('skin-modal').style.display='block';
+  document.getElementById('skin-overlay').style.display='block';
+  fetch('/hub/skins/state').then(r=>r.json()).then(d=>{
+    if(!d.ok) return;
+    skinShopData=d; mySkin_local=d.equipped;
+    document.getElementById('sk-my-cr').textContent=d.cr.toLocaleString()+' CR';
+    document.getElementById('sk-my-shards').textContent=d.shards+' ◈';
+    const grid=document.getElementById('skin-grid');
+    grid.innerHTML=SKIN_ORDER.map(id=>{
+      const s=d.shop[id]; const owned=d.owned.includes(id); const equipped=d.equipped===id;
+      const priceHtml=s.free?'<span style="color:#39ff14">Zadarmo</span>':s.price_cr?`<span style="color:#ffdd44">${s.price_cr.toLocaleString()} CR</span>`:`<span style="color:#dd00ff">${s.price_shards} ◈</span>`;
+      const btnHtml=equipped?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:5px' disabled>✓ Nasadený</button>`:owned?`<button class='btn-sm' style='color:#00ccff;border-color:#00ccff;width:100%;margin-top:5px' onclick="doEquipSkin('${id}')">Nasadiť</button>`:s.free?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:5px' onclick="doBuySkin('${id}','free')">Získať</button>`:s.price_cr?`<button class='btn-sm' style='color:#ffdd44;border-color:#ffdd44;width:100%;margin-top:5px' onclick="doBuySkin('${id}','cr')">Kúpiť CR</button>`:`<button class='btn-sm' style='color:#dd00ff;border-color:#dd00ff;width:100%;margin-top:5px' onclick="doBuySkin('${id}','shards')">Kúpiť ◈</button>`;
+      const svgPreview=(SKIN_SVG[id]||SKIN_SVG.default).replace('width="44"','width="60"').replace('height="66"','height="90"').replace(/width="\d+"(?!.*width)/,'width="60"').replace(/height="\d+"(?!.*height)/,'height="90"');
+      return `<div style='background:#000c14;border:1px solid ${equipped?'#39ff14':'#00ccff22'};padding:8px;text-align:center;border-radius:2px'><div style='display:inline-block'>${svgPreview}</div><div style='font-size:.82em;margin:3px 0 2px;color:#00ccff'>${SKIN_NAMES[id]}</div><div style='font-size:.73em;margin-bottom:3px'>${priceHtml}</div>${btnHtml}</div>`;
+    }).join('');
+    const sel=document.getElementById('sk-gift-skin');
+    sel.innerHTML=d.owned.map(id=>`<option value='${id}'>${SKIN_NAMES[id]||id}</option>`).join('');
+  });
+}
+function closeSkinShop() {
+  document.getElementById('skin-modal').style.display='none';
+  document.getElementById('skin-overlay').style.display='none';
+}
+function doBuySkin(id, currency) {
+  post('/hub/skins/buy',{skin_id:id,currency}).then(d=>{
+    toast(d.ok?'✓ '+d.msg:'✗ '+(d.error||'Chyba'));
+    if(d.ok) openSkinShop();
+  });
+}
+function doEquipSkin(id) {
+  post('/hub/skins/equip',{skin_id:id}).then(d=>{
+    toast(d.ok?'✓ '+d.msg:'✗ '+(d.error||'Chyba'));
+    if(d.ok){mySkin_local=id; openSkinShop();}
+  });
+}
+function doGiftSkin() {
+  const skin_id=document.getElementById('sk-gift-skin').value;
+  const to=document.getElementById('sk-gift-to').value.trim();
+  if(!to){toast('Zadaj username');return;}
+  post('/hub/skins/gift',{skin_id,to}).then(d=>toast(d.ok?'✓ '+d.msg:'✗ '+(d.error||'Chyba')));
+}
+
+// ── Utils ────────────────────────────────────────────────────────────────────
 function post(url, body) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
-    .then(r => r.json()).catch(()=>({}));
+    .then(r=>r.json()).catch(()=>({}));
 }
-let _toastTimer;
+let _toastT;
 function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.style.opacity = '1';
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.style.opacity='0', 3000);
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.style.opacity='1';
+  clearTimeout(_toastT); _toastT=setTimeout(()=>el.style.opacity='0',3200);
 }
 
-// ── Chat ────────────────────────────────────────────────────────────────────
-let _lastChatTs = 0;
-
-function renderChat(msgs) {
-  if (!msgs || !msgs.length) return;
-  const el = document.getElementById('hub-chat');
-  const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 20;
-  const newMsgs = msgs.filter(m => m.t > _lastChatTs);
-  if (!newMsgs.length) return;
-  _lastChatTs = msgs[msgs.length-1].t;
-  newMsgs.forEach(m => {
-    const div = document.createElement('div');
-    const isMe = m.u === ME;
-    div.style.cssText = `color:${isMe?'#00ccff':'#ccc'};word-break:break-word`;
-    div.innerHTML = `<span style="color:${isMe?'#00ccff88':'#888'};font-size:.85em">${m.u}:</span> ${m.m.replace(/</g,'&lt;')}`;
-    el.appendChild(div);
-  });
-  if (atBottom) el.scrollTop = el.scrollHeight;
-}
-
-function sendChat() {
-  const inp = document.getElementById('chat-input');
-  const msg = inp.value.trim();
-  if (!msg) return;
-  inp.value = '';
-  post('/hub/chat', {msg}).then(d => { if (!d.ok) toast('✗ '+(d.error||'Chyba')); });
-}
-
-// ── Station Interactions ────────────────────────────────────────────────────
-let _stationSel = null;
-
-function openStationModal(type) {
-  document.getElementById('_stn_sel')?.remove();
-  const online = Object.keys(state.players||{}).filter(u => u !== ME);
-  const wrap = document.createElement('div');
-  wrap.id = '_stn_sel';
-  wrap.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#050f15;border:1px solid #00ccff55;padding:16px 20px;z-index:30;min-width:220px;max-width:300px;font-family:inherit';
-
-  if (type === 'gift') {
-    // Gift works for anyone — show online list + manual input for offline
-    const onlineRows = online.map(u => {
-      const p = state.players[u];
-      return `<div onclick="selectStation('${u}','gift')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #ffd70011">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#ffd700'};margin-right:6px;vertical-align:middle"></span>
-        ${u} <span style="color:#39ff1488;font-size:.75em">● online</span>
-      </div>`;
-    }).join('');
-    wrap.innerHTML = `<div style="color:#ffd700;margin-bottom:10px;font-size:1.15em">🎁 Komu giftnúť</div>`
-      + (onlineRows || `<div style="color:#555;font-size:.8em;margin-bottom:6px">— nikto online —</div>`)
-      + `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffd70022">
-           <div style="color:#ffd70066;font-size:.78em;margin-bottom:5px">Alebo zadaj username (aj offline):</div>
-           <div style="display:flex;gap:6px">
-             <input id="_stn_uname" placeholder="username" style="flex:1;background:#000c14;border:1px solid #ffd70044;color:#ffd700;font-family:inherit;font-size:.85em;padding:3px 7px;outline:none">
-             <button onclick="selectStation(document.getElementById('_stn_uname').value.trim(),'gift')" style="background:#000;border:1px solid #ffd700;color:#ffd700;font-family:inherit;font-size:.85em;padding:3px 10px;cursor:pointer">OK</button>
-           </div>
-         </div>
-         <button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
-  } else {
-    // Trade — only online players make sense
-    if (!online.length) { toast('Nikto iný nie je online'); return; }
-    if (online.length === 1) { openModal(online[0]); switchTab('trade'); return; }
-    wrap.innerHTML = `<div style="color:#4a90e2;margin-bottom:10px;font-size:1.15em">🤝 S kým obchodovať</div>`
-      + online.map(u => {
-          const p = state.players[u];
-          const rname = ROOMS[p?.room]?.name || '';
-          return `<div onclick="selectStation('${u}','trade')" style="padding:5px 0;cursor:pointer;color:#aaa;border-bottom:1px solid #00ccff11">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p?.color||'#00ccff'};margin-right:6px;vertical-align:middle"></span>
-            ${u} <span style="color:#555;font-size:.8em">${rname}</span>
-          </div>`;
-        }).join('')
-      + `<button onclick="document.getElementById('_stn_sel').remove()" style="margin-top:10px;background:#000;border:1px solid #ff4455;color:#ff4455;font-family:inherit;padding:2px 10px;cursor:pointer;font-size:.85em">✕ Zavrieť</button>`;
-  }
-  document.body.appendChild(wrap);
-}
-
-function selectStation(uname, type) {
-  if (!uname) { toast('Zadaj username'); return; }
-  document.getElementById('_stn_sel')?.remove();
-  openModal(uname);
-  switchTab(type);
-}
-
-// ── Skin Shop ──────────────────────────────────────────────────────────────
-const SKIN_ORDER = ['default','banik','astronaut','kapitan','robot'];
-const SKIN_NAMES = {default:'Default', banik:'Baník', astronaut:'Astronaut', kapitan:'Kapitán', robot:'Robot'};
-
-function openSkinShop() {
-  document.getElementById('skin-modal').style.display = 'block';
-  document.getElementById('skin-overlay').style.display = 'block';
-  fetch('/hub/skins/state').then(r=>r.json()).then(d => {
-    if (!d.ok) return;
-    skinShopData = d;
-    mySkin = d.equipped;
-    document.getElementById('sk-my-cr').textContent = d.cr.toLocaleString()+' CR';
-    document.getElementById('sk-my-shards').textContent = d.shards+' ◈';
-    const grid = document.getElementById('skin-grid');
-    grid.innerHTML = SKIN_ORDER.map(id => {
-      const s = d.shop[id];
-      const owned = d.owned.includes(id);
-      const equipped = d.equipped === id;
-      const priceHtml = s.free ? '<span style="color:#39ff14">Zadarmo</span>'
-        : s.price_cr ? `<span style="color:#ffdd44">${s.price_cr.toLocaleString()} CR</span>`
-        : `<span style="color:#dd00ff">${s.price_shards} ◈</span>`;
-      const btnHtml = equipped
-        ? `<button class="btn-sm" style="color:#39ff14;border-color:#39ff14;width:100%;margin-top:6px" disabled>✓ Nasadený</button>`
-        : owned
-        ? `<button class="btn-sm" style="color:#00ccff;border-color:#00ccff;width:100%;margin-top:6px" onclick="doEquipSkin('${id}')">Nasadiť</button>`
-        : s.free
-        ? `<button class="btn-sm" style="color:#39ff14;border-color:#39ff14;width:100%;margin-top:6px" onclick="doBuySkin('${id}','free')">Získať</button>`
-        : s.price_cr
-        ? `<button class="btn-sm" style="color:#ffdd44;border-color:#ffdd44;width:100%;margin-top:6px" onclick="doBuySkin('${id}','cr')">Kúpiť CR</button>`
-        : `<button class="btn-sm" style="color:#dd00ff;border-color:#dd00ff;width:100%;margin-top:6px" onclick="doBuySkin('${id}','shards')">Kúpiť ◈</button>`;
-      return `<div style="background:#000c14;border:1px solid ${equipped?'#39ff14':'#00ccff22'};padding:10px;text-align:center;border-radius:3px">
-        <div style="display:inline-block">${SKIN_SVG[id]||SKIN_SVG.default}</div>
-        <div style="font-size:.85em;margin:4px 0 2px;color:#00ccff">${SKIN_NAMES[id]}</div>
-        <div style="font-size:.75em;margin-bottom:4px">${priceHtml}</div>
-        ${btnHtml}
-      </div>`;
-    }).join('');
-    // Skin select pre gift
-    const sel = document.getElementById('sk-gift-skin');
-    sel.innerHTML = d.owned.map(id => `<option value="${id}">${SKIN_NAMES[id]||id}</option>`).join('');
-  });
-}
-
-function closeSkinShop() {
-  document.getElementById('skin-modal').style.display = 'none';
-  document.getElementById('skin-overlay').style.display = 'none';
-}
-
-function doBuySkin(id, currency) {
-  post('/hub/skins/buy', {skin_id:id, currency}).then(d => {
-    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
-    if (d.ok) openSkinShop();
-  });
-}
-
-function doEquipSkin(id) {
-  post('/hub/skins/equip', {skin_id:id}).then(d => {
-    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
-    if (d.ok) { mySkin = id; openSkinShop(); renderCanvas(); }
-  });
-}
-
-function doGiftSkin() {
-  const skin_id = document.getElementById('sk-gift-skin').value;
-  const to      = document.getElementById('sk-gift-to').value.trim();
-  if (!to) { toast('Zadaj username'); return; }
-  post('/hub/skins/gift', {skin_id, to}).then(d => {
-    toast(d.ok ? '✓ '+d.msg : '✗ '+(d.error||'Chyba'));
-  });
-}
+// ── Init ─────────────────────────────────────────────────────────────────────
+buildRoom('dock', null);
+animate();
+pollState();
+sendMove();
 </script>
 </body></html>"""
 
