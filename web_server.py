@@ -9791,8 +9791,13 @@ body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#00ccff
   </div>
   <div style='color:#00ccff66;font-size:.76em;margin-bottom:8px'>
     CR: <strong id='sk-my-cr' style='color:#ffdd44'>—</strong> &nbsp;|&nbsp; ◈: <strong id='sk-my-shards' style='color:#dd00ff'>—</strong>
+    &nbsp;|&nbsp; <span id='sk-count' style='color:#555'></span>
   </div>
-  <div id='skin-grid' style='display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px'></div>
+  <div id='skin-filters' style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center'>
+    <select id='sk-base-filter' onchange='renderSkinGrid()' style='background:#000c14;border:1px solid #00ccff44;color:#00ccff;font-family:inherit;font-size:.8em;padding:3px 6px;outline:none'></select>
+    <div id='sk-tier-tabs' style='display:flex;gap:4px'></div>
+  </div>
+  <div id='skin-grid' style='display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;max-height:50vh;overflow-y:auto'></div>
   <div style='margin-top:12px;border-top:1px solid #dd00ff22;padding-top:10px'>
     <div style='font-size:.78em;color:#00ccff66;margin-bottom:5px'>🎁 Giftnúť skin hráčovi</div>
     <div style='display:flex;gap:5px;flex-wrap:wrap'>
@@ -9808,16 +9813,106 @@ body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#00ccff
 <script>
 __INIT__
 
-// ── Skin SVGs (billboard textures) ─────────────────────────────────────────
-const SKIN_SVG = {
-  default: `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='15' y='4' width='50' height='44' rx='5' fill='#ffb5a0'/><rect x='24' y='16' width='8' height='8' fill='#333'/><rect x='48' y='16' width='8' height='8' fill='#333'/><rect x='27' y='34' width='26' height='5' fill='#cc8070'/><rect x='10' y='50' width='60' height='36' rx='3' fill='#4a90e2'/><rect x='0' y='52' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='68' y='52' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='16' y='88' width='21' height='26' fill='#1a3a6e'/><rect x='43' y='88' width='21' height='26' fill='#1a3a6e'/><rect x='11' y='110' width='28' height='10' rx='2' fill='#111'/><rect x='41' y='110' width='28' height='10' rx='2' fill='#111'/></svg>`,
-  banik:   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='8' y='2' width='64' height='22' rx='5' fill='#f5a623'/><rect x='18' y='8' width='44' height='7' rx='2' fill='#ffffffaa'/><rect x='15' y='18' width='50' height='40' rx='5' fill='#d4a574'/><rect x='24' y='28' width='8' height='8' fill='#333'/><rect x='48' y='28' width='8' height='8' fill='#333'/><rect x='27' y='44' width='26' height='5' fill='#8a5030'/><rect x='10' y='60' width='60' height='36' rx='3' fill='#e07020'/><rect x='10' y='68' width='60' height='8' fill='#8a3010'/><rect x='10' y='80' width='60' height='8' fill='#8a3010'/><rect x='64' y='62' width='14' height='26' rx='3' fill='#60504a'/><rect x='0' y='62' width='12' height='20' rx='3' fill='#d4a574'/><rect x='68' y='62' width='12' height='20' rx='3' fill='#d4a574'/><rect x='16' y='98' width='21' height='22' fill='#5c3a1e'/><rect x='43' y='98' width='21' height='22' fill='#5c3a1e'/><rect x='11' y='114' width='28' height='6' rx='2' fill='#3a2010'/><rect x='41' y='114' width='28' height='6' rx='2' fill='#3a2010'/></svg>`,
-  astronaut:`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='8' y='2' width='64' height='56' rx='22' fill='#dde2e8'/><rect x='18' y='12' width='44' height='30' rx='13' fill='#7abbde'/><rect x='22' y='16' width='14' height='8' rx='4' fill='#ffffffaa'/><rect x='22' y='34' width='10' height='6' rx='2' fill='#e04040cc'/><rect x='48' y='34' width='10' height='6' rx='2' fill='#e04040cc'/><rect x='22' y='58' width='36' height='8' rx='2' fill='#b8bec8'/><rect x='8' y='64' width='64' height='38' rx='4' fill='#e4e8ec'/><rect x='24' y='72' width='32' height='18' rx='3' fill='#b0b8c4'/><rect x='27' y='76' width='8' height='8' fill='#e04040' rx='1'/><rect x='38' y='76' width='10' height='8' fill='#8a9aaa' rx='1'/><rect x='0' y='66' width='10' height='26' rx='4' fill='#c8d0d8'/><rect x='70' y='66' width='10' height='26' rx='4' fill='#c8d0d8'/><rect x='14' y='104' width='24' height='16' rx='5' fill='#7a9ab0'/><rect x='42' y='104' width='24' height='16' rx='5' fill='#7a9ab0'/></svg>`,
-  kapitan: `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='6' y='14' width='68' height='10' rx='2' fill='#1a2a8a'/><rect x='12' y='2' width='56' height='18' rx='5' fill='#1a2a8a'/><rect x='14' y='14' width='52' height='7' fill='#f5c842'/><rect x='15' y='22' width='50' height='42' rx='5' fill='#ffb5a0'/><rect x='24' y='32' width='8' height='8' fill='#333'/><rect x='48' y='32' width='8' height='8' fill='#333'/><rect x='27' y='50' width='26' height='5' fill='#cc8070'/><rect x='10' y='66' width='60' height='40' rx='3' fill='#1a2a8a'/><rect x='6' y='66' width='20' height='12' rx='3' fill='#f5c842'/><rect x='54' y='66' width='20' height='12' rx='3' fill='#f5c842'/><rect x='35' y='72' width='10' height='10' rx='5' fill='#f5c842'/><rect x='35' y='84' width='10' height='10' rx='5' fill='#f5c842'/><rect x='35' y='96' width='10' height='10' rx='5' fill='#f5c842'/><rect x='0' y='68' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='68' y='68' width='12' height='20' rx='3' fill='#ffb5a0'/><rect x='16' y='108' width='21' height='12' fill='#1a2a8a'/><rect x='43' y='108' width='21' height='12' fill='#1a2a8a'/><rect x='11' y='116' width='28' height='4' rx='2' fill='#111'/><rect x='41' y='116' width='28' height='4' rx='2' fill='#111'/></svg>`,
-  robot:   `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 120'><rect x='36' y='0' width='8' height='14' fill='#607080'/><ellipse cx='40' cy='2' rx='7' ry='5' fill='#e04040'/><rect x='10' y='12' width='60' height='50' rx='5' fill='#607080'/><rect x='18' y='22' width='18' height='14' rx='3' fill='#00ccff'/><rect x='44' y='22' width='18' height='14' rx='3' fill='#00ccff'/><rect x='20' y='24' width='6' height='4' rx='1' fill='#ffffff66'/><rect x='46' y='24' width='6' height='4' rx='1' fill='#ffffff66'/><rect x='20' y='46' width='40' height='6' rx='2' fill='#405060'/><rect x='26' y='62' width='28' height='8' rx='2' fill='#506070'/><rect x='8' y='68' width='64' height='38' rx='4' fill='#506070'/><rect x='14' y='76' width='22' height='14' rx='3' fill='#e04040'/><rect x='44' y='76' width='22' height='14' rx='3' fill='#00ccff'/><rect x='0' y='70' width='10' height='28' rx='4' fill='#607080'/><rect x='70' y='70' width='10' height='28' rx='4' fill='#607080'/><rect x='16' y='108' width='20' height='12' rx='2' fill='#607080'/><rect x='44' y='108' width='20' height='12' rx='2' fill='#607080'/></svg>`,
-};
-const SKIN_NAMES = {default:'Default',banik:'Baník',astronaut:'Astronaut',kapitan:'Kapitán',robot:'Robot'};
-const SKIN_ORDER = ['default','banik','astronaut','kapitan','robot'];
+// ── Procedurálny skin generátor (Roblox-štýl blokové postavy) ───────────────
+const SKIN_N_BASE=10, SKIN_N_COLOR=8, SKIN_N_ACC=6;
+const BASE_PAL = [
+  {skin:'#e8b07a', suit:'#e8731f', pants:'#5c3a1e', trim:'#ffcc33', face:'normal'},  // 0 Baník
+  {skin:'#e6ebf0', suit:'#eef2f6', pants:'#c2ccd6', trim:'#7abbde', face:'visor'},   // 1 Astronaut
+  {skin:'#ffb59a', suit:'#1e2e8a', pants:'#141f5a', trim:'#f5c842', face:'normal'},  // 2 Kapitán
+  {skin:'#9aa6b4', suit:'#6a7a8a', pants:'#566676', trim:'#00ccff', face:'robot'},   // 3 Robot
+  {skin:'#ffd0b0', suit:'#f0f4f8', pants:'#3a4a5a', trim:'#39ff14', face:'goggles'}, // 4 Vedec
+  {skin:'#f0c098', suit:'#6e4a2a', pants:'#3a2a1a', trim:'#e0a040', face:'normal'},  // 5 Pilot
+  {skin:'#e8b07a', suit:'#2a8a44', pants:'#1a5230', trim:'#ffd700', face:'normal'},  // 6 Obchodník
+  {skin:'#e8b07a', suit:'#d4a017', pants:'#3a3a3a', trim:'#ff8800', face:'normal'},  // 7 Inžinier
+  {skin:'#d0a878', suit:'#4e5e3a', pants:'#2a3a1e', trim:'#7a8a5a', face:'normal'},  // 8 Vojak
+  {skin:'#2e2e3e', suit:'#16161f', pants:'#0a0a12', trim:'#dd00ff', face:'glow'},    // 9 Tajomná
+];
+const COLOR_OVERRIDE = [null,'#e04040','#3a6ad0','#2a9a44','#9a3ad0','#f5c842','#00ccff','#2a1040'];
+const SKIN_BASE_NAMES = ['Baník','Astronaut','Kapitán','Robot','Vedec','Pilot','Obchodník','Inžinier','Vojak','Tajomná'];
+const SKIN_COLOR_NAMES = ['Základná','Červená','Modrá','Zelená','Fialová','Zlatá','Tyrkysová','Void'];
+const SKIN_ACC_NAMES = ['','Helma','Batoh','Anténa','Plášť','Aura'];
+
+function _shade(hex, amt) {
+  const n = parseInt(hex.slice(1),16);
+  const r=Math.max(0,Math.min(255,((n>>16)&255)+amt));
+  const g=Math.max(0,Math.min(255,((n>>8)&255)+amt));
+  const b=Math.max(0,Math.min(255,(n&255)+amt));
+  return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+}
+
+function parseSkinId(id) {
+  const legacy={'default':[0,0,0],'banik':[0,0,0],'astronaut':[1,0,0],'kapitan':[2,0,0],'robot':[3,0,0]};
+  if (legacy[id]) return legacy[id];
+  const m=/^b(\d+)_c(\d+)_a(\d+)$/.exec(id||'');
+  if (m){ const b=+m[1],c=+m[2],a=+m[3]; if(b<SKIN_N_BASE&&c<SKIN_N_COLOR&&a<SKIN_N_ACC) return [b,c,a]; }
+  return [0,0,0];
+}
+function skinIdOf(b,c,a){ return `b${b}_c${c}_a${a}`; }
+
+function skinTier(b,c,a){
+  if (b===9) return 'shards';
+  if (c===5||c===7||a===4||a===5) return 'shards';
+  if ((c===0||c===1||c===2||c===3)&&a===0) return 'free';
+  return 'cr';
+}
+function skinPrice(b,c,a){
+  const t=skinTier(b,c,a);
+  if (t==='free') return {cr:0,shards:0};
+  if (t==='cr') return {cr:2000+c*1500+a*3000, shards:0};
+  let sh=6+a*2; if(c===5)sh+=4; if(c===7)sh+=8; if(b===9)sh+=3;
+  return {cr:0, shards:Math.min(40,sh)};
+}
+function skinName(b,c,a){
+  let n=SKIN_BASE_NAMES[b];
+  if (c!==0) n+=' · '+SKIN_COLOR_NAMES[c];
+  if (a!==0) n+=' · '+SKIN_ACC_NAMES[a];
+  return n;
+}
+
+function genSkin(b,c,a){
+  const P=BASE_PAL[b]||BASE_PAL[0];
+  let suit=P.suit, pants=P.pants, trim=P.trim;
+  const ov=COLOR_OVERRIDE[c];
+  if (ov){ suit=ov; pants=_shade(ov,-45); }
+  if (c===7) trim='#dd44ff';
+  const skin=P.skin;
+  let s=`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 132'>`;
+  if (a===5) s+=`<ellipse cx='40' cy='70' rx='40' ry='62' fill='${trim}' opacity='0.16'/>`;
+  if (a===4) s+=`<path d='M21 46 L59 46 L65 108 L15 108 Z' fill='${trim}' opacity='0.8'/>`;
+  if (a===2) s+=`<rect x='5' y='54' width='12' height='30' rx='3' fill='${_shade(trim,-20)}'/><rect x='63' y='54' width='12' height='30' rx='3' fill='${_shade(trim,-20)}'/>`;
+  // legs
+  s+=`<rect x='22' y='106' width='15' height='24' rx='3' fill='${pants}'/><rect x='43' y='106' width='15' height='24' rx='3' fill='${pants}'/>`;
+  s+=`<rect x='21' y='126' width='17' height='6' rx='2' fill='#1a1a1a'/><rect x='42' y='126' width='17' height='6' rx='2' fill='#1a1a1a'/>`;
+  // torso
+  s+=`<rect x='18' y='58' width='44' height='50' rx='6' fill='${suit}'/>`;
+  s+=`<rect x='37' y='58' width='6' height='50' fill='${_shade(suit,-18)}' opacity='0.6'/>`;
+  s+=`<rect x='18' y='82' width='44' height='5' fill='${trim}' opacity='0.65'/>`;
+  // arms
+  s+=`<rect x='5' y='60' width='13' height='34' rx='5' fill='${suit}'/><rect x='62' y='60' width='13' height='34' rx='5' fill='${suit}'/>`;
+  s+=`<rect x='5' y='88' width='13' height='9' rx='4' fill='${skin}'/><rect x='62' y='88' width='13' height='9' rx='4' fill='${skin}'/>`;
+  // head
+  s+=`<rect x='20' y='8' width='40' height='40' rx='9' fill='${skin}'/>`;
+  if (P.face==='robot'){
+    s+=`<rect x='26' y='22' width='10' height='8' rx='2' fill='${trim}'/><rect x='44' y='22' width='10' height='8' rx='2' fill='${trim}'/><rect x='30' y='39' width='20' height='4' rx='1' fill='#2a3a4a'/>`;
+  } else if (P.face==='visor'){
+    s+=`<rect x='24' y='17' width='32' height='20' rx='9' fill='#7abbde'/><rect x='28' y='21' width='8' height='5' rx='2' fill='#ffffffaa'/>`;
+  } else if (P.face==='goggles'){
+    s+=`<rect x='25' y='20' width='12' height='9' rx='3' fill='${trim}' opacity='0.65'/><rect x='43' y='20' width='12' height='9' rx='3' fill='${trim}' opacity='0.65'/><circle cx='31' cy='24' r='2' fill='#222'/><circle cx='49' cy='24' r='2' fill='#222'/><rect x='32' y='39' width='16' height='3' rx='1' fill='#b07050'/>`;
+  } else if (P.face==='glow'){
+    s+=`<rect x='26' y='22' width='9' height='6' rx='2' fill='${trim}'/><rect x='45' y='22' width='9' height='6' rx='2' fill='${trim}'/>`;
+  } else {
+    s+=`<rect x='28' y='23' width='7' height='8' rx='2' fill='#2a2a2a'/><rect x='45' y='23' width='7' height='8' rx='2' fill='#2a2a2a'/><rect x='32' y='39' width='16' height='3' rx='1' fill='#b07050'/>`;
+  }
+  if (a===1) s+=`<rect x='18' y='3' width='44' height='16' rx='8' fill='${trim}'/><rect x='18' y='13' width='44' height='6' fill='${_shade(trim,-35)}'/>`;
+  if (a===3) s+=`<rect x='38' y='-4' width='4' height='13' fill='#888'/><circle cx='40' cy='-5' r='4' fill='${trim}'/>`;
+  s+=`</svg>`;
+  return s;
+}
+
+function skinSVGSized(id,w,h){
+  const p=parseSkinId(id);
+  return genSkin(p[0],p[1],p[2]).replace("viewBox='0 0 80 132'",`width='${w}' height='${h}' viewBox='0 0 80 132'`);
+}
 
 // ── Three.js Setup ──────────────────────────────────────────────────────────
 const canvas3d = document.getElementById('c3d');
@@ -10143,25 +10238,23 @@ function getTexture(uname, skinId, col) {
   const k = `${uname}_${skinId}`;
   if (_texCache[k]) return _texCache[k];
   const cv = document.createElement('canvas');
-  cv.width = 128; cv.height = 200;
+  cv.width = 128; cv.height = 232;
   const ctx = cv.getContext('2d');
   const tex = new THREE.CanvasTexture(cv);
   _texCache[k] = tex;
 
-  const svgStr = (SKIN_SVG[skinId]||SKIN_SVG.default)
-    .replace('width="44"','width="128"').replace('height="66"','height="160"')
-    .replace(/width="\d+"/, 'width="128"').replace(/height="\d+"/, 'height="160"');
+  const svgStr = skinSVGSized(skinId, 128, 211);
   const blob = new Blob([svgStr], {type:'image/svg+xml'});
   const url  = URL.createObjectURL(blob);
   const img  = new Image();
   img.onload = () => {
-    ctx.clearRect(0,0,128,200);
-    ctx.drawImage(img, 0, 0, 128, 168);
+    ctx.clearRect(0,0,128,232);
+    ctx.drawImage(img, 0, 0, 128, 211);
     ctx.fillStyle = col||'#00ccff';
     ctx.font = 'bold 16px monospace';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#000'; ctx.shadowBlur = 5;
-    ctx.fillText(uname, 64, 192);
+    ctx.fillText(uname, 64, 226);
     URL.revokeObjectURL(url);
     tex.needsUpdate = true;
   };
@@ -10185,7 +10278,7 @@ function updatePlayerSprites(players) {
     if (!otherSprites[uname]) {
       const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
       const sp  = new THREE.Sprite(mat);
-      sp.scale.set(1.3, 2.0, 1);
+      sp.scale.set(1.25, 2.26, 1);
       scene.add(sp);
       otherSprites[uname] = sp;
     } else {
@@ -10361,8 +10454,17 @@ function respondOffer(id, accept) {
   });
 }
 
-// ── Skin Shop ────────────────────────────────────────────────────────────────
+// ── Skin Shop (procedurálny katalóg, 480 skinov) ────────────────────────────
 let skinShopData = null;
+let _skFilterTier = 'all';   // all|free|cr|shards|owned
+const TIER_TABS = [
+  {id:'all',    label:'Všetky',  color:'#00ccff'},
+  {id:'free',   label:'🟢 Zadarmo', color:'#39ff14'},
+  {id:'cr',     label:'🔵 CR',      color:'#ffdd44'},
+  {id:'shards', label:'🟣 Shards',  color:'#dd00ff'},
+  {id:'owned',  label:'✓ Vlastním', color:'#aaa'},
+];
+
 function openSkinShop() {
   if (ptrLocked) document.exitPointerLock();
   document.getElementById('skin-modal').style.display='block';
@@ -10372,18 +10474,77 @@ function openSkinShop() {
     skinShopData=d; mySkin_local=d.equipped;
     document.getElementById('sk-my-cr').textContent=d.cr.toLocaleString()+' CR';
     document.getElementById('sk-my-shards').textContent=d.shards+' ◈';
-    const grid=document.getElementById('skin-grid');
-    grid.innerHTML=SKIN_ORDER.map(id=>{
-      const s=d.shop[id]; const owned=d.owned.includes(id); const equipped=d.equipped===id;
-      const priceHtml=s.free?'<span style="color:#39ff14">Zadarmo</span>':s.price_cr?`<span style="color:#ffdd44">${s.price_cr.toLocaleString()} CR</span>`:`<span style="color:#dd00ff">${s.price_shards} ◈</span>`;
-      const btnHtml=equipped?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:5px' disabled>✓ Nasadený</button>`:owned?`<button class='btn-sm' style='color:#00ccff;border-color:#00ccff;width:100%;margin-top:5px' onclick="doEquipSkin('${id}')">Nasadiť</button>`:s.free?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:5px' onclick="doBuySkin('${id}','free')">Získať</button>`:s.price_cr?`<button class='btn-sm' style='color:#ffdd44;border-color:#ffdd44;width:100%;margin-top:5px' onclick="doBuySkin('${id}','cr')">Kúpiť CR</button>`:`<button class='btn-sm' style='color:#dd00ff;border-color:#dd00ff;width:100%;margin-top:5px' onclick="doBuySkin('${id}','shards')">Kúpiť ◈</button>`;
-      const svgPreview=(SKIN_SVG[id]||SKIN_SVG.default).replace('width="44"','width="60"').replace('height="66"','height="90"').replace(/width="\d+"(?!.*width)/,'width="60"').replace(/height="\d+"(?!.*height)/,'height="90"');
-      return `<div style='background:#000c14;border:1px solid ${equipped?'#39ff14':'#00ccff22'};padding:8px;text-align:center;border-radius:2px'><div style='display:inline-block'>${svgPreview}</div><div style='font-size:.82em;margin:3px 0 2px;color:#00ccff'>${SKIN_NAMES[id]}</div><div style='font-size:.73em;margin-bottom:3px'>${priceHtml}</div>${btnHtml}</div>`;
-    }).join('');
+    // Base filter dropdown
+    const bsel=document.getElementById('sk-base-filter');
+    if (!bsel.options.length) {
+      bsel.innerHTML='<option value="all">Všetky postavy</option>'
+        +SKIN_BASE_NAMES.map((n,i)=>`<option value='${i}'>${n}</option>`).join('');
+    }
+    // Tier tabs
+    const tt=document.getElementById('sk-tier-tabs');
+    tt.innerHTML=TIER_TABS.map(t=>`<button onclick="setSkTier('${t.id}')" id="sktab-${t.id}" style="background:${_skFilterTier===t.id?'#001a2e':'#000'};border:1px solid ${t.color}${_skFilterTier===t.id?'':'44'};color:${t.color};font-family:inherit;font-size:.76em;padding:2px 8px;cursor:pointer">${t.label}</button>`).join('');
+    // Gift dropdown (owned only)
     const sel=document.getElementById('sk-gift-skin');
-    sel.innerHTML=d.owned.map(id=>`<option value='${id}'>${SKIN_NAMES[id]||id}</option>`).join('');
+    sel.innerHTML=d.owned.map(id=>{const p=parseSkinId(id); return `<option value='${id}'>${skinName(p[0],p[1],p[2])}</option>`;}).join('');
+    renderSkinGrid();
   });
 }
+
+function setSkTier(t){ _skFilterTier=t; openSkinShopRefreshTabs(); renderSkinGrid(); }
+function openSkinShopRefreshTabs(){
+  const tt=document.getElementById('sk-tier-tabs');
+  if(!tt) return;
+  TIER_TABS.forEach(t=>{
+    const b=document.getElementById('sktab-'+t.id);
+    if(b){ b.style.background=_skFilterTier===t.id?'#001a2e':'#000'; b.style.borderColor=t.color+(_skFilterTier===t.id?'':'44'); }
+  });
+}
+
+function renderSkinGrid() {
+  if(!skinShopData) return;
+  const d=skinShopData;
+  const baseF=document.getElementById('sk-base-filter').value;
+  const grid=document.getElementById('skin-grid');
+  const cards=[];
+  let count=0;
+  const bases = baseF==='all' ? [...Array(SKIN_N_BASE).keys()] : [parseInt(baseF)];
+  for (const b of bases) {
+    for (let c=0;c<SKIN_N_COLOR;c++) {
+      for (let a=0;a<SKIN_N_ACC;a++) {
+        const id=skinIdOf(b,c,a);
+        const tier=skinTier(b,c,a);
+        const owned=d.owned.includes(id);
+        const equipped=d.equipped===id;
+        // Filter
+        if (_skFilterTier==='owned' && !owned) continue;
+        if (_skFilterTier!=='all' && _skFilterTier!=='owned' && tier!==_skFilterTier) continue;
+        count++;
+        const pr=skinPrice(b,c,a);
+        const priceHtml=tier==='free'?'<span style="color:#39ff14">Zadarmo</span>':pr.cr?`<span style="color:#ffdd44">${pr.cr.toLocaleString()} CR</span>`:`<span style="color:#dd00ff">${pr.shards} ◈</span>`;
+        const btnHtml=equipped
+          ?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:4px' disabled>✓ Nasadený</button>`
+          :owned
+          ?`<button class='btn-sm' style='color:#00ccff;border-color:#00ccff;width:100%;margin-top:4px' onclick="doEquipSkin('${id}')">Nasadiť</button>`
+          :tier==='free'
+          ?`<button class='btn-sm' style='color:#39ff14;border-color:#39ff14;width:100%;margin-top:4px' onclick="doEquipSkin('${id}')">Nasadiť</button>`
+          :pr.cr
+          ?`<button class='btn-sm' style='color:#ffdd44;border-color:#ffdd44;width:100%;margin-top:4px' onclick="doBuySkin('${id}','cr')">Kúpiť</button>`
+          :`<button class='btn-sm' style='color:#dd00ff;border-color:#dd00ff;width:100%;margin-top:4px' onclick="doBuySkin('${id}','shards')">Kúpiť</button>`;
+        const tierDot=tier==='free'?'#39ff14':tier==='cr'?'#ffdd44':'#dd00ff';
+        cards.push(`<div style='background:#000c14;border:1px solid ${equipped?'#39ff14':'#00ccff22'};padding:6px;text-align:center;border-radius:2px;position:relative'>
+          <span style='position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:${tierDot}'></span>
+          <div style='display:inline-block'>${skinSVGSized(id,52,86)}</div>
+          <div style='font-size:.74em;margin:2px 0;color:#00ccff;line-height:1.1'>${skinName(b,c,a)}</div>
+          <div style='font-size:.72em;margin-bottom:2px'>${priceHtml}</div>
+          ${btnHtml}
+        </div>`);
+      }
+    }
+  }
+  document.getElementById('sk-count').textContent=count+' skinov';
+  grid.innerHTML=cards.join('') || '<div style="color:#555;grid-column:1/-1;text-align:center;padding:20px">Žiadne skiny v tomto filtri</div>';
+}
+
 function closeSkinShop() {
   document.getElementById('skin-modal').style.display='none';
   document.getElementById('skin-overlay').style.display='none';
@@ -10397,7 +10558,7 @@ function doBuySkin(id, currency) {
 function doEquipSkin(id) {
   post('/hub/skins/equip',{skin_id:id}).then(d=>{
     toast(d.ok?'✓ '+d.msg:'✗ '+(d.error||'Chyba'));
-    if(d.ok){mySkin_local=id; openSkinShop();}
+    if(d.ok){mySkin_local=id; delete _texCache[ME+'_'+id]; openSkinShop();}
   });
 }
 function doGiftSkin() {
@@ -10869,29 +11030,103 @@ def _ensure_ref_code(uname, users=None):
 
 # ── Hub Skins ──────────────────────────────────────────────────────────────
 
-HUB_SKINS = {
-    "default":   {"name_sk": "Default",   "name_en": "Default",   "price_cr": 0,     "price_shards": 0,  "free": True},
-    "banik":     {"name_sk": "Baník",     "name_en": "Miner",     "price_cr": 5000,  "price_shards": 0},
-    "astronaut": {"name_sk": "Astronaut", "name_en": "Astronaut", "price_cr": 0,     "price_shards": 10},
-    "kapitan":   {"name_sk": "Kapitán",   "name_en": "Captain",   "price_cr": 25000, "price_shards": 0},
-    "robot":     {"name_sk": "Robot",     "name_en": "Robot",     "price_cr": 0,     "price_shards": 20},
-}
+# Procedurálny skin systém: 10 báz × 8 farieb × 6 doplnkov = 480 skinov.
+# Skin ID formát: "b{base}_c{color}_a{acc}", napr. "b3_c5_a2".
+SKIN_BASES = [
+    {"sk": "Baník",      "en": "Miner"},
+    {"sk": "Astronaut",  "en": "Astronaut"},
+    {"sk": "Kapitán",    "en": "Captain"},
+    {"sk": "Robot",      "en": "Robot"},
+    {"sk": "Vedec",      "en": "Scientist"},
+    {"sk": "Pilot",      "en": "Pilot"},
+    {"sk": "Obchodník",  "en": "Merchant"},
+    {"sk": "Inžinier",   "en": "Engineer"},
+    {"sk": "Vojak",      "en": "Soldier"},
+    {"sk": "Tajomná",    "en": "Mysterious"},
+]
+SKIN_COLORS_SK = ["Základná", "Červená", "Modrá", "Zelená", "Fialová", "Zlatá", "Tyrkysová", "Void"]
+SKIN_ACC_SK    = ["", "Helma", "Batoh", "Anténa", "Plášť", "Aura"]
+SKIN_N_BASE, SKIN_N_COLOR, SKIN_N_ACC = 10, 8, 6
+_SKIN_DEFAULT = "b0_c0_a0"
+
+
+def _skin_parse(sid):
+    """Vráti (base, color, acc) alebo None pri neplatnom ID. Podporuje aj staré ID."""
+    legacy = {"default": (0, 0, 0), "banik": (0, 0, 0), "astronaut": (1, 0, 0),
+              "kapitan": (2, 0, 0), "robot": (3, 0, 0)}
+    if sid in legacy:
+        return legacy[sid]
+    try:
+        parts = sid.split("_")
+        b = int(parts[0][1:]); c = int(parts[1][1:]); a = int(parts[2][1:])
+        if 0 <= b < SKIN_N_BASE and 0 <= c < SKIN_N_COLOR and 0 <= a < SKIN_N_ACC:
+            return (b, c, a)
+    except (IndexError, ValueError):
+        pass
+    return None
+
+
+def _skin_valid(sid):
+    return _skin_parse(sid) is not None
+
+
+def _skin_canon(sid):
+    """Normalizuj na kanonický 'b#_c#_a#' tvar."""
+    p = _skin_parse(sid)
+    return f"b{p[0]}_c{p[1]}_a{p[2]}" if p else _SKIN_DEFAULT
+
+
+def _skin_tier(b, c, a):
+    if b == 9:
+        return "shards"
+    if c in (5, 7) or a in (4, 5):
+        return "shards"
+    if c in (0, 1, 2, 3) and a == 0:
+        return "free"
+    return "cr"
+
+
+def _skin_price(b, c, a):
+    """Vráti (price_cr, price_shards)."""
+    tier = _skin_tier(b, c, a)
+    if tier == "free":
+        return (0, 0)
+    if tier == "cr":
+        return (2000 + c * 1500 + a * 3000, 0)
+    # shards
+    sh = 6 + a * 2
+    if c == 5: sh += 4
+    if c == 7: sh += 8
+    if b == 9: sh += 3
+    return (0, min(40, sh))
+
+
+def _skin_name(b, c, a, lang="sk"):
+    base = SKIN_BASES[b]["en" if lang == "en" else "sk"]
+    parts = [base]
+    if c != 0:
+        parts.append(SKIN_COLORS_SK[c])
+    if a != 0:
+        parts.append(SKIN_ACC_SK[a])
+    return " · ".join(parts)
 
 
 def _hub_skins_of(uname, hub=None):
     if hub is None:
         hub = _hub_load()
     rec   = hub.get("skins", {}).get(uname, {})
-    owned = rec.get("owned", ["default"])
-    if "default" not in owned:
-        owned.insert(0, "default")
-    return {"owned": owned, "equipped": rec.get("equipped", "default")}
+    owned = [_skin_canon(s) for s in rec.get("owned", [])]
+    if _SKIN_DEFAULT not in owned:
+        owned.insert(0, _SKIN_DEFAULT)
+    equipped = _skin_canon(rec.get("equipped", _SKIN_DEFAULT))
+    return {"owned": owned, "equipped": equipped}
 
 
 def _hub_give_skin(uname, skin_id, hub=None):
     """Pridaj skin hráčovi — vráti True ak nový, False ak ho už má."""
     if hub is None:
         hub = _hub_load()
+    skin_id = _skin_canon(skin_id)
     skins = _hub_skins_of(uname, hub)
     if skin_id in skins["owned"]:
         return False
@@ -10905,15 +11140,21 @@ def _hub_give_skin(uname, skin_id, hub=None):
 
 
 def _hub_equip_skin(uname, skin_id, hub=None):
-    """Nastav aktívny skin — vráti True ak OK."""
+    """Nastav aktívny skin — vráti True ak OK. Free skiny možno nasadiť aj bez vlastnenia."""
     if hub is None:
         hub = _hub_load()
+    skin_id = _skin_canon(skin_id)
     skins = _hub_skins_of(uname, hub)
-    if skin_id not in skins["owned"]:
+    b, c, a = _skin_parse(skin_id)
+    is_free = _skin_tier(b, c, a) == "free"
+    if skin_id not in skins["owned"] and not is_free:
         return False
+    owned = skins["owned"]
+    if is_free and skin_id not in owned:
+        owned.append(skin_id)
     hub.setdefault("skins", {})[uname] = {
         **hub.get("skins", {}).get(uname, {}),
-        "owned": skins["owned"],
+        "owned": owned,
         "equipped": skin_id,
     }
     if uname in hub.get("players", {}):
@@ -10933,11 +11174,14 @@ def hub_skins_state():
     uname_up = next((k for k in users if k.lower() == uname), uname).upper()
     cr     = load_jf(KB_CAREER, {}).get(uname_up, {}).get("career_cr", 0)
     shards = _get_shards(uname)
-    shop   = {k: {"name": v["name_sk"], "price_cr": v.get("price_cr", 0),
-                  "price_shards": v.get("price_shards", 0), "free": v.get("free", False)}
-              for k, v in HUB_SKINS.items()}
+    # Katalóg sa generuje na klientovi z metadát (480 skinov) — posielame len meta
+    meta = {
+        "bases":  [b["sk"] for b in SKIN_BASES],
+        "colors": SKIN_COLORS_SK,
+        "accs":   SKIN_ACC_SK,
+    }
     return json.dumps({"ok": True, "owned": skins["owned"],
-                       "equipped": skins["equipped"], "cr": cr, "shards": shards, "shop": shop})
+                       "equipped": skins["equipped"], "cr": cr, "shards": shards, "meta": meta})
 
 
 @app.route("/hub/skins/buy", methods=["POST"])
@@ -10951,37 +11195,40 @@ def hub_skins_buy():
         return json.dumps({"ok": False}), 400
     skin_id  = data.get("skin_id", "")
     currency = data.get("currency", "cr")
-    if skin_id not in HUB_SKINS:
+    p = _skin_parse(skin_id)
+    if not p:
         return json.dumps({"ok": False, "error": "neznámy skin"}), 400
-    skin = HUB_SKINS[skin_id]
+    b, c, a = p
+    skin_id = _skin_canon(skin_id)
+    skin_name = _skin_name(b, c, a)
+    price_cr, price_shards = _skin_price(b, c, a)
+    tier = _skin_tier(b, c, a)
     hub  = _hub_load()
     if skin_id in _hub_skins_of(uname, hub)["owned"]:
         return json.dumps({"ok": False, "error": "skin už vlastníš"}), 400
-    if skin.get("free"):
+    if tier == "free":
         _hub_give_skin(uname, skin_id, hub)
-        return json.dumps({"ok": True, "msg": f"{skin['name_sk']} pridaný!"})
+        return json.dumps({"ok": True, "msg": f"{skin_name} pridaný!"})
     if currency == "cr":
-        price = skin.get("price_cr", 0)
-        if not price:
-            return json.dumps({"ok": False, "error": "skin nie je za CR"}), 400
+        if not price_cr:
+            return json.dumps({"ok": False, "error": "tento skin je len za ◈"}), 400
         users    = load_users()
         uname_up = next((k for k in users if k.lower() == uname), uname).upper()
         career   = load_jf(KB_CAREER, {})
         cr = career.get(uname_up, {}).get("career_cr", 0)
-        if cr < price:
+        if cr < price_cr:
             return json.dumps({"ok": False, "error": f"nedostatok CR (máš {cr:,})"}), 400
-        career.setdefault(uname_up, {})["career_cr"] = cr - price
+        career.setdefault(uname_up, {})["career_cr"] = cr - price_cr
         save_jf(KB_CAREER, career)
     elif currency == "shards":
-        price = skin.get("price_shards", 0)
-        if not price:
-            return json.dumps({"ok": False, "error": "skin nie je za ◈"}), 400
-        if not _spend_shards(uname, price):
-            return json.dumps({"ok": False, "error": f"nedostatok ◈ (treba {price})"}), 400
+        if not price_shards:
+            return json.dumps({"ok": False, "error": "tento skin je len za CR"}), 400
+        if not _spend_shards(uname, price_shards):
+            return json.dumps({"ok": False, "error": f"nedostatok ◈ (treba {price_shards})"}), 400
     else:
         return json.dumps({"ok": False, "error": "neznáma mena"}), 400
     _hub_give_skin(uname, skin_id, hub)
-    return json.dumps({"ok": True, "msg": f"{skin['name_sk']} kúpený!"})
+    return json.dumps({"ok": True, "msg": f"{skin_name} kúpený!"})
 
 
 @app.route("/hub/skins/equip", methods=["POST"])
@@ -10994,12 +11241,13 @@ def hub_skins_equip():
     except Exception:
         return json.dumps({"ok": False}), 400
     skin_id = data.get("skin_id", "")
-    if skin_id not in HUB_SKINS:
+    p = _skin_parse(skin_id)
+    if not p:
         return json.dumps({"ok": False, "error": "neznámy skin"}), 400
     hub = _hub_load()
     if not _hub_equip_skin(uname, skin_id, hub):
         return json.dumps({"ok": False, "error": "skin nevlastníš"}), 400
-    return json.dumps({"ok": True, "msg": f"{HUB_SKINS[skin_id]['name_sk']} nasadený!"})
+    return json.dumps({"ok": True, "msg": f"{_skin_name(*p)} nasadený!"})
 
 
 @app.route("/hub/skins/gift", methods=["POST"])
@@ -11013,20 +11261,24 @@ def hub_skins_gift():
         return json.dumps({"ok": False}), 400
     target  = data.get("to", "").lower()
     skin_id = data.get("skin_id", "")
+    p = _skin_parse(skin_id)
     if not target or target == uname:
         return json.dumps({"ok": False, "error": "neplatný príjemca"}), 400
-    if skin_id not in HUB_SKINS:
+    if not p:
         return json.dumps({"ok": False, "error": "neznámy skin"}), 400
+    b, c, a = p
+    skin_id = _skin_canon(skin_id)
     users      = load_users()
     target_key = next((k for k in users if k.lower() == target), None)
     if not target_key:
         return json.dumps({"ok": False, "error": "hráč neexistuje"}), 404
     hub = _hub_load()
-    if skin_id not in _hub_skins_of(uname, hub)["owned"] and not HUB_SKINS[skin_id].get("free"):
+    is_free = _skin_tier(b, c, a) == "free"
+    if skin_id not in _hub_skins_of(uname, hub)["owned"] and not is_free:
         return json.dumps({"ok": False, "error": "skin nevlastníš"}), 400
     if not _hub_give_skin(target, skin_id, hub):
         return json.dumps({"ok": False, "error": f"{target} tento skin už má"}), 400
-    skin_name = HUB_SKINS[skin_id]["name_sk"]
+    skin_name = _skin_name(b, c, a)
     send_notification(target_key, f"🎨 {uname} ti daroval skin {skin_name}!", from_role="Hub")
     return json.dumps({"ok": True, "msg": f"Skin {skin_name} odoslaný → {target_key}"})
 
