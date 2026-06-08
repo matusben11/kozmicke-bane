@@ -9669,7 +9669,8 @@ body{background:#000;color:#00ccff;font-family:'VT323',monospace;font-size:1rem;
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">"""
 
 # 3D Hub — Three.js FPS s billboard sprites
-_HUB_PAGE = """<!DOCTYPE html><html lang='sk'><head>
+# RAW string: zachová JS backslash escapy (\' v reťazcoch, \d v regex) nedotknuté
+_HUB_PAGE = r"""<!DOCTYPE html><html lang='sk'><head>
 <meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Hub — Kozmické Bane</title>__CSS__
 <style>
@@ -9947,11 +9948,14 @@ scene.add(dirLight);
 // ── FPS Controls ────────────────────────────────────────────────────────────
 let camYaw = 0, camPitch = 0, ptrLocked = false;
 
+function modalOpen(id) {
+  const el = document.getElementById(id);
+  return el && getComputedStyle(el).display !== 'none';
+}
 function uiActive() {
   const tag = document.activeElement?.tagName;
   return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA'
-      || document.getElementById('modal').style.display !== 'none'
-      || document.getElementById('skin-modal').style.display !== 'none';
+      || modalOpen('modal') || modalOpen('skin-modal');
 }
 
 canvas3d.addEventListener('click', () => { if (!uiActive()) canvas3d.requestPointerLock(); });
