@@ -5,6 +5,7 @@ Spustenie: python web_server.py
 """
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -19,6 +20,7 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from flask import Flask, request, redirect, session, make_response
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR  = pathlib.Path(__file__).parent.resolve()
 HTML_FILE = BASE_DIR / "kozmicke_bane.html"
@@ -1022,7 +1024,7 @@ AUCTION_LOTS_CFG = [
 MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
-app.secret_key = os.environ.get("SECRET_KEY", "kb-web-secret-xyrax9-2024")
+app.secret_key = os.environ["SECRET_KEY"]  # bez premennej radšej spadni, než použiť známy kľúč
 CORS(app, resources={r"/bot/*": {"origins": ["https://claude.ai", "https://api.claude.ai"]}},
      allow_headers=["X-Bot-Secret", "Content-Type"],
      methods=["GET", "POST", "OPTIONS"],
@@ -1051,7 +1053,7 @@ def _seed_default_user():
     if username in users:
         return  # účet už existuje, nič nerob
     users[username] = {
-        "password": password,
+        "password": hash_pw(password),
         "registered": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "last_login": None,
         "last_web_login": None,
@@ -1089,15 +1091,24 @@ def save_users(u):
         _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))
 
 def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+    return generate_password_hash(pw)   # scrypt + náhodná soľ
 
 def check_pw(stored, entered):
-    """Podporuje plaintext (nové) aj SHA-256 hash (staré účty)."""
-    if stored == entered:
-        return True
-    if len(stored) == 64 and stored == hash_pw(entered):
-        return True
-    return False
+    """Vráti (heslo_sedí, treba_prehashovať). Staré sha256/plaintext heslá sa pri prihlásení prevedú."""
+    if stored.startswith(("scrypt:", "pbkdf2:")):
+        return check_password_hash(stored, entered), False
+    if len(stored) == 64:  # starý sha256 hash
+        old = hashlib.sha256(entered.encode()).hexdigest()
+        return hmac.compare_digest(stored.encode(), old.encode()), True
+    return hmac.compare_digest(stored.encode(), entered.encode()), True  # plaintext
+
+def _pw_kind(stored):
+    """Typ uloženého hesla pre owner panel — samotné heslo/hash sa nikdy nezobrazuje."""
+    if stored.startswith(("scrypt:", "pbkdf2:")):
+        return "hash"
+    if len(stored) == 64:
+        return "sha256 (starý)"
+    return "plaintext (starý)"
 
 def check_ban(user):
     """Vráti (is_banned, správa). banned_until: None=nie, -1=permanent, timestamp=čas."""
@@ -2308,17 +2319,7 @@ input:focus{border-color:#ffb000;}
 
   <div id="reset" class="panel __ON_RESET__">
     __FLASH_RESET__
-    <form method="POST" action="/reset">
-      <label>__LBL_USERNAME__</label>
-      <input type="text" name="username">
-      <label>__LBL_REGDATE__</label>
-      <input type="text" name="reg_date" placeholder="__PLACEHOLDER_DATE__">
-      <label>__LBL_NEWPW__</label>
-      <input type="password" name="new_password">
-      <label>__LBL_CONFIRM_PW__</label>
-      <input type="password" name="new_password2">
-      <button class="btn" type="submit">&#128273; &nbsp; __BTN_CHANGEPW__</button>
-    </form>
+    <p style="text-align:center;line-height:1.6">__RESET_INFO__</p>
   </div>
 
   <p class="hint">KOZMICKÉ BANE v4.7 &mdash; Web Edition &mdash; localhost:__PORT__</p>
@@ -2376,12 +2377,9 @@ def render_login(tab="login", err_login="", err_reg="", err_reset="",
         .replace("__LBL_CONFIRM_PW__",  L("POTVRĎ HESLO", "CONFIRM PASSWORD"))
         .replace("__BTN_SIGNIN__",      L("PRIHLÁSIŤ SA", "SIGN IN"))
         .replace("__BTN_REGISTER__",    L("VYTVORIŤ ÚČET", "CREATE ACCOUNT"))
-        .replace("__LBL_REGDATE__",
-                 L('DÁTUM REGISTRÁCIE &nbsp;<span style="color:#555;font-size:0.85em">(YYYY-MM-DD)</span>',
-                   'REGISTRATION DATE &nbsp;<span style="color:#555;font-size:0.85em">(YYYY-MM-DD)</span>'))
-        .replace("__PLACEHOLDER_DATE__", L("napr. 2024-03-10", "e.g. 2024-03-10"))
-        .replace("__LBL_NEWPW__",       L("NOVÉ HESLO", "NEW PASSWORD"))
-        .replace("__BTN_CHANGEPW__",    L("ZMENIŤ HESLO", "CHANGE PASSWORD"))
+        .replace("__RESET_INFO__",
+                 L("Zabudol si heslo? Napíš adminovi a ten ti ho resetuje.",
+                   "Forgot your password? Contact an admin to reset it."))
     )
 
 
@@ -3286,8 +3284,11 @@ def login():
     banned, ban_msg = check_ban(users[username])
     if banned:
         return render_login(tab="login", err_login=ban_msg)
-    if not check_pw(users[username]["password"], password):
+    ok, upgrade = check_pw(users[username]["password"], password)
+    if not ok:
         return render_login(tab="login", err_login=L("Nesprávne heslo.", "Incorrect password."))
+    if upgrade:
+        users[username]["password"] = hash_pw(password)
     session["username"] = username
     users[username]["last_web_login"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     save_users(users)
@@ -3311,7 +3312,7 @@ def register():
         return render_login(tab="register", err_reg=L("Heslá sa nezhodujú.", "Passwords do not match."))
     ref_code_used = request.form.get("ref_code", "").strip().upper()
     users[username] = {
-        "password":     password,
+        "password":     hash_pw(password),
         "created_at":   datetime.now().strftime("%Y-%m-%d %H:%M"),
         "referral_code": _ref_code(username),
         "referred_by":  None,
@@ -3340,25 +3341,8 @@ def register():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    username  = request.form.get("username", "").strip()
-    reg_date  = request.form.get("reg_date", "").strip()
-    new_pw    = request.form.get("new_password", "")
-    new_pw2   = request.form.get("new_password2", "")
-    users = load_users()
-    if username not in users:
-        return render_login(tab="reset", err_reset=L("Používateľ neexistuje.", "User does not exist."))
-    u = users[username]
-    date_field = u.get("created_at", "") or u.get("registered", "")
-    if not reg_date or reg_date not in date_field:
-        return render_login(tab="reset", err_reset=L("Nesprávny dátum registrácie (napr. 2024-01-15).", "Incorrect registration date (e.g. 2024-01-15)."))
-    ok, msg = validate_pw(new_pw)
-    if not ok:
-        return render_login(tab="reset", err_reset=msg)
-    if new_pw != new_pw2:
-        return render_login(tab="reset", err_reset=L("Heslá sa nezhodujú.", "Passwords do not match."))
-    users[username]["password"] = new_pw
-    save_users(users)
-    return render_login(tab="login", ok_login=L("Heslo bolo zmenené. Prihlás sa.", "Password changed. Sign in."))
+    # Reset cez dátum registrácie bol vypnutý — dátum sa dá uhádnuť. Heslo resetuje owner v paneli.
+    return render_login(tab="reset", err_reset=L("Zabudol si heslo? Napíš adminovi.", "Forgot your password? Contact an admin."))
 
 
 @app.route("/logout")
@@ -4067,7 +4051,7 @@ def owner_diag():
         "=== USERS ===",
     ]
     for u, d in sorted(users.items()):
-        lines.append(f"  {u}: pw={d.get('password','?')[:20]}  ban={d.get('banned_until')}")
+        lines.append(f"  {u}: pw={_pw_kind(d.get('password', ''))}  ban={d.get('banned_until')}")
     pre = "\n".join(lines)
     return f"<pre style='background:#000;color:#0f0;padding:20px;font-family:monospace'>{pre}</pre>"
 
@@ -4092,7 +4076,7 @@ def owner_panel():
         c  = career.get(uname_lower.upper(), {})
         sv = saves.get(uname_lower.upper(), {})
         display = u_orig or uname_lower.upper()
-        pw_str = u.get("password", "") or "<em style='color:#555'>—</em>"
+        pw_str = _pw_kind(u.get("password", "")) if u.get("password") else "<em style='color:#555'>—</em>"
         bu = u.get("banned_until")
         if bu == -1:
             ban_cell = "<span style='color:#ff4444'>&#128683; PERM</span>"
@@ -4396,7 +4380,7 @@ def owner_reset_pw():
     users  = load_users()
     if uname not in users or not new_pw:
         return redirect("/owner/panel")
-    users[uname]["password"] = new_pw
+    users[uname]["password"] = hash_pw(new_pw)
     save_users(users)
     return redirect("/owner/panel")
 
