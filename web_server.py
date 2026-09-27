@@ -6,13 +6,18 @@ Spustenie: python web_server.py
 
 import hashlib
 import hmac
+import html
 import json
 import math
 import os
 import pathlib
 import random
+import re
 import smtplib
+import threading
 import time
+import unicodedata
+import urllib.parse
 import urllib.request
 import urllib.error
 from collections import Counter
@@ -1023,12 +1028,62 @@ AUCTION_LOTS_CFG = [
 ]
 MAX_ACTIVE_LOTS = 2  # koľko lotov môže bežať súčasne
 
-app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
+# static_folder=None — inak by Flask servoval celý priečinok projektu (zdrojáky, game_users.json…)
+app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ["SECRET_KEY"]  # bez premennej radšej spadni, než použiť známy kľúč
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.environ.get("RENDER")),
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024,   # 2 MB na request
+)
 CORS(app, resources={r"/bot/*": {"origins": ["https://claude.ai", "https://api.claude.ai"]}},
      allow_headers=["X-Bot-Secret", "Content-Type"],
      methods=["GET", "POST", "OPTIONS"],
      supports_credentials=False)
+
+
+# ── Bezpečnosť: CSRF, rate limit, hlavičky ────────────────────────────────
+def _client_ip():
+    # Render pridáva skutočnú IP klienta na koniec X-Forwarded-For (začiatok si vie klient podvrhnúť)
+    xff = request.headers.get("X-Forwarded-For", "")
+    return xff.split(",")[-1].strip() if xff else (request.remote_addr or "?")
+
+_rate_hits = {}
+
+def _rate_limited(key, limit, window):
+    """True ak `key` prekročil `limit` záznamov za posledných `window` sekúnd. Sám nič nezaznamená."""
+    now = time.time()
+    hits = [t for t in _rate_hits.get(key, []) if now - t < window]
+    _rate_hits[key] = hits
+    return len(hits) >= limit
+
+def _rate_hit(key):
+    _rate_hits.setdefault(key, []).append(time.time())
+    if len(_rate_hits) > 20000:  # ochrana pamäte
+        _rate_hits.clear()
+
+@app.before_request
+def _csrf_guard():
+    """Odmietne požiadavky, ktoré menia stav a prišli z cudzieho webu (CSRF)."""
+    if request.path.startswith("/bot/"):
+        return None  # bot API používa vlastnú hlavičku X-Bot-Secret
+    sensitive_get = request.path.startswith(("/owner/", "/adminpanel", "/delete_save/"))
+    if request.method in ("GET", "HEAD", "OPTIONS") and not sensitive_get:
+        return None
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return "Forbidden (cross-site request)", 403
+    origin = request.headers.get("Origin")
+    if origin and origin != "null" and urllib.parse.urlparse(origin).netloc != request.host:
+        return "Forbidden (bad origin)", 403
+    return None
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    return resp
 
 
 # ── Language helpers ────────────────────────────────────────────────────────
@@ -1070,20 +1125,32 @@ def _uname():
 
 def load_users():
     # Redis primary: čítaj priamo z Upstash
+    global _users_seen_max
     if _KV_URL:
         data = _kv_get("game_users")
         if data is not None:
+            _users_seen_max = len(data) or _users_seen_max
             return data
     # Fallback: lokálny súbor
     try:
         if DATA_FILE.exists():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            _users_seen_max = len(data) or _users_seen_max
+            return data
     except Exception as e:
         print(f"[WARN] game_users.json corrupted ({e}), starting fresh.")
     return {}
 
+_users_seen_max = 0  # počet účtov pri poslednom úspešnom načítaní/uložení
+
 def save_users(u):
+    # Ochrana: ak načítanie zlyhalo (Upstash výpadok → prázdny {}), neprepíš celú databázu
+    global _users_seen_max
+    if _users_seen_max >= 5 and len(u) < _users_seen_max // 2:
+        print(f"[ERROR] save_users odmietnutý: {len(u)} účtov vs. predtým {_users_seen_max} — možný výpadok úložiska")
+        return
+    _users_seen_max = len(u)
     if _KV_URL:
         _kv_set("game_users", u)          # primárne úložisko
         _atomic_write(DATA_FILE, json.dumps(u, indent=4, ensure_ascii=False))  # best-effort cache
@@ -1130,9 +1197,40 @@ def check_ban(user):
     return True, L(f"Tvoj účet je zablokovaný ešte {t}.", f"Your account is banned for another {t}.")
 
 def validate_pw(pw):
-    if len(pw) < 4:
-        return False, L("Heslo musí mať aspoň 4 znaky.", "Password must be at least 4 characters.")
+    if len(pw) < 8:
+        return False, L("Heslo musí mať aspoň 8 znakov.", "Password must be at least 8 characters.")
     return True, "OK"
+
+USERNAME_RE    = re.compile(r"[A-Za-z0-9_]{3,20}")
+RESERVED_NAMES = {"claudebot", "owner", "admin", "administrator", "system", "server", "moderator", "mod"}
+
+def validate_username(username, users):
+    """Vráti (ok, správa). Iba ASCII písmená/číslice/_ — zabraňuje XSS cez mená a kolíziám kľúčov."""
+    if not USERNAME_RE.fullmatch(username):
+        return False, L("Meno: 3–20 znakov, iba písmená bez diakritiky, číslice a _.",
+                        "Username: 3–20 chars, only letters, digits and _.")
+    if username.lower() in RESERVED_NAMES:
+        return False, L("Toto meno je vyhradené.", "This username is reserved.")
+    if any(k.lower() == username.lower() for k in users):
+        return False, L(f"Meno '{username}' je obsadené.", f"Username '{username}' is already taken.")
+    return True, "OK"
+
+def _account_age_days(uname):
+    u = next((v for k, v in load_users().items() if k.lower() == uname.lower()), {})
+    created = u.get("created_at") or u.get("registered") or ""
+    try:
+        return (datetime.now() - datetime.strptime(created[:16], "%Y-%m-%d %H:%M")).days
+    except ValueError:
+        return 999  # staré účty bez dátumu
+
+def esc(s):
+    """HTML-escape ľubovoľnej hodnoty (aj do atribútov)."""
+    return html.escape(str(s), quote=True)
+
+def json_script(obj):
+    """json.dumps bezpečný na vloženie do <script> (nedá sa ním ukončiť tag)."""
+    return (json.dumps(obj).replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
 
 def load_jf(path, default=None):
     """
@@ -1442,12 +1540,14 @@ def _energy_tick(uname_upper):
 
     # Dispatch pressure event
     has_pending = profile.get("dispatch_pending") is not None
-    if has_rbmk_running and not has_pending and random.random() < DISPATCH_PROB:
+    # Pravdepodobnosti sú za hodinu — predtým sa hádzalo pri každom načítaní stránky (farmenie refreshom)
+    _ev_hrs = min(max(elapsed_hrs, 0.0), 24.0)
+    if has_rbmk_running and not has_pending and random.random() < 1 - (1 - DISPATCH_PROB) ** _ev_hrs:
         profile["dispatch_pending"] = {"ts": now}
 
     # Soviet event (tajný sovietský reaktor) — len ak má RBMK a žiadny aktívny
     has_soviet = profile.get("soviet_event_pending") is not None
-    if has_rbmk_running and not has_soviet and random.random() < SOVIET_EVENT_PROB:
+    if has_rbmk_running and not has_soviet and random.random() < 1 - (1 - SOVIET_EVENT_PROB) ** _ev_hrs:
         profile["soviet_event_pending"] = {"ts": now}
 
     # Proliferačná horúčava — prirodzený pokles 1.5 bodu/hod
@@ -1686,7 +1786,7 @@ def _apply_price_impact(item_id, qty, direction):
     item = next((i for i in NPC_MARKET if i["id"] == item_id), {})
     base_b = item.get("npc_buys")
     base_s = item.get("npc_sells")
-    impact = qty / liq  # bezrozmerný tlak
+    impact = min(qty / liq, 0.5)  # bezrozmerný tlak; strop, aby jeden obchod nepohol cenou 10×
 
     if direction == "sell":
         # predaj → ponuka rastie → kúpna cena klesá, predajná mierne klesá
@@ -1704,6 +1804,13 @@ def _apply_price_impact(item_id, qty, direction):
         if base_b is not None:
             cur = float(entry.get("b") or base_b)
             entry["b"] = round(min(dyn.get("max_b", base_b * 5), cur * (1.0 + impact * 0.10)), 1)
+
+    # NPC nikdy nevykupuje drahšie, než predáva (inak kúp → predaj = CR zadarmo)
+    if base_b is not None and base_s is not None:
+        s_now = float(entry.get("s") or base_s)
+        b_now = float(entry.get("b") or base_b)
+        if b_now > s_now * 0.9:
+            entry["b"] = round(s_now * 0.9, 1)
 
     entry["ts"] = now
     raw[item_id] = entry
@@ -2091,13 +2198,42 @@ _seed_special_ranks()
 _seed_energy_profile()
 
 
-def get_sp_ranks(user_dict):
-    """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
+def _migrate_escape_stored_text():
+    """Jednorazovo escapuje staré notifikácie a feed (nové sa escapujú pri uložení, flag "e")."""
+    users, changed = load_users(), False
+    for u in users.values():
+        for n in u.get("notifications", []) if isinstance(u, dict) else []:
+            if isinstance(n, dict) and not n.get("e"):
+                n["text"], n["from"], n["e"] = esc(n.get("text", "")), esc(n.get("from", "")), 1
+                changed = True
+    if changed:
+        save_users(users)
+    feed = load_jf(KB_FEED, {"events": []})
+    if any(not ev.get("e") for ev in feed.get("events", [])):
+        for ev in feed["events"]:
+            if not ev.get("e"):
+                ev["text"], ev["e"] = esc(ev.get("text", "")), 1
+        save_jf(KB_FEED, feed)
+
+_migrate_escape_stored_text()
+
+
+def get_sp_ranks_raw(user_dict):
+    """Ako get_sp_ranks, ale bez escapovania — iba na zápis späť do dát, nie na zobrazenie."""
     sr = user_dict.get("special_ranks")
     if isinstance(sr, list):
         return [s for s in sr if s][:2]
     old = user_dict.get("special_rank")
     return [old] if old else []
+
+def get_sp_ranks(user_dict):
+    """Vráti list špeciálnych rankov (max 2). Kompatibilné so starým special_rank stringom."""
+    sr = user_dict.get("special_ranks")
+    # Escapované — ranky zadávajú admini voľným textom a zobrazujú sa ako HTML
+    if isinstance(sr, list):
+        return [esc(s) for s in sr if s][:2]
+    old = user_dict.get("special_rank")
+    return [esc(old)] if old else []
 
 RANKS = [
     (1,  "Baník",        0),
@@ -2140,12 +2276,18 @@ def send_notification(uname, text, from_role="owner"):
         print(f"[notify] uname '{uname}' not found in users")
         return
     notifs = users[key].setdefault("notifications", [])
-    notifs.append({"text": text, "from": from_role,
-                   "ts": datetime.now().strftime("%Y-%m-%d %H:%M"), "read": False})
+    # Escapované už pri uložení — text sa zobrazuje na viacerých miestach ako HTML
+    notifs.append({"text": esc(str(text)[:500]), "from": esc(str(from_role)[:30]),
+                   "ts": datetime.now().strftime("%Y-%m-%d %H:%M"), "read": False, "e": 1})
+    users[key]["notifications"] = notifs[-NOTIF_MAX:]
     save_users(users)
     email = users[key].get("email", "").strip()
-    if email:
-        _send_email(email, f"[Kozmické Bane] Správa od {from_role}", text)
+    # Email iba pre správy od ownera/admina (hráčske akcie by inak vedeli zasypať schránku)
+    if email and from_role in ("Owner", "Admin", "owner"):
+        threading.Thread(target=_send_email, daemon=True,
+                         args=(email, f"[Kozmické Bane] Správa od {from_role}", text)).start()
+
+NOTIF_MAX = 50
 
 
 def _send_email(to, subject, body):
@@ -2372,8 +2514,8 @@ def render_login(tab="login", err_login="", err_reg="", err_reset="",
         .replace("__LBL_USERNAME__",    L("MENO", "USERNAME"))
         .replace("__LBL_PASSWORD__",    L("HESLO", "PASSWORD"))
         .replace("__LBL_PASSWORD_HINT__",
-                 L('HESLO &nbsp;<span style="color:#555;font-size:0.85em">(min. 6 znakov, aspoň 1 číslica)</span>',
-                   'PASSWORD &nbsp;<span style="color:#555;font-size:0.85em">(min. 6 chars, at least 1 digit)</span>'))
+                 L('HESLO &nbsp;<span style="color:#555;font-size:0.85em">(min. 8 znakov)</span>',
+                   'PASSWORD &nbsp;<span style="color:#555;font-size:0.85em">(min. 8 chars)</span>'))
         .replace("__LBL_CONFIRM_PW__",  L("POTVRĎ HESLO", "CONFIRM PASSWORD"))
         .replace("__BTN_SIGNIN__",      L("PRIHLÁSIŤ SA", "SIGN IN"))
         .replace("__BTN_REGISTER__",    L("VYTVORIŤ ÚČET", "CREATE ACCOUNT"))
@@ -2494,13 +2636,8 @@ WEB_BRIDGE = """\
           });
         } catch(e) {}
       }
-      if (key === 'kb_leaderboard') {
-        try {
-          JSON.parse(value).forEach(function(e) {
-            api.add_leaderboard(JSON.stringify(e));
-          });
-        } catch(e) {}
-      }
+      // kb_leaderboard sa nesynchronizuje tu — addToLeaderboard() posiela nový záznam sám
+      // (predtým sa pri každom zápise znova posielali všetky záznamy → duplikáty)
     };
 
     var _origRemove = Storage.prototype.removeItem;
@@ -2508,7 +2645,6 @@ WEB_BRIDGE = """\
       _origRemove.call(this, key);
       var api = getApi(); if (!api) return;
       if (key === 'kb_saves') { for (var i=1;i<=4;i++) api.delete_save(i); }
-      if (key === 'kb_leaderboard') { api.clear_leaderboard(); }
     };
   }
 
@@ -2657,7 +2793,7 @@ def render_lobby(pilot):
  ██║  ██╗╚██████╔╝███████╗██║ ╚═╝ ██║██║╚██████╗██║  ██╗███████╗
  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝</pre>"""
     html += f'<div class="subtitle">B A N E &nbsp; v4.7 &mdash; CAREER EDITION</div>'
-    pilot_line = f'PILOT: {pilot.upper()} &nbsp;|&nbsp; {L("RANG","RANK")}: {display_rank} &nbsp;|&nbsp; {cr:,} CR'
+    pilot_line = f'PILOT: {esc(pilot.upper())} &nbsp;|&nbsp; {L("RANG","RANK")}: {display_rank} &nbsp;|&nbsp; {cr:,} CR'
     if sp_stars:
         pilot_line += f' &nbsp;|&nbsp; {sp_stars}'
     html += f'<div class="pilot">{pilot_line}</div>'
@@ -2795,7 +2931,7 @@ def render_lobby(pilot):
     html += f'<div class="card-title" style="color:#ffd700">&#127942; {L("TÝŽDENNÝ LEADERBOARD","WEEKLY LEADERBOARD")}</div>'
     if _wprev:
         html += (f'<div style="font-size:.78em;color:#888;margin-bottom:6px">'
-                 f'{L("Minulý víťaz","Last winner")}: <span style="color:#ffd700">{_wprev.get("uname","")}</span>'
+                 f'{L("Minulý víťaz","Last winner")}: <span style="color:#ffd700">{esc(_wprev.get("uname",""))}</span>'
                  f' — {_wprev.get("cr",0):,} CR ({_wprev.get("week","")})</div>')
     if _wscores:
         _wmed = ["🥇","🥈","🥉"]
@@ -2862,7 +2998,7 @@ def render_lobby(pilot):
         spr  = get_sp_ranks(u_lb)
         sp_tag = (" " + " ".join(f'<span style="color:#ffd700;font-size:.85em">&#9733;{s}</span>' for s in spr)) if spr else ""
         sess_lbl = L("sess.", "sess.")
-        html += f'<div class="{cls}">{m} &nbsp; <span>{uname}</span>{sp_tag} &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} {sess_lbl}</div>'
+        html += f'<div class="{cls}">{m} &nbsp; <span>{esc(uname)}</span>{sp_tag} &nbsp; {c:,} CR &nbsp; [{rn}] &nbsp; {d.get("sessions",0)} {sess_lbl}</div>'
         shown += 1
     if shown == 0:
         html += f'<div class="lb-row">&ndash; {L("zatiaľ žiadne záznamy","no records yet")} &ndash;</div>'
@@ -2961,7 +3097,7 @@ def render_lobby(pilot):
                  f'background:#010008;border:1px solid #38d1ff44;padding:8px 14px;'
                  f'font-family:\'VT323\',monospace">'
                  f'<span style="color:#38d1ff;font-size:.85em;letter-spacing:.08em">📌 {L("FEATURED PILOT","FEATURED PILOT")}</span><br>'
-                 f'<span style="color:#cfffcf;font-size:1.05em">{_featured.upper()}</span>'
+                 f'<span style="color:#cfffcf;font-size:1.05em">{esc(_featured.upper())}</span>'
                  f' &nbsp; <span style="color:#888;font-size:.9em">{_feat_rank} &nbsp; {_feat_cr:,} CR &nbsp; ◈{_feat_vs}</span>'
                  f'</div>')
 
@@ -3278,15 +3414,24 @@ def index():
 def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
+    bad_login = L("Nesprávne meno alebo heslo.", "Incorrect username or password.")
+    ip_key, user_key = "login:" + _client_ip(), "login-u:" + username.lower()
+    if _rate_limited(ip_key, 20, 600) or _rate_limited(user_key, 10, 900):
+        return render_login(tab="login", err_login=L("Príliš veľa pokusov. Skús o pár minút.",
+                                                     "Too many attempts. Try again in a few minutes."))
     users = load_users()
+    if username not in users:  # meno nezávisle od veľkosti písmen
+        username = next((k for k in users if k.lower() == username.lower()), username)
     if username not in users:
-        return render_login(tab="login", err_login=L(f"Používateľ '{username}' neexistuje.", f"User '{username}' does not exist."))
+        _rate_hit(ip_key); _rate_hit(user_key)
+        return render_login(tab="login", err_login=bad_login)
+    ok, upgrade = check_pw(users[username]["password"], password)
+    if not ok:
+        _rate_hit(ip_key); _rate_hit(user_key)
+        return render_login(tab="login", err_login=bad_login)
     banned, ban_msg = check_ban(users[username])
     if banned:
         return render_login(tab="login", err_login=ban_msg)
-    ok, upgrade = check_pw(users[username]["password"], password)
-    if not ok:
-        return render_login(tab="login", err_login=L("Nesprávne heslo.", "Incorrect password."))
     if upgrade:
         users[username]["password"] = hash_pw(password)
     session["username"] = username
@@ -3301,10 +3446,13 @@ def register():
     password  = request.form.get("password", "")
     password2 = request.form.get("password2", "")
     users = load_users()
-    if not username:
-        return render_login(tab="register", err_reg=L("Meno nemôže byť prázdne.", "Username cannot be empty."))
-    if username in users:
-        return render_login(tab="register", err_reg=L(f"Meno '{username}' je obsadené.", f"Username '{username}' is already taken."))
+    reg_key = "register:" + _client_ip()
+    if _rate_limited(reg_key, 5, 3600):
+        return render_login(tab="register", err_reg=L("Príliš veľa registrácií z tejto siete. Skús neskôr.",
+                                                     "Too many registrations from this network. Try later."))
+    ok, msg = validate_username(username, users)
+    if not ok:
+        return render_login(tab="register", err_reg=esc(msg))
     ok, msg = validate_pw(password)
     if not ok:
         return render_login(tab="register", err_reg=msg)
@@ -3330,6 +3478,7 @@ def register():
             users[referrer_key].setdefault("referrals", []).append(username)
             _add_shards(username.lower(), 3, source="referral_new")
     save_users(users)
+    _rate_hit(reg_key)
     # Vitajte notifikácia
     send_notification(username,
         "Vitaj na palube Kozmické Bane! 🚀 Som ClaudeBot. Pozri si Hub, zoznám sa s pilotmi a začni ťažiť!",
@@ -3355,7 +3504,9 @@ def logout():
 def set_lang(code):
     if code in ('sk', 'en'):
         session['lang'] = code
-    return redirect(request.referrer or '/')
+    ref = request.referrer or ''
+    same_host = urllib.parse.urlparse(ref).netloc == request.host
+    return redirect(ref if ref and same_host else '/')
 
 
 # ── Routes — Mini hry ─────────────────────────────────────────────────────
@@ -3469,14 +3620,14 @@ def game():
     lb_rows.sort(key=lambda x: -x["career_cr"])
     server_inject = (
         f"<script>"
-        f"window.__SERVER_SAVES__={json.dumps(user_saves)};"
-        f"window.__MY_CAREER__={json.dumps(my_career)};"
-        f"window.__GLOBAL_LB__={json.dumps(lb_rows)};"
+        f"window.__SERVER_SAVES__={json_script(user_saves)};"
+        f"window.__MY_CAREER__={json_script(my_career)};"
+        f"window.__GLOBAL_LB__={json_script(lb_rows)};"
         f"window.__IS_TESTER__={'true' if _is_tester else 'false'};"
         f"window.__IS_PREMIUM__={'true' if _is_premium else 'false'};"
-        f"window.__BETA_FLAGS__={json.dumps(_beta_flags)};"
-        f"window.__SESSION_USER__={json.dumps(session['username'].lower())};"
-        f"window.__SHOW_TUTORIAL__={json.dumps(not u_data.get('tutorial_done', False))};"
+        f"window.__BETA_FLAGS__={json_script(_beta_flags)};"
+        f"window.__SESSION_USER__={json_script(session['username'].lower())};"
+        f"window.__SHOW_TUTORIAL__={json_script(not _u.get('tutorial_done', False))};"
         f"</script>\n"
     )
     html = html.replace("<head>", "<head>\n" + server_inject + WEB_BRIDGE, 1)
@@ -3507,17 +3658,24 @@ def _require_session():
 def api_save_game():
     if not _require_session():
         return "", 401
-    d = request.json
+    d = request.get_json(silent=True)
+    if not isinstance(d, dict) or str(d.get("slot")) not in SAVE_SLOTS or "data" not in d:
+        return "false", 400
+    if len(json.dumps(d["data"])) > SAVE_MAX_BYTES:
+        return "false", 413
     saves = load_jf(KB_SAVES, {})
     saves.setdefault(_uname(), {})[str(d["slot"])] = d["data"]
     save_jf(KB_SAVES, saves)
     return "true"
 
+SAVE_SLOTS     = {"1", "2", "3", "4"}
+SAVE_MAX_BYTES = 300_000
+
 @app.route("/api/load_game", methods=["POST"])
 def api_load_game():
     if not _require_session():
         return "null", 401
-    slot = str(request.json.get("slot"))
+    slot = str((request.get_json(silent=True) or {}).get("slot"))
     saves = load_jf(KB_SAVES, {})
     user_saves = saves.get(_uname(), {})
     d = user_saves.get(slot)
@@ -3527,7 +3685,7 @@ def api_load_game():
 def api_delete_save():
     if not _require_session():
         return "", 401
-    slot = str(request.json.get("slot"))
+    slot = str((request.get_json(silent=True) or {}).get("slot"))
     saves = load_jf(KB_SAVES, {})
     uname = _uname()
     if uname in saves:
@@ -3549,11 +3707,38 @@ def api_startup_data():
 
 @app.route("/api/add_leaderboard", methods=["POST"])
 def api_add_lb():
-    lb = load_jf(KB_LB, [])
-    lb.append(request.json)
-    lb.sort(key=lambda x: -x.get("score", 0))
+    if not _require_session():
+        return "false", 401
+    entry = _clean_lb_entry(request.get_json(silent=True))
+    if entry is None:
+        return "false", 400
+    lb = [e for e in load_jf(KB_LB, []) if isinstance(e, dict)]
+    lb.append(entry)
+    lb.sort(key=lambda x: -(x.get("score", 0) if isinstance(x.get("score", 0), (int, float)) else 0))
     save_jf(KB_LB, lb[:20])
     return "true"
+
+def _clean_lb_entry(entry):
+    """Iba známe polia s rozumnými hodnotami, meno vždy zo session. None ak je záznam neplatný."""
+    if not isinstance(entry, dict):
+        return None
+    try:
+        score = int(entry.get("score", 0))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    clean = {k: v for k, v in entry.items()
+             if k in ("credits", "turns", "maxDepth", "win", "ts")
+             and isinstance(v, (int, float, bool)) and math.isfinite(v)}
+    clean["score"] = max(0, min(score, 10**9))
+    clean["username"] = session["username"]
+    return clean
+
+def _clean_saves(raw):
+    """Vráti {slot: data} iba pre platné sloty 1–4 s rozumnou veľkosťou."""
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): v for k, v in raw.items()
+            if str(k) in SAVE_SLOTS and len(json.dumps(v)) <= SAVE_MAX_BYTES}
 
 @app.route("/api/get_leaderboard")
 def api_get_lb():
@@ -3573,11 +3758,34 @@ def api_get_lb():
 
 @app.route("/api/clear_leaderboard", methods=["POST"])
 def api_clear_lb():
+    if not _owner_check():  # predtým ho vedel zmazať ktokoľvek
+        return "false", 403
     save_jf(KB_LB, [])
     return "true"
 
 # In-memory tracker: koľko CR bolo už live-syncnutých pre aktuálnu session
 _live_cr_synced: dict = {}  # {username_lower: total_cr_synced_this_session}
+
+# Hra beží v prehliadači, server CR neoverí — aspoň obmedzí, koľko sa dá pripísať za hodinu
+CR_EARN_PER_HOUR = int(os.environ.get("CR_EARN_PER_HOUR", 1_000_000))
+
+def _int_arg(d, key, lo=0, hi=10**12):
+    """Bezpečne prečíta celé číslo z JSON body (zlé hodnoty → lo)."""
+    try:
+        v = int(float(d.get(key, 0)))
+    except (TypeError, ValueError, OverflowError):
+        return lo
+    return max(lo, min(hi, v))
+
+def _cr_budget(e, delta):
+    """Vráti koľko z `delta` CR sa smie pripísať (rolling okno 1 h), a zapíše to do záznamu e."""
+    now = time.time()
+    start, used = e.get("cr_win", [0, 0])
+    if now - start > 3600:
+        start, used = now, 0
+    allowed = max(0, min(delta, CR_EARN_PER_HOUR - used))
+    e["cr_win"] = [start, used + allowed]
+    return allowed
 
 
 @app.route("/api/sync_turn_cr", methods=["POST"])
@@ -3587,10 +3795,12 @@ def api_sync_turn_cr():
         return "{}", 401
     pilot   = session["username"]
     key     = pilot.upper()
-    d       = request.json or {}
-    credits_now = int(d.get("credits_earned", 0))  # celkový earned v tejto session
+    d       = request.get_json(silent=True) or {}
+    credits_now = _int_arg(d, "credits_earned")  # celkový earned v tejto session
 
     prev = _live_cr_synced.get(pilot, 0)
+    if credits_now < prev:  # nová session (stará nebola ukončená)
+        prev = 0
     delta = credits_now - prev
     if delta <= 0:
         career = load_jf(KB_CAREER, {})
@@ -3600,7 +3810,7 @@ def api_sync_turn_cr():
     career = load_jf(KB_CAREER, {})
     e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
                           "total_mined": 0, "wins": 0, "last_seen": "–"})
-    e["career_cr"] += delta
+    e["career_cr"] += _cr_budget(e, delta)
     r, rname = kb_rank(e["career_cr"])
     e["rank"] = r; e["rank_name"] = rname
     career[key] = e
@@ -3612,29 +3822,34 @@ def api_sync_turn_cr():
 def api_session_end():
     if not _require_session():
         return "{}", 401
-    d      = request.json
+    d      = request.get_json(silent=True) or {}
     pilot  = session["username"]
+    if _rate_limited("session_end:" + pilot, 1, 30):  # koniec hry max. raz za 30 s
+        return "{}", 429
+    _rate_hit("session_end:" + pilot)
     career = load_jf(KB_CAREER, {})
     key    = pilot.upper()
     e = career.get(key, {
         "career_cr": 0, "sessions": 0, "best_session": 0,
         "total_mined": 0, "wins": 0, "last_seen": "–"
     })
-    earned = int(d.get("credits_earned", 0))
+    earned = _int_arg(d, "credits_earned", hi=CR_EARN_PER_HOUR)
 
     # CR boli už live-syncnuté počas session — tu len dopočítame prípadný zostatok
     prev_synced = _live_cr_synced.pop(pilot, 0)
+    if earned < prev_synced:
+        prev_synced = 0
     remaining = earned - prev_synced
     if remaining > 0:
-        e["career_cr"] += remaining
+        e["career_cr"] += _cr_budget(e, remaining)
 
     e["sessions"]     += 1
-    e["total_mined"]  += int(d.get("mined", 0))
+    e["total_mined"]  += _int_arg(d, "mined", hi=1_000_000)
     e["best_session"]  = max(e["best_session"], earned)
     e["last_seen"]     = datetime.now().strftime("%Y-%m-%d %H:%M")
     if d.get("win"):
         e["wins"] = e.get("wins", 0) + 1
-        planet = int(d.get("planet", 1))
+        planet = _int_arg(d, "planet", lo=1, hi=10)
         if planet == 1 and _win_shard_flag(pilot, 1):
             _add_shards(pilot, 2, "win_zyrax9")
         elif planet == 2 and _win_shard_flag(pilot, 2):
@@ -3654,7 +3869,7 @@ def api_session_end():
     elif earned > 0:
         _weekly_add(pilot, earned)
     # Mine quest (amount z klienta)
-    mined_amt = int(d.get("mined", 0))
+    mined_amt = _int_arg(d, "mined", hi=1_000_000)
     if mined_amt > 0:
         done_q = _quest_progress(pilot.lower(), "mine", mined_amt)
         _quest_give_rewards(pilot.lower(), done_q)
@@ -3691,30 +3906,11 @@ def api_get_career():
 
 @app.route("/api/sync_career", methods=["POST"])
 def api_sync_career():
-    """Záloha kariéry z localStorage → server (iba ak je server nižší alebo prázdny)."""
+    """Predtým prepísal career_cr hodnotou z prehliadača (= neobmedzené CR).
+    Server je teraz jediný zdroj pravdy — len vráti uloženú kariéru."""
     if not _require_session():
         return "{}", 401
-    d = request.get_json(force=True, silent=True) or {}
-    client_cr = int(d.get("career_cr", 0))
-    if client_cr <= 0:
-        return "{}", 200
-    career = load_jf(KB_CAREER, {})
-    key = _uname()
-    server_cr = career.get(key, {}).get("career_cr", 0)
-    if client_cr > server_cr:
-        e = career.get(key, {"career_cr": 0, "sessions": 0, "best_session": 0,
-                              "total_mined": 0, "wins": 0, "last_seen": "–"})
-        e["career_cr"]   = client_cr
-        e["sessions"]    = max(e.get("sessions", 0),    int(d.get("sessions", 0)))
-        e["wins"]        = max(e.get("wins", 0),        int(d.get("wins", 0)))
-        e["total_mined"] = max(e.get("total_mined", 0), int(d.get("total_mined", 0)))
-        e["best_session"]= max(e.get("best_session", 0),int(d.get("best_session", 0)))
-        r, rname = kb_rank(client_cr)
-        e["rank"] = r; e["rank_name"] = rname
-        career[key] = e
-        save_jf(KB_CAREER, career)
-        return json.dumps(e)
-    return json.dumps(career.get(key, {}))
+    return json.dumps(load_jf(KB_CAREER, {}).get(_uname(), {}))
 
 @app.route("/api/energy")
 def api_energy_status():
@@ -3732,8 +3928,10 @@ def api_energy_use():
     if not _require_session():
         return '{"ok":false,"energy":0}', 401
     try:
-        amount = float((request.json or {}).get("amount", 0))
-    except (ValueError, TypeError):
+        amount = float((request.get_json(silent=True) or {}).get("amount", 0))
+    except (ValueError, TypeError, AttributeError):
+        return '{"ok":false,"energy":0}', 400
+    if not math.isfinite(amount) or amount <= 0:  # záporné množstvo by energiu pridávalo
         return '{"ok":false,"energy":0}', 400
     uname   = _uname()
     profile = _energy_tick(uname)
@@ -3774,14 +3972,16 @@ def api_get_all_careers():
 @app.route("/api/sync_local_saves", methods=["POST"])
 def sync_local_saves():
     """Auto-sync: prehliadač pošle localStorage dáta → server ich uloží."""
-    if "username" not in session:
+    if not _require_session():
         return {"ok": False}, 401
     uname = _uname()
-    body = request.get_json(force=True, silent=True) or {}
+    body = request.get_json(force=True, silent=True)
+    if not isinstance(body, dict):
+        return {"ok": False}, 400
     synced = 0
 
     # Uloženia (kb_saves) — localStorage formát: {slot: saveData}
-    raw_saves = body.get("saves", {})
+    raw_saves = _clean_saves(body.get("saves", {}))
     deleted_slots = session.get("deleted_slots", [])
     if raw_saves:
         all_saves = load_jf(KB_SAVES, {})
@@ -3797,12 +3997,14 @@ def sync_local_saves():
 
     # Leaderboard — iba záznamy tohto hráča
     lb_entries = body.get("leaderboard", [])
-    if lb_entries:
-        all_lb = load_jf(KB_LB, [])
+    if isinstance(lb_entries, list) and lb_entries:
+        all_lb = [e for e in load_jf(KB_LB, []) if isinstance(e, dict)]
         existing_ts = {e.get("ts") for e in all_lb}
-        for entry in lb_entries:
-            if (entry.get("username", "").upper() == uname
-                    and entry.get("ts") not in existing_ts):
+        for entry in lb_entries[:50]:
+            if not isinstance(entry, dict) or str(entry.get("username", "")).upper() != uname:
+                continue
+            entry = _clean_lb_entry(entry)
+            if entry and entry.get("ts") not in existing_ts:
                 all_lb.append(entry)
         all_lb.sort(key=lambda x: x.get("score", 0), reverse=True)
         save_jf(KB_LB, all_lb[:50])
@@ -3832,7 +4034,7 @@ def export_data():
 
 @app.route("/import_data", methods=["GET", "POST"])
 def import_data():
-    if "username" not in session:
+    if not _require_session():
         return redirect("/")
     uname = _uname()
 
@@ -3845,25 +4047,26 @@ def import_data():
         except Exception:
             return _import_page("⚠ Neplatný JSON súbor.", error=True)
 
-        def _merge(path, key):
-            d = load_jf(path, {})
-            d[uname] = data[key]
-            save_jf(path, d)
-
-        if data.get("saves"):  _merge(KB_SAVES,  "saves")
-        if data.get("career"): _merge(KB_CAREER, "career")
+        if not isinstance(data, dict):
+            return _import_page("⚠ Neplatný JSON súbor.", error=True)
+        # Kariéra (CR) sa už neimportuje — inak si ju ktokoľvek vedel prepísať
+        if data.get("saves"):
+            all_saves = load_jf(KB_SAVES, {})
+            all_saves[uname] = _clean_saves(data["saves"])
+            save_jf(KB_SAVES, all_saves)
 
         # Leaderboard — pridaj záznamy (bez duplikátov podľa ts)
-        if data.get("lb"):
-            lb = load_jf(KB_LB, [])
+        if isinstance(data.get("lb"), list):
+            lb = [e for e in load_jf(KB_LB, []) if isinstance(e, dict)]
             existing_ts = {e.get("ts") for e in lb}
-            for entry in data["lb"]:
-                if entry.get("ts") not in existing_ts:
+            for entry in data["lb"][:50]:
+                entry = _clean_lb_entry(entry)
+                if entry and entry.get("ts") not in existing_ts:
                     lb.append(entry)
             lb.sort(key=lambda x: -x.get("score", 0))
             save_jf(KB_LB, lb[:50])
 
-        return _import_page(f"✓ Dáta pre {uname} úspešne importované!", error=False)
+        return _import_page(f"✓ Dáta pre {esc(uname)} úspešne importované!", error=False)
 
     return _import_page("")
 
@@ -3933,14 +4136,21 @@ input{background:#111;border:1px solid #444;color:#ffb000;padding:.2rem .4rem;
 
 def _owner_check():
     """Vráti True ak je owner session aktívna."""
-    return session.get("owner") is True
+    if session.get("owner") is not True:
+        return False
+    if time.time() - session.get("owner_ts", 0) > OWNER_SESSION_TTL:
+        session.pop("owner", None)
+        return False
+    return True
+
+OWNER_SESSION_TTL = 8 * 3600  # owner session vyprší po 8 hodinách
 
 def _is_admin_user():
-    """Vráti True ak je prihlásený hráč s is_admin=True."""
+    """Vráti True ak je prihlásený (a nezabanovaný) hráč s is_admin=True."""
     if "username" not in session:
         return False
-    users = load_users()
-    return users.get(session["username"], {}).get("is_admin") is True
+    u = load_users().get(session["username"], {})
+    return u.get("is_admin") is True and not check_ban(u)[0]
 
 @app.route("/owner", methods=["GET", "POST"])
 def owner_login():
@@ -3949,10 +4159,16 @@ def owner_login():
     err = ""
     if request.method == "POST":
         code = request.form.get("code", "")
-        if OWNER_CODE and code == OWNER_CODE:
+        ip_key = "owner:" + _client_ip()
+        if _rate_limited(ip_key, 5, 900) or _rate_limited("owner:*", 30, 3600):
+            err = "Príliš veľa pokusov. Skús neskôr."
+        elif OWNER_CODE and hmac.compare_digest(code.encode(), OWNER_CODE.encode()):
             session["owner"] = True
+            session["owner_ts"] = time.time()
             return redirect("/owner/panel")
-        err = "Nesprávny owner kód."
+        else:
+            _rate_hit(ip_key); _rate_hit("owner:*")
+            err = "Nesprávny owner kód."
     return f"""<!DOCTYPE html><html><head><title>Owner</title>{ADMIN_CSS}</head><body>
 <h1>&#128081; OWNER PR&#205;STUP</h1>
 <p style="color:#888;margin-bottom:1rem">Zadaj owner kód nastavený v env premennej <code>OWNER_CODE</code>.</p>
@@ -4075,7 +4291,9 @@ def owner_panel():
         u  = users.get(u_orig, {}) if u_orig else {}
         c  = career.get(uname_lower.upper(), {})
         sv = saves.get(uname_lower.upper(), {})
-        display = u_orig or uname_lower.upper()
+        raw_name    = u_orig or uname_lower.upper()
+        display     = esc(raw_name)
+        display_url = esc(urllib.parse.quote(raw_name, safe=""))
         pw_str = _pw_kind(u.get("password", "")) if u.get("password") else "<em style='color:#555'>—</em>"
         bu = u.get("banned_until")
         if bu == -1:
@@ -4115,7 +4333,7 @@ def owner_panel():
         notif_hist = "".join(
             f'<div style="font-size:.78em;color:{"#aaa" if n.get("read") else "#ffe08a"};'
             f'border-bottom:1px solid #1a1a1a;padding:1px 0">'
-            f'<span style="color:#555">[{n.get("ts","")} {n.get("from","")}]</span> {n.get("text","")}'
+            f'<span style="color:#555">[{esc(n.get("ts",""))} {n.get("from","")}]</span> {n.get("text","")}'
             f'</div>'
             for n in notifs_all[-5:]  # posledných 5
         ) or f'<span style="color:#333;font-size:.78em">—</span>'
@@ -4193,7 +4411,7 @@ def owner_panel():
                 Ban
               </button>
             </form>
-            <a href="/owner/unban/{display}"
+            <a href="/owner/unban/{display_url}"
                style="color:#aaa;font-size:.8em;margin-left:3px">Unban</a>
             &nbsp;
             <form method="POST" action="/owner/reset_pw" style="display:inline">
@@ -4222,20 +4440,20 @@ def owner_panel():
               </button>
             </form>
             &nbsp;
-            <a href="/owner/toggle_admin/{display}"
+            <a href="/owner/toggle_admin/{display_url}"
                style="color:{'#ff9900' if is_adm else '#00ccff'};font-size:.8em;margin-left:3px">
                {'Revoke Admin' if is_adm else 'Make Admin'}</a>
             &nbsp;
-            <a href="/owner/toggle_tester/{display}"
+            <a href="/owner/toggle_tester/{display_url}"
                style="color:{'#ff9900' if is_tst else '#39ff6a'};font-size:.8em;margin-left:3px">
                {'Revoke Tester' if is_tst else 'Make Tester'}</a>
             &nbsp;
-            <a href="/owner/toggle_premium/{display}"
+            <a href="/owner/toggle_premium/{display_url}"
                style="color:{'#ff9900' if is_prem else '#ffcc00'};font-size:.8em;margin-left:3px;font-weight:bold">
                {'Revoke Premium' if is_prem else '⚡ Premium'}</a>
             &nbsp;
-            <a href="/owner/delete/{display}" style="color:#ff4444;font-size:.8em"
-               onclick="return confirm('Vymazat {display}?')">Del</a>
+            <a href="/owner/delete/{display_url}" style="color:#ff4444;font-size:.8em"
+               data-u="{display}" onclick="return confirm('Vymazat '+this.dataset.u+'?')">Del</a>
             &nbsp;
             <div style="display:inline-flex;flex-wrap:wrap;gap:1px;vertical-align:middle">{rank_btns}</div>
             &nbsp;
@@ -4265,7 +4483,7 @@ def owner_panel():
 
     total_cr  = sum(d.get("career_cr", 0) for d in career.values())
     sp_holders = ", ".join(
-        f"<span style='color:#ffd700'>{k}: " + " | ".join(f"&#9733;{s}" for s in get_sp_ranks(v)) + "</span>"
+        f"<span style='color:#ffd700'>{esc(k)}: " + " | ".join(f"&#9733;{s}" for s in get_sp_ranks(v)) + "</span>"
         for k, v in users.items() if get_sp_ranks(v)
     ) or "—"
     return f"""<!DOCTYPE html><html><head><title>Owner Panel</title>{ADMIN_CSS}
@@ -4411,7 +4629,8 @@ def owner_set_heat():
         return redirect("/owner")
     uname = request.form.get("uname", "").strip().upper()
     try:
-        heat = max(0.0, min(100.0, float(request.form.get("heat", 0))))
+        heat = float(request.form.get("heat", 0))
+        heat = max(0.0, min(100.0, heat)) if math.isfinite(heat) else 0.0
     except ValueError:
         return redirect("/owner/panel")
     data = load_jf(KB_ENERGY, {})
@@ -4452,7 +4671,7 @@ def owner_set_special_rank():
     users = load_users()
     if uname not in users:
         return redirect("/owner/panel")
-    new_ranks = [t for t in [t1, t2] if t][:2]
+    new_ranks = [t[:24] for t in [t1, t2] if t][:2]
     users[uname]["special_ranks"] = new_ranks
     users[uname].pop("special_rank", None)  # odstráň starý formát
     save_users(users)
@@ -4569,7 +4788,10 @@ def owner_rename():
     if not old_name or not new_name or old_name == new_name:
         return redirect("/owner/panel")
     users = load_users()
-    if old_name not in users or new_name in users:
+    if old_name not in users:
+        return redirect("/owner/panel")
+    ok, _ = validate_username(new_name, {k: v for k, v in users.items() if k != old_name})
+    if not ok:
         return redirect("/owner/panel")
     # Premenuj v users
     users[new_name] = users.pop(old_name)
@@ -4783,6 +5005,8 @@ def adminpanel_set_featured():
         return redirect("/lobby")
     target = request.form.get("uname", "").strip()
     data = load_jf(KB_SHARDS, {})
+    if target and target not in load_users():
+        return redirect("/adminpanel")
     data["_featured_player"] = target if target else ""
     save_jf(KB_SHARDS, data)
     return redirect("/adminpanel")
@@ -4800,7 +5024,8 @@ def adminpanel_set_rank():
         return redirect("/adminpanel")
     # Admin nemôže nastaviť owner-only tituly
     forbidden = {r.lower() for r in OWNER_ONLY_RANKS}
-    new_ranks = [t for t in [t1, t2] if t and t.lower() not in forbidden][:2]
+    new_ranks = [t[:24] for t in [t1, t2]
+                 if t and unicodedata.normalize("NFKC", t).lower() not in forbidden][:2]
     users[uname]["special_ranks"] = new_ranks
     users[uname].pop("special_rank", None)
     save_users(users)
@@ -6027,6 +6252,8 @@ def energy_soviet_event():
     profile = _energy_tick(uname)
     opt     = next((o for o in SOVIET_OPTS if o["id"] == choice), SOVIET_OPTS[2])
 
+    if not profile.get("soviet_event_pending"):  # bez čakajúceho eventu sa odmena dala brať donekonečna
+        return redirect("/energy")
     profile["soviet_event_pending"] = None
 
     if opt["cr"] or opt["wg_pu"]:
@@ -6102,7 +6329,7 @@ def enrichment_page():
     fuel    = profile.get("fuel", {})
     raw     = profile.get("raw_materials", {})
     lang    = session.get("lang", "sk")
-    msg     = request.args.get("msg", "")
+    msg     = esc(request.args.get("msg", ""))
 
     def Lp(sk, en): return en if lang == "en" else sk
 
@@ -6288,9 +6515,9 @@ def enrichment_process():
         needed_raw = rods * g["feed_per_rod"]
         total_cr   = rods * g["cr_cost"]
     if rods <= 0:
-        return redirect(f"/energy/enrichment?msg=!{Lp('Nedostatok surového uránu.','Not enough raw uranium.')}")
+        return redirect(f"/energy/enrichment?msg=!{L('Nedostatok surového uránu.','Not enough raw uranium.')}")
     if cr < total_cr:
-        return redirect(f"/energy/enrichment?msg=!{Lp('Nedostatok CR.','Not enough CR.')}")
+        return redirect(f"/energy/enrichment?msg=!{L('Nedostatok CR.','Not enough CR.')}")
 
     # Odpočítaj suroviny a CR
     raw["uranium_raw"] = round(uranium_raw - needed_raw, 2)
@@ -6333,7 +6560,7 @@ def market_page():
     def Lp(sk, en):
         return en if lang == "en" else sk
 
-    msg = request.args.get("msg", "")
+    msg = esc(request.args.get("msg", ""))
     prices = _get_market_prices()
 
     css = """
@@ -6627,7 +6854,7 @@ def auctions_page():
     def Lp(sk, en):
         return en if lang == "en" else sk
 
-    msg = request.args.get("msg", "")
+    msg = esc(request.args.get("msg", ""))
 
     css = """
 <style>
@@ -6984,7 +7211,7 @@ def company_auctions_page():
     def Lp(sk, en):
         return en if lang == "en" else sk
 
-    msg = request.args.get("msg", "")
+    msg = esc(request.args.get("msg", ""))
 
     css = """
 <style>
@@ -7303,35 +7530,28 @@ def company_collect():
         seller_entry["career_cr"] = seller_entry.get("career_cr", 0) + cost
         career[seller] = seller_entry
 
-        # Preveď assets kupujúcemu
+        # Prevedie sa iba to, čo predajca ešte naozaj má (predtým dostal kupujúci celý snapshot
+        # z času zalistovania, aj keď ho predajca medzitým rozpredal → duplikácia majetku)
         snap = p["snapshot"]
-        winner_profile.setdefault("plants", []).extend(snap.get("plants", []))
-        winner_profile["energy"] = min(
-            MAX_ENERGY,
-            winner_profile.get("energy", 0) + snap.get("energy", 0)
-        )
-        for k, v in snap.get("fuel", {}).items():
-            winner_profile.setdefault("fuel", {})[k] = round(
-                winner_profile["fuel"].get(k, 0) + v, 2)
-        for k, v in snap.get("commodities", {}).items():
-            winner_profile.setdefault("commodities", {})[k] = round(
-                winner_profile["commodities"].get(k, 0) + v, 2)
-
-        # Odober assets predajcovi (cap na 0)
         seller_profile = energy_data.get(seller, {})
         sp = seller_profile.get("plants", [])
+        wp = winner_profile.setdefault("plants", [])
         for plant in snap.get("plants", []):
-            if plant in sp:
+            pt = PLANT_TYPES.get(plant, {})
+            if plant in sp and wp.count(plant) < pt.get("max_count", 1):
                 sp.remove(plant)
+                wp.append(plant)
         seller_profile["plants"] = sp
-        seller_profile["energy"] = max(0, round(
-            seller_profile.get("energy", 0) - snap.get("energy", 0), 1))
-        for k, v in snap.get("fuel", {}).items():
-            seller_profile.setdefault("fuel", {})[k] = max(0, round(
-                seller_profile["fuel"].get(k, 0) - v, 2))
-        for k, v in snap.get("commodities", {}).items():
-            seller_profile.setdefault("commodities", {})[k] = max(0, round(
-                seller_profile["commodities"].get(k, 0) - v, 2))
+        e_moved = max(0, min(snap.get("energy", 0), seller_profile.get("energy", 0)))
+        seller_profile["energy"] = round(seller_profile.get("energy", 0) - e_moved, 1)
+        winner_profile["energy"] = min(MAX_ENERGY, winner_profile.get("energy", 0) + e_moved)
+        for field in ("fuel", "commodities"):
+            for k, v in snap.get(field, {}).items():
+                have  = seller_profile.setdefault(field, {}).get(k, 0)
+                moved = max(0, min(v, have))
+                seller_profile[field][k] = round(have - moved, 2)
+                winner_profile.setdefault(field, {})[k] = round(
+                    winner_profile[field].get(k, 0) + moved, 2)
         energy_data[seller] = seller_profile
 
         collected.append(p["seller"])
@@ -7372,7 +7592,7 @@ def bankrupt_auctions_page():
     def Lp(sk, en):
         return en if lang == "en" else sk
 
-    msg = request.args.get("msg", "")
+    msg = esc(request.args.get("msg", ""))
 
     css = """
 <style>
@@ -7624,7 +7844,7 @@ def bankrupt_collect():
             winner_profile.setdefault("commodities", {})[k] = round(
                 winner_profile["commodities"].get(k, 0) + v, 2)
 
-        collected.append(f'{p["seller"]} (+{seller_share:,} CR {Lp("predajcovi","to seller")})')
+        collected.append(f'{p["seller"]} (+{seller_share:,} CR {L("predajcovi","to seller")})')
 
     save_jf(KB_CAREER, career)
     energy_data[uname] = winner_profile
@@ -8632,6 +8852,8 @@ def country_weapons(cid):
 
         if action == "build_warhead":
             pu_type = request.form.get("pu_type", "wg_pu")
+            if pu_type not in ("pu239", "wg_pu"):  # inak sa dali stavať hlavice z uhlia
+                pu_type = "wg_pu"
             try:
                 qty = max(1, int(request.form.get("qty", 1)))
             except ValueError:
@@ -8698,21 +8920,24 @@ def country_weapons(cid):
         return redirect(f"/countries/{cid}/weapons?msg={msg}")
 
     # Čítaj správu z query stringu
-    raw_msg = request.args.get("msg", "")
+    raw_msg = esc(request.args.get("msg", ""))
     msg_html = ""
-    if raw_msg.startswith("OK:"):
-        parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Vyrobených","Built")} {parts[1]} {L("hlavíc","warheads")} (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
-    elif raw_msg.startswith("OK_WEAPONS:"):
-        msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Zbrane nakúpené za","Weapons purchased for")} {int(raw_msg.split(":")[1]):,} CR.</div>'
-    elif raw_msg == "NESCHVALENE":
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Krajina nemá schválenie Rady na jadrové zbrane!","Country has no Security Council nuclear approval!")}</div>'
-    elif raw_msg.startswith("NEDOSTATOK:"):
-        parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok","Insufficient")} {parts[1]}: {parts[2]}</div>'
-    elif raw_msg.startswith("NEDOSTATOK_CR:"):
-        parts = raw_msg.split(":")
-        msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok CR: máš","Insufficient CR: you have")} {int(parts[1]):,}, {L("potrebuješ","need")} {int(parts[2]):,}</div>'
+    try:  # zlý formát ?msg= predtým spôsobil 500
+        if raw_msg.startswith("OK:"):
+            parts = raw_msg.split(":")
+            msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Vyrobených","Built")} {parts[1]} {L("hlavíc","warheads")} (−{parts[1]} {parts[2]}, heat +{parts[3]})</div>'
+        elif raw_msg.startswith("OK_WEAPONS:"):
+            msg_html = f'<div style="color:#39ff6a;margin-bottom:8px">✅ {L("Zbrane nakúpené za","Weapons purchased for")} {int(raw_msg.split(":")[1]):,} CR.</div>'
+        elif raw_msg == "NESCHVALENE":
+            msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Krajina nemá schválenie Rady na jadrové zbrane!","Country has no Security Council nuclear approval!")}</div>'
+        elif raw_msg.startswith("NEDOSTATOK:"):
+            parts = raw_msg.split(":")
+            msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok","Insufficient")} {parts[1]}: {parts[2]}</div>'
+        elif raw_msg.startswith("NEDOSTATOK_CR:"):
+            parts = raw_msg.split(":")
+            msg_html = f'<div style="color:#ff3a3a;margin-bottom:8px">❌ {L("Nedostatok CR: máš","Insufficient CR: you have")} {int(parts[1]):,}, {L("potrebuješ","need")} {int(parts[2]):,}</div>'
+    except (IndexError, ValueError):
+        msg_html = ""
 
     nuc_ok  = w.get("nuclear_approved", False)
     nuc_col = "#39ff6a" if nuc_ok else "#ff3a3a"
@@ -8882,7 +9107,8 @@ def pu_market():
             edata = load_jf(KB_ENERGY, {})
             ep    = edata.get(uname, {})
             avail = ep.get("fuel", {}).get(pu_type, 0.0)
-            if qty <= 0 or price_cr <= 0:
+            if (pu_type not in ("pu239", "wg_pu") or not math.isfinite(qty)  # NaN prešlo všetkými kontrolami
+                    or qty <= 0 or price_cr <= 0 or price_cr > 10**9):
                 msg = "CHYBA_INVALID"
             elif avail < qty:
                 msg = f"CHYBA_QTY:{avail:.3f}"
@@ -8936,7 +9162,7 @@ def pu_market():
         return redirect(f"/countries/pu_market?msg={msg}")
 
     # HTML
-    raw_msg = request.args.get("msg", "")
+    raw_msg = esc(request.args.get("msg", ""))
     if raw_msg.startswith("OK_LIST:"):
         p = raw_msg.split(":")
         lbl = "WG-Pu" if p[2] == "wg_pu" else "Pu-239"
@@ -9031,11 +9257,15 @@ def energy_invest():
             amount = int(request.form.get("amount", 0))
         except ValueError:
             amount = 0
+        if inv_type not in ("cr", "fuel"):  # iný typ preskočil kontroly minima → záporná suma = CR zadarmo
+            inv_type = "cr"
 
         edata = load_jf(KB_ENERGY, {})
         all_users_check = load_users()
         # Overenia
-        if target == uname:
+        if amount <= 0:
+            msg = L("❌ Neplatná suma.","❌ Invalid amount.")
+        elif target == uname:
             msg = L("❌ Nemôžeš investovať sám do seba.","❌ You cannot invest in yourself.")
         elif not any(k.upper() == target for k in all_users_check):
             msg = L("❌ Hráč neexistuje.","❌ Player does not exist.")
@@ -9479,12 +9709,14 @@ def api_epsilon_choice():
     if not _require_session():
         return "{}", 401
     uname  = session["username"]
-    d      = request.json or {}
-    choice = int(d.get("choice", 0))
+    d      = request.get_json(silent=True) or {}
+    choice = _int_arg(d, "choice")
     if choice not in (1, 2, 3):
         return "{}", 400
 
     eps = load_jf(KB_EPSILON, {})
+    if uname in eps.get("choices", {}):  # voľba je jednorazová (predtým spam rezolúcií do Rady)
+        return json.dumps({"ok": True, "choice": eps["choices"][uname].get("choice")})
     eps.setdefault("choices", {})[uname] = {"choice": choice, "ts": time.time()}
 
     if choice == 1:
@@ -9532,7 +9764,7 @@ def api_epsilon_choice():
         # Zostať — špeciálny rank "◉ Stratený"
         users = load_users()
         u = users.get(uname, {})
-        sp = get_sp_ranks(u)
+        sp = get_sp_ranks_raw(u)
         lost_rank = "◉ Stratený"
         if lost_rank not in sp:
             sp.append(lost_rank)
@@ -10083,7 +10315,7 @@ function buildRoom(roomId, entryDir) {
   buildDecorations(roomId, t);
 
   // Set camera entry position
-  const epos = entryDir ? ENTRY_XZ[OPP[entryDir]] : {x:0, z:0};
+  const epos = entryDir ? ENTRY_XZ[entryDir] : {x:0, z:0};
   camera.position.set(epos.x, 1.7, epos.z);
   if (entryDir) {
     const facing = {n: Math.PI, s:0, w: Math.PI/2, e:-Math.PI/2};
@@ -10347,7 +10579,7 @@ function renderChat(msgs) {
   newMsgs.forEach(m => {
     const d = document.createElement('div');
     d.style.cssText = `color:${m.u===ME?'#00ccff':'#ccc'};word-break:break-word`;
-    d.innerHTML = `<span style='color:${m.u===ME?'#00ccff77':'#666'};font-size:.85em'>${m.u}:</span> ${m.m.replace(/</g,'&lt;')}`;
+    d.innerHTML = `<span style='color:${m.u===ME?'#00ccff77':'#666'};font-size:.85em'>${h(m.u)}:</span> ${h(m.m)}`;
     el.appendChild(d);
   });
   if (atBottom) el.scrollTop = el.scrollHeight;
@@ -10367,10 +10599,10 @@ function renderSidebar() {
   list.innerHTML = entries.map(([uname,p]) => {
     const rname = ROOMS[p.room]?.name || p.room;
     const me = uname===ME;
-    return `<div class='pitem' ${me?'':'onclick="openModal(\''+uname+'\')"'}>
-      <span class='pdot' style='background:${p.color||'#00ccff'}'></span>
-      <span class='pname' style='color:${p.color||'#00ccff'}'>${uname}${me?' (ja)':''}</span>
-      <span class='proom'>${rname}</span>
+    return `<div class='pitem' ${me?'':'data-u="'+h(uname)+'" onclick="openModal(this.dataset.u)"'}>
+      <span class='pdot' style='background:${h(p.color||'#00ccff')}'></span>
+      <span class='pname' style='color:${h(p.color||'#00ccff')}'>${h(uname)}${me?' (ja)':''}</span>
+      <span class='proom'>${h(rname)}</span>
     </div>`;
   }).join('');
 }
@@ -10380,18 +10612,22 @@ function renderOffers() {
   if (!offers.length) { wrap.innerHTML='<div style="color:#333;font-size:.73em;padding:3px 0">žiadne ponuky</div>'; return; }
   wrap.innerHTML='<div class="sb-title" style="font-size:.7em;color:#ffd70077">PONUKY PRE MŇA</div>'
     +offers.map(o=>`<div class='offer-card'>
-      <div style='color:#ffd700'>● ${o.from}</div>
+      <div style='color:#ffd700'>● ${h(o.from)}</div>
       <div style='color:#aaa'>${fmtItem(o.give_type,o.give_amount)} → ${fmtItem(o.want_type,o.want_amount)}</div>
       <div class='offer-btns'>
-        <button class='btn-sm' style='color:#39ff14;border-color:#39ff14' onclick="respondOffer('${o.id}',true)">✓</button>
-        <button class='btn-sm' style='color:#ff4455;border-color:#ff4455' onclick="respondOffer('${o.id}',false)">✗</button>
+        <button class='btn-sm' style='color:#39ff14;border-color:#39ff14' onclick="respondOffer('${h(o.id)}',true)">✓</button>
+        <button class='btn-sm' style='color:#ff4455;border-color:#ff4455' onclick="respondOffer('${h(o.id)}',false)">✗</button>
       </div>
     </div>`).join('');
 }
+function h(v) {  // HTML escape
+  return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function fmtItem(type, amount) {
+  amount = Number(amount)||0;
   if (type==='cr') return amount.toLocaleString()+' CR';
   if (type==='shards') return amount+' ◈';
-  return amount+'× '+type;
+  return amount+'× '+h(type);
 }
 
 // ── Modal (Gift/Trade) ───────────────────────────────────────────────────────
@@ -10605,7 +10841,7 @@ def hub_page():
     ])
 
     init_js = (
-        "const ME=" + json.dumps(uname) + ";\n"
+        "const ME=" + json_script(uname) + ";\n"
         "const ROOMS=" + rooms_js + ";\n"
         "const COMMODITIES=" + commodities_js + ";"
     )
@@ -10640,6 +10876,9 @@ def hub_chat():
     msg  = str(data.get("msg", "")).strip()[:200]
     if not msg:
         return json.dumps({"ok": False, "error": "prázdna správa"}), 400
+    if _rate_limited("chat:" + uname, 5, 10):
+        return json.dumps({"ok": False, "error": "píšeš príliš rýchlo"}), 429
+    _rate_hit("chat:" + uname)
     hub  = _hub_load()
     room = hub.get("players", {}).get(uname, {}).get("room", "dock")
     hub.setdefault("chat", {}).setdefault(room, []).append({
@@ -10660,10 +10899,16 @@ def hub_move():
     except Exception:
         return json.dumps({"ok": False}), 400
     room = data.get("room", "dock")
-    if room not in HUB_ROOMS:
+    if not isinstance(room, str) or room not in HUB_ROOMS:
         room = "dock"
-    x = max(5.0, min(95.0, float(data.get("x", 50))))
-    y = max(5.0, min(95.0, float(data.get("y", 50))))
+    try:
+        x, y = float(data.get("x", 50)), float(data.get("y", 50))
+    except (TypeError, ValueError):
+        return json.dumps({"ok": False}), 400
+    if not (math.isfinite(x) and math.isfinite(y)):
+        x = y = 50.0
+    x = max(5.0, min(95.0, x))
+    y = max(5.0, min(95.0, y))
     hub = _hub_load()
     equipped = _hub_skins_of(uname, hub)["equipped"]
     hub.setdefault("players", {})[uname] = {
@@ -10684,15 +10929,20 @@ def hub_gift():
     except Exception:
         return json.dumps({"ok": False}), 400
 
-    target     = data.get("to", "").lower()
-    gift_type  = data.get("type", "cr")
+    target     = str(data.get("to", "")).lower()
+    gift_type  = str(data.get("type", "cr"))
     try:
         amount = int(data.get("amount", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return json.dumps({"ok": False, "error": "neplatné množstvo"}), 400
 
     if amount <= 0 or not target or target == uname:
         return json.dumps({"ok": False, "error": "neplatný gift"}), 400
+    if gift_type == "pu239":
+        return json.dumps({"ok": False, "error": "neznámy typ"}), 400
+    if _rate_limited("gift:" + uname, 20, 3600):
+        return json.dumps({"ok": False, "error": "príliš veľa giftov, skús neskôr"}), 429
+    _rate_hit("gift:" + uname)
 
     users = load_users()
     target_key = next((k for k in users if k.lower() == target), None)
@@ -10710,11 +10960,14 @@ def hub_gift():
         career.setdefault(t_key, {})["career_cr"] = career.get(t_key, {}).get("career_cr", 0) + amount
         save_jf(KB_CAREER, career)
         send_notification(target_key, f"🎁 {uname} ti daroval {amount:,} CR!", from_role="Hub")
-        _feed_add(f"🎁 {uname} daroval {amount:,} CR hráčovi {target_key}")
+        if amount >= 1000:  # drobné gifty nezahlcujú globálny feed
+            _feed_add(f"🎁 {uname} daroval {amount:,} CR hráčovi {target_key}")
         done_q = _quest_progress(uname, "gift"); _quest_give_rewards(uname, done_q)
         return json.dumps({"ok": True, "msg": f"Poslal si {amount:,} CR → {target_key}"})
 
     elif gift_type == "shards":
+        if _account_age_days(uname) < 3:  # proti farmeniu shardov cez nové alt účty
+            return json.dumps({"ok": False, "error": "shardy môžu darovať účty staršie ako 3 dni"}), 400
         if not _spend_shards(uname, amount):
             return json.dumps({"ok": False, "error": "nedostatok Void Shards"}), 400
         sd  = load_jf(KB_SHARDS, {})
@@ -10755,17 +11008,23 @@ def hub_offer():
     except Exception:
         return json.dumps({"ok": False}), 400
 
-    target      = data.get("to", "").lower()
-    give_type   = data.get("give_type", "cr")
-    want_type   = data.get("want_type", "cr")
+    target      = str(data.get("to", "")).lower()
+    give_type   = str(data.get("give_type", "cr"))
+    want_type   = str(data.get("want_type", "cr"))
     try:
         give_amount = int(data.get("give_amount", 0))
         want_amount = int(data.get("want_amount", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return json.dumps({"ok": False, "error": "neplatné množstvo"}), 400
 
     if give_amount <= 0 or want_amount <= 0 or not target or target == uname:
         return json.dumps({"ok": False, "error": "neplatná ponuka"}), 400
+    allowed = {"cr", "shards"} | {i["id"] for i in NPC_MARKET if i["id"] != "pu239"}
+    if give_type not in allowed or want_type not in allowed:
+        return json.dumps({"ok": False, "error": "neznámy typ"}), 400
+    if _rate_limited("offer:" + uname, 5, 600):
+        return json.dumps({"ok": False, "error": "príliš veľa ponúk, skús neskôr"}), 429
+    _rate_hit("offer:" + uname)
 
     users = load_users()
     target_key = next((k for k in users if k.lower() == target), None)
@@ -10889,7 +11148,7 @@ def hub_offer_respond():
 # Activity Feed
 def _feed_add(text):
     feed = load_jf(KB_FEED, {"events": []})
-    feed["events"].insert(0, {"ts": time.time(), "text": text})
+    feed["events"].insert(0, {"ts": time.time(), "text": esc(str(text)[:300]), "e": 1})
     feed["events"] = feed["events"][:100]
     save_jf(KB_FEED, feed)
 
@@ -10985,7 +11244,7 @@ def _weekly_check():
                 send_notification(w_key,
                     f"🏆 Vyhral si týždenný leaderboard s {scores[winner]:,} CR! Rank Šampión na 7 dní.",
                     from_role="System")
-                sp = get_sp_ranks(users[w_key])
+                sp = get_sp_ranks_raw(users[w_key])
                 champ = "🏆 Šampión"
                 if champ not in sp:
                     users[w_key]["special_ranks"] = ([champ] + [s for s in sp if s != champ])[:2]
@@ -11247,8 +11506,8 @@ def hub_skins_gift():
         data = request.get_json(force=True) or {}
     except Exception:
         return json.dumps({"ok": False}), 400
-    target  = data.get("to", "").lower()
-    skin_id = data.get("skin_id", "")
+    target  = str(data.get("to", "")).lower()
+    skin_id = str(data.get("skin_id", ""))
     p = _skin_parse(skin_id)
     if not target or target == uname:
         return json.dumps({"ok": False, "error": "neplatný príjemca"}), 400
@@ -11264,8 +11523,19 @@ def hub_skins_gift():
     is_free = _skin_tier(b, c, a) == "free"
     if skin_id not in _hub_skins_of(uname, hub)["owned"] and not is_free:
         return json.dumps({"ok": False, "error": "skin nevlastníš"}), 400
+    if is_free:
+        return json.dumps({"ok": False, "error": "free skin si môže vziať každý sám"}), 400
     if not _hub_give_skin(target, skin_id, hub):
         return json.dumps({"ok": False, "error": f"{target} tento skin už má"}), 400
+    # Darovaný skin odosielateľovi zmizne (predtým sa dal donekonečna kopírovať)
+    mine = _hub_skins_of(uname, hub)
+    mine["owned"] = [s_ for s_ in mine["owned"] if s_ != skin_id]
+    hub.setdefault("skins", {})[uname] = {
+        **hub.get("skins", {}).get(uname, {}),
+        "owned": mine["owned"],
+        "equipped": _SKIN_DEFAULT if mine["equipped"] == skin_id else mine["equipped"],
+    }
+    _hub_save(hub, important=True)
     skin_name = _skin_name(b, c, a)
     send_notification(target_key, f"🎨 {uname} ti daroval skin {skin_name}!", from_role="Hub")
     return json.dumps({"ok": True, "msg": f"Skin {skin_name} odoslaný → {target_key}"})
@@ -11284,16 +11554,15 @@ def _bot_auth():
     """Vráti True ak X-Bot-Secret hlavička sedí s BOT_SECRET env premennou."""
     if not BOT_SECRET:
         return False
-    return request.headers.get("X-Bot-Secret", "") == BOT_SECRET
+    return hmac.compare_digest(request.headers.get("X-Bot-Secret", "").encode(), BOT_SECRET.encode())
 
 
 def _ensure_bot_account():
     """Vytvorí účet ClaudeBot ak ešte neexistuje. Vracia username key."""
     users = load_users()
     if not any(k.lower() == _BOT_UNAME for k in users):
-        pw_hash = hashlib.sha256(
-            (BOT_SECRET or "claudebot_default").encode()
-        ).hexdigest()
+        # Náhodné heslo — na bota sa nedá prihlásiť cez web (predtým sha256("claudebot_default"))
+        pw_hash = hash_pw(os.urandom(32).hex())
         users[_BOT_UNAME_KEY] = {
             "password": pw_hash,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
